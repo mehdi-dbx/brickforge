@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@700;800&amp;display=swap');
+      .title { font-family: 'DM Sans', sans-serif; font-weight: 800; font-size: 72px; fill: #1b1b1b; }
+      .title-red { font-family: 'DM Sans', sans-serif; font-weight: 800; font-size: 72px; fill: #eb1600; }
+      .sub { font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 20px; fill: #6b7280; }
+    </style>
+  </defs>
+  <!-- Logo mark -->
+  <g transform="translate(40, 30)">
+    <path d="M50 0L95 26V78L50 104L5 78V26L50 0Z" fill="#eb1600" opacity="0.12"/>
+    <path d="M50 0L95 26V78L50 104L5 78V26L50 0Z" stroke="#eb1600" stroke-width="2.5" fill="none"/>
+    <path d="M50 16L82 34.5V65.5L50 84L18 65.5V34.5L50 16Z" fill="#eb1600" opacity="0.35"/>
+    <path d="M50 30L70 41.5V60.5L50 72L30 60.5V41.5L50 30Z" fill="#eb1600"/>
+  </g>
+  <!-- Title -->
+  <text x="165" y="105" class="title">Brick</text>
+  <text x="365" y="105" class="title-red">Forge</text>
+  <!-- Subtitle -->
+  <text x="165" y="145" class="sub">Build production-ready AI agents on Databricks -- in a day, not a month.</text>
+</svg>

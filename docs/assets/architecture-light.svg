@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 420">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@400&amp;display=swap');
+      text { font-family: 'DM Sans', -apple-system, sans-serif; }
+      .heading { font-size: 22px; font-weight: 700; fill: #111314; }
+      .heading-green { font-size: 22px; font-weight: 700; fill: #1a9e67; }
+      .lead { font-size: 13px; fill: #7e8a95; }
+      .box-label { font-size: 14px; font-weight: 600; fill: #111314; text-anchor: middle; }
+      .box-sub { font-size: 11px; fill: #7e8a95; text-anchor: middle; }
+      .box-or { font-size: 10px; fill: #bec3c8; font-weight: 600; text-anchor: middle; font-style: italic; }
+      .arrow { fill: #bec3c8; }
+      .tag { font-size: 9px; font-weight: 600; text-anchor: middle; letter-spacing: 0.5px; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="420" rx="16" fill="#f5f6f7"/>
+
+  <!-- Header -->
+  <text x="40" y="42" class="heading">How They </text>
+  <text x="175" y="42" class="heading-green">Fit Together</text>
+  <text x="40" y="64" class="lead">A message flows through the stack. Each brick handles one layer.</text>
+
+  <!-- === ROW: User -> Chat UI -> API -> Agent -> Tools -> Data -> Answer -> User === -->
+
+  <!-- User -->
+  <rect x="20" y="120" width="105" height="80" rx="10" fill="#ffffff" stroke="#d6d9dc" stroke-width="1.2"/>
+  <text x="72" y="155" class="box-label">User</text>
+  <text x="72" y="173" class="box-sub">asks a question</text>
+
+  <!-- Arrow -->
+  <path d="M130 160 L148 160" stroke="#bec3c8" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Chat UI -->
+  <rect x="155" y="120" width="105" height="80" rx="10" fill="#ffffff" stroke="#d6d9dc" stroke-width="1.2"/>
+  <text x="207" y="155" class="box-label">Chat UI</text>
+  <text x="207" y="173" class="box-sub">React frontend</text>
+
+  <!-- Arrow -->
+  <path d="M265 160 L283 160" stroke="#bec3c8" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- API Server -->
+  <rect x="290" y="120" width="105" height="80" rx="10" fill="#ffffff" stroke="#d6d9dc" stroke-width="1.2"/>
+  <text x="342" y="155" class="box-label">API Server</text>
+  <text x="342" y="173" class="box-sub">auth + routing</text>
+
+  <!-- Arrow -->
+  <path d="M400 160 L418 160" stroke="#bec3c8" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Agent (red) -->
+  <rect x="425" y="110" width="120" height="100" rx="10" fill="rgba(235,22,0,0.07)" stroke="#eb1600" stroke-width="1.2"/>
+  <rect x="452" y="116" width="66" height="18" rx="9" fill="#eb1600"/>
+  <text x="485" y="129" class="tag" fill="#ffffff">AGENT</text>
+  <text x="485" y="155" class="box-label">LangGraph</text>
+  <text x="485" y="173" class="box-sub">LLM reasons</text>
+  <text x="485" y="187" class="box-sub">&amp; routes</text>
+
+  <!-- Arrow -->
+  <path d="M550 160 L568 160" stroke="#bec3c8" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Tools column (red, stacked) -->
+  <rect x="575" y="88" width="135" height="245" rx="12" fill="rgba(235,22,0,0.04)" stroke="#eb1600" stroke-width="0.8" stroke-dasharray="4 3"/>
+
+  <!-- UC Function -->
+  <rect x="587" y="98" width="111" height="56" rx="8" fill="rgba(235,22,0,0.07)" stroke="#eb1600" stroke-width="1"/>
+  <text x="642" y="121" class="box-label" style="font-size:12px">UC Function</text>
+  <text x="642" y="139" class="box-sub" style="font-size:10px">precise queries</text>
+
+  <!-- or -->
+  <text x="642" y="168" class="box-or">or</text>
+
+  <!-- Genie MCP -->
+  <rect x="587" y="178" width="111" height="56" rx="8" fill="rgba(235,22,0,0.07)" stroke="#eb1600" stroke-width="1"/>
+  <text x="642" y="201" class="box-label" style="font-size:12px">Genie MCP</text>
+  <text x="642" y="219" class="box-sub" style="font-size:10px">NL &#8594; SQL</text>
+
+  <!-- or -->
+  <text x="642" y="248" class="box-or">or</text>
+
+  <!-- KA Agent -->
+  <rect x="587" y="258" width="111" height="56" rx="8" fill="rgba(235,22,0,0.07)" stroke="#eb1600" stroke-width="1"/>
+  <text x="642" y="281" class="box-label" style="font-size:12px">KA Agent</text>
+  <text x="642" y="299" class="box-sub" style="font-size:10px">docs &amp; PDFs</text>
+
+  <!-- Arrow from tools -->
+  <path d="M715 160 L743 160" stroke="#bec3c8" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Delta Tables (green) -->
+  <rect x="750" y="120" width="120" height="80" rx="10" fill="rgba(26,158,103,0.08)" stroke="#1a9e67" stroke-width="1.2"/>
+  <text x="810" y="155" class="box-label">Delta Tables</text>
+  <text x="810" y="173" class="box-sub">Unity Catalog</text>
+
+  <!-- Arrow -->
+  <path d="M875 160 L893 160" stroke="#bec3c8" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Answer (green) -->
+  <rect x="900" y="120" width="120" height="80" rx="10" fill="rgba(26,158,103,0.08)" stroke="#1a9e67" stroke-width="1.2"/>
+  <text x="960" y="149" class="box-label">Answer</text>
+  <text x="960" y="167" class="box-sub">+ Data</text>
+  <text x="960" y="181" class="box-sub">streamed live</text>
+
+  <!-- Return arrow back to user -->
+  <path d="M960 205 L960 380 L72 380 L72 205" stroke="#d6d9dc" stroke-width="1.2" fill="none" stroke-dasharray="5 4" marker-end="url(#arrowhead-dim)"/>
+  <text x="520" y="398" style="font-size:11px; fill:#bec3c8; text-anchor:middle; font-family:'DM Sans',sans-serif;">response streamed back to user</text>
+
+  <!-- Arrowhead markers -->
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#bec3c8"/>
+    </marker>
+    <marker id="arrowhead-dim" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#d6d9dc"/>
+    </marker>
+  </defs>
+</svg>

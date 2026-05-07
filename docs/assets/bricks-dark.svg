@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 320">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;display=swap');
+      text { font-family: 'DM Sans', -apple-system, sans-serif; }
+      .heading { font-size: 22px; font-weight: 700; fill: #e5e7eb; }
+      .heading-blue { font-size: 22px; font-weight: 700; fill: #60a5fa; }
+      .lead { font-size: 13px; fill: #6b7280; }
+      .card-title { font-size: 14px; font-weight: 700; fill: #e5e7eb; text-anchor: middle; }
+      .card-desc { font-size: 10.5px; fill: #9ca3af; text-anchor: middle; }
+      .card-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="320" rx="16" fill="#0d1117"/>
+
+  <!-- Header -->
+  <text x="40" y="40" class="heading">The Six </text>
+  <text x="127" y="40" class="heading-blue">Bricks</text>
+  <text x="40" y="60" class="lead">Six composable pieces, working together. Swap in your own data, tools, or documents -- the rest stays the same.</text>
+
+  <!-- Card 1: Agent (purple) -->
+  <rect x="20" y="85" width="165" height="215" rx="12" fill="#161b22" stroke="#8b5cf6" stroke-width="1.2"/>
+  <rect x="48" y="95" width="110" height="20" rx="10" fill="rgba(139,92,246,0.15)"/>
+  <text x="103" y="109" class="card-tag" fill="#a78bfa">ORCHESTRATOR</text>
+  <text x="103" y="150" class="card-title">The Agent</text>
+  <text x="103" y="168" class="card-title" style="fill:#a78bfa; font-size:12px">LangGraph</text>
+  <text x="103" y="200" class="card-desc">Reads your system prompt</text>
+  <text x="103" y="216" class="card-desc">Reasons over the request</text>
+  <text x="103" y="232" class="card-desc">Decides which tool to call</text>
+
+  <!-- Card 2: UC Functions (red) -->
+  <rect x="200" y="85" width="165" height="215" rx="12" fill="#161b22" stroke="#eb1600" stroke-width="1.2"/>
+  <rect x="245" y="95" width="75" height="20" rx="10" fill="rgba(235,22,0,0.12)"/>
+  <text x="283" y="109" class="card-tag" fill="#f87171">TOOL</text>
+  <text x="283" y="150" class="card-title">UC Functions</text>
+  <text x="283" y="168" class="card-title" style="fill:#f87171; font-size:12px">(SQL)</text>
+  <text x="283" y="200" class="card-desc">Governed, versioned</text>
+  <text x="283" y="216" class="card-desc">SQL functions in</text>
+  <text x="283" y="232" class="card-desc">Unity Catalog</text>
+
+  <!-- Card 3: Genie MCP (red) -->
+  <rect x="380" y="85" width="165" height="215" rx="12" fill="#161b22" stroke="#eb1600" stroke-width="1.2"/>
+  <rect x="425" y="95" width="75" height="20" rx="10" fill="rgba(235,22,0,0.12)"/>
+  <text x="463" y="109" class="card-tag" fill="#f87171">TOOL</text>
+  <text x="463" y="150" class="card-title">Genie MCP</text>
+  <text x="463" y="200" class="card-desc">Natural language &#8594; SQL</text>
+  <text x="463" y="216" class="card-desc">Ask in plain English</text>
+  <text x="463" y="232" class="card-desc">Genie translates</text>
+
+  <!-- Card 4: Knowledge Assistant (red) -->
+  <rect x="560" y="85" width="165" height="215" rx="12" fill="#161b22" stroke="#eb1600" stroke-width="1.2"/>
+  <rect x="605" y="95" width="75" height="20" rx="10" fill="rgba(235,22,0,0.12)"/>
+  <text x="643" y="109" class="card-tag" fill="#f87171">TOOL</text>
+  <text x="643" y="144" class="card-title">Knowledge</text>
+  <text x="643" y="162" class="card-title">Assistant</text>
+  <text x="643" y="200" class="card-desc">RAG over your PDFs</text>
+  <text x="643" y="216" class="card-desc">and documents</text>
+  <text x="643" y="232" class="card-desc">with source citations</text>
+
+  <!-- Card 5: Data Layer (green) -->
+  <rect x="740" y="85" width="165" height="215" rx="12" fill="#161b22" stroke="#34d399" stroke-width="1.2"/>
+  <rect x="785" y="95" width="75" height="20" rx="10" fill="rgba(52,211,153,0.12)"/>
+  <text x="823" y="109" class="card-tag" fill="#34d399">DATA</text>
+  <text x="823" y="150" class="card-title">Data Layer</text>
+  <text x="823" y="200" class="card-desc">UC tables, functions,</text>
+  <text x="823" y="216" class="card-desc">stored procedures</text>
+  <text x="823" y="232" class="card-desc">Auto-provisioned</text>
+
+  <!-- Card 6: Chat App (amber) -->
+  <rect x="920" y="85" width="165" height="215" rx="12" fill="#161b22" stroke="#fbbf24" stroke-width="1.2"/>
+  <rect x="955" y="95" width="95" height="20" rx="10" fill="rgba(251,191,36,0.12)"/>
+  <text x="1003" y="109" class="card-tag" fill="#fbbf24">FRONTEND</text>
+  <text x="1003" y="150" class="card-title">Chat App</text>
+  <text x="1003" y="200" class="card-desc">Streaming React chat</text>
+  <text x="1003" y="216" class="card-desc">+ Express API server</text>
+  <text x="1003" y="232" class="card-desc">Pre-wired to agent</text>
+</svg>
