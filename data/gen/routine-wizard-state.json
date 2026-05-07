@@ -1,0 +1,158 @@
+{
+  "step": "provision",
+  "domain": "look up vehicles by make",
+  "routines": [
+    {
+      "name": "search_vehicles_by_make",
+      "type": "function",
+      "description": "Look up all vehicles matching a given make, with availability status and location details",
+      "parameters": [
+        {
+          "name": "make",
+          "sql_type": "STRING"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles",
+        "locations"
+      ],
+      "instructions": "SELECT vehicle_id, make, model, year, category, daily_rate, is_available, license_plate, l.name as location_name, l.city, l.state FROM vehicles v LEFT JOIN locations l ON v.location_id = l.location_id WHERE LOWER(v.make) = LOWER('{make}') ORDER BY year DESC, model ASC. Return all columns listed. Use case-insensitive matching on make."
+    },
+    {
+      "name": "search_available_vehicles_by_make",
+      "type": "function",
+      "description": "Look up only currently available vehicles for a given make, optionally filtered by city",
+      "parameters": [
+        {
+          "name": "make",
+          "sql_type": "STRING"
+        },
+        {
+          "name": "city",
+          "sql_type": "STRING"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles",
+        "locations"
+      ],
+      "instructions": "SELECT vehicle_id, make, model, year, category, daily_rate, license_plate, l.name as location_name, l.city, l.state, l.airport_code FROM vehicles v JOIN locations l ON v.location_id = l.location_id WHERE LOWER(v.make) = LOWER('{make}') AND v.is_available = TRUE AND ('{city}' = '' OR LOWER(l.city) = LOWER('{city}')) ORDER BY daily_rate ASC. Filter to is_available = TRUE. If city param is empty string, skip city filter."
+    },
+    {
+      "name": "get_vehicle_makes",
+      "type": "function",
+      "description": "Return a distinct list of all vehicle makes in the fleet along with a count of total and available vehicles per make",
+      "parameters": [],
+      "tables_referenced": [
+        "vehicles"
+      ],
+      "instructions": "SELECT make, COUNT(*) as total_vehicles, SUM(CASE WHEN is_available THEN 1 ELSE 0 END) as available_vehicles FROM vehicles GROUP BY make ORDER BY make ASC. No parameters needed. Useful for helping users discover what makes are offered."
+    },
+    {
+      "name": "search_vehicles_by_make_and_category",
+      "type": "function",
+      "description": "Look up vehicles filtered by make and vehicle category (e.g. SUV, Sedan, Truck)",
+      "parameters": [
+        {
+          "name": "make",
+          "sql_type": "STRING"
+        },
+        {
+          "name": "category",
+          "sql_type": "STRING"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles",
+        "locations"
+      ],
+      "instructions": "SELECT vehicle_id, make, model, year, category, daily_rate, is_available, license_plate, l.name as location_name, l.city, l.state FROM vehicles v LEFT JOIN locations l ON v.location_id = l.location_id WHERE LOWER(v.make) = LOWER('{make}') AND ('{category}' = '' OR LOWER(v.category) = LOWER('{category}')) ORDER BY is_available DESC, daily_rate ASC. If category is empty string, return all categories for that make. Sort available vehicles first."
+    },
+    {
+      "name": "get_vehicle_details",
+      "type": "function",
+      "description": "Retrieve full details for a specific vehicle by vehicle_id, including location and active reservation info",
+      "parameters": [
+        {
+          "name": "vehicle_id",
+          "sql_type": "STRING"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles",
+        "locations",
+        "reservations"
+      ],
+      "instructions": "SELECT v.*, l.name as location_name, l.city, l.state, l.airport_code, l.phone as location_phone, r.reservation_id as active_reservation_id, r.pickup_date, r.dropoff_date FROM vehicles v LEFT JOIN locations l ON v.location_id = l.location_id LEFT JOIN reservations r ON v.vehicle_id = r.vehicle_id AND r.status IN ('confirmed','active') AND r.dropoff_date >= CURRENT_DATE WHERE v.vehicle_id = '{vehicle_id}'. Return one row with full vehicle, location, and any active reservation details."
+    },
+    {
+      "name": "update_vehicle_availability",
+      "type": "procedure",
+      "description": "Update the availability status of a vehicle by vehicle_id",
+      "parameters": [
+        {
+          "name": "vehicle_id",
+          "sql_type": "STRING"
+        },
+        {
+          "name": "is_available",
+          "sql_type": "BOOLEAN"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles"
+      ],
+      "instructions": "CREATE OR REPLACE PROCEDURE with IN parameters vehicle_id STRING and is_available BOOLEAN. Execute UPDATE on vehicles table setting is_available = is_available WHERE vehicle_id = vehicle_id parameter. Raise an error using SIGNAL if no rows are affected (vehicle not found). Include a SELECT to confirm the updated row after the update."
+    },
+    {
+      "name": "update_vehicle_daily_rate",
+      "type": "procedure",
+      "description": "Update the daily rental rate for a specific vehicle",
+      "parameters": [
+        {
+          "name": "vehicle_id",
+          "sql_type": "STRING"
+        },
+        {
+          "name": "new_daily_rate",
+          "sql_type": "DOUBLE"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles"
+      ],
+      "instructions": "CREATE OR REPLACE PROCEDURE with IN parameters vehicle_id STRING and new_daily_rate DOUBLE. Validate that new_daily_rate > 0, otherwise SIGNAL an error with message 'Daily rate must be greater than zero'. Execute UPDATE on vehicles table setting daily_rate = new_daily_rate WHERE vehicle_id matches. If no rows updated, SIGNAL an error that the vehicle was not found."
+    },
+    {
+      "name": "transfer_vehicle_location",
+      "type": "procedure",
+      "description": "Transfer a vehicle to a new location by updating its location_id",
+      "parameters": [
+        {
+          "name": "vehicle_id",
+          "sql_type": "STRING"
+        },
+        {
+          "name": "new_location_id",
+          "sql_type": "STRING"
+        }
+      ],
+      "tables_referenced": [
+        "vehicles",
+        "locations"
+      ],
+      "instructions": "CREATE OR REPLACE PROCEDURE with IN parameters vehicle_id STRING and new_location_id STRING. First verify the new_location_id exists in the locations table; if not, SIGNAL an error 'Location not found'. Then UPDATE vehicles SET location_id = new_location_id WHERE vehicle_id matches. If no vehicle rows updated, SIGNAL 'Vehicle not found'. On success, SELECT the updated vehicle row joined with the new location details to confirm the transfer."
+    }
+  ],
+  "currentIdx": 7,
+  "savedNames": [
+    "search_vehicles_by_make",
+    "search_available_vehicles_by_make",
+    "get_vehicle_makes",
+    "search_vehicles_by_make_and_category",
+    "get_vehicle_details",
+    "update_vehicle_availability",
+    "update_vehicle_daily_rate",
+    "transfer_vehicle_location"
+  ]
+}

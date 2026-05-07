@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxGenieSpace, ExecLine } from '../types'
+import { Pencil, Upload, Link, Trash2, FileText } from 'lucide-react'
+import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxGenieSpace, ExecLine, TableDef } from '../types'
+import { GenTerminal } from './GenTerminal'
 import { SETUP_STEPS } from '../setupSteps'
+
+export type TestResult = { status: 'idle' | 'loading' | 'ok' | 'fail'; message: string }
 
 interface SetupDrawerProps {
   activeStep: StepId
@@ -8,11 +12,14 @@ interface SetupDrawerProps {
   selectedChoice: number | null
   execLines: ExecLine[]
   currentValues: Record<string, string>
+  testCache: Partial<Record<StepId, TestResult>>
+  onTestResult: (step: StepId, result: TestResult) => void
   onSelectChoice: (i: number) => void
   onContinue: () => void
   onBack: () => void
   onReconfigure: () => void
   onExecDone: (ok: boolean) => void
+  onRefresh: () => void
   onNext?: () => void
 }
 
@@ -51,8 +58,8 @@ function ProfileList({ selected, onSelect }: { selected: string; onSelect: (n: s
       {profiles.map(p => (
         <PickRow key={p.name} active={selected === p.name} disabled={!p.valid} onClick={() => p.valid && onSelect(p.name)}>
           <Dot color={p.valid ? 'green' : 'gray'} />
-          <span className="flex-1 font-mono text-[13px] text-zinc-800 dark:text-zinc-100 truncate">{p.name}</span>
-          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono truncate max-w-[160px]">{p.host.replace('https://', '')}</span>
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{p.name}</span>
+          <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono truncate max-w-[160px]">{p.host.replace('https://', '')}</span>
           {p.valid && <Tag color="green">valid</Tag>}
         </PickRow>
       ))}
@@ -73,7 +80,7 @@ function WarehouseList({ selected, onSelect }: { selected: string; onSelect: (id
         return (
           <PickRow key={wh.id} active={selected === wh.id} onClick={() => onSelect(wh.id, wh.name)}>
             <Dot color={running ? 'green' : 'gray'} />
-            <span className="flex-1 font-mono text-[13px] text-zinc-800 dark:text-zinc-100">{wh.name}</span>
+            <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{wh.name}</span>
             {running && <Tag color="green">running</Tag>}
           </PickRow>
         )
@@ -95,12 +102,17 @@ function CatalogPicker({ catalog, schema, onCatalog, onSchema }: {
       {catalogs.map(c => (
         <PickRow key={c} active={catalog === c} onClick={() => onCatalog(c)}>
           <Dot color="green" />
-          <span className="font-mono text-[13px] text-zinc-800 dark:text-zinc-100">{c}</span>
+          <span className="font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{c}</span>
         </PickRow>
       ))}
       <div className="mt-3">
         <Label>schema name</Label>
-        <Input value={schema} onChange={onSchema} placeholder="main" />
+        <input
+          value={schema}
+          onChange={e => onSchema(e.target.value)}
+          placeholder="main"
+          className="w-full text-[14px] font-mono bg-white dark:bg-dbx-gray-900 border-2 border-dbx-green dark:border-dbx-green rounded-lg px-3 py-2.5 outline-none focus:border-dbx-green focus:shadow-[0_0_8px_rgba(0,169,114,0.2)] text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-300 dark:placeholder:text-dbx-gray-600 transition-all duration-150"
+        />
       </div>
     </>
   )
@@ -118,46 +130,670 @@ function GenieList({ selected, onSelect }: { selected: string; onSelect: (id: st
       {spaces.map(s => (
         <PickRow key={s.id} active={selected === s.id} onClick={() => onSelect(s.id, s.name)}>
           <Dot color="green" />
-          <span className="flex-1 font-mono text-[13px] text-zinc-800 dark:text-zinc-100">{s.name}</span>
-          <span className="text-[11px] text-zinc-400 dark:text-zinc-600 font-mono">{s.id.slice(0, 8)}…</span>
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{s.name}</span>
+          <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{s.id.slice(0, 8)}…</span>
         </PickRow>
       ))}
     </>
   )
 }
 
+// ─── KA document picker ───────────────────────────────────────────────────────
+
+interface VolumeFile { name: string; path: string; size: number; modified: string | null }
+
+function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
+  const [files, setFiles] = useState<VolumeFile[]>([])
+  const [volumePath, setVolumePath] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+  const [urlUploading, setUrlUploading] = useState(false)
+  const [feedback, setFeedback] = useState<{ text: string; ok: boolean }[]>([])
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const fetchDocs = useCallback(() => {
+    setLoading(true)
+    setError('')
+    fetch('/api/ka/documents')
+      .then(r => r.json())
+      .then(data => {
+        const f = data.files || []
+        setFiles(f)
+        setVolumePath(data.volumePath || '')
+        if (data.error && f.length === 0) setError(data.error)
+        onReady(f.length > 0)
+      })
+      .catch(e => { setError(String(e)); onReady(false) })
+      .finally(() => setLoading(false))
+  }, [onReady])
+
+  useEffect(() => { fetchDocs() }, [fetchDocs])
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files
+    if (!selected || selected.length === 0) return
+    setUploading(true)
+    setFeedback([])
+    const formData = new FormData()
+    for (const file of Array.from(selected)) formData.append('files', file)
+    try {
+      const resp = await fetch('/api/ka/upload', { method: 'POST', body: formData })
+      const data = await resp.json()
+      const results = (data.uploaded || []).map((r: { name: string; ok: boolean; error?: string }) => ({
+        text: r.ok ? `[+] ${r.name}` : `[x] ${r.name} -- ${r.error || 'failed'}`,
+        ok: r.ok,
+      }))
+      setFeedback(results)
+      fetchDocs()
+    } catch (err) {
+      setFeedback([{ text: `[x] upload failed: ${err}`, ok: false }])
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleUrlUpload = async () => {
+    const url = urlInput.trim()
+    if (!url) return
+    setUrlUploading(true)
+    setFeedback([])
+    try {
+      const resp = await fetch('/api/ka/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await resp.json()
+      const steps = (data.steps || []).map((s: string) => ({
+        text: s,
+        ok: s.startsWith('[+]'),
+      }))
+      steps.push({ text: data.ok ? `[+] ${data.name}` : `[x] ${data.name} -- ${data.error || 'failed'}`, ok: data.ok })
+      setFeedback(steps)
+      if (data.ok) setUrlInput('')
+      fetchDocs()
+    } catch (err) {
+      setFeedback([{ text: `[x] fetch failed: ${err}`, ok: false }])
+    } finally {
+      setUrlUploading(false)
+    }
+  }
+
+  const handleDelete = async (name: string) => {
+    setDeleting(name)
+    try {
+      await fetch(`/api/ka/documents/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      fetchDocs()
+    } catch {}
+    setDeleting(null)
+  }
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  if (loading) return <Spinner label="loading volume documents..." />
+
+  return (
+    <div className="space-y-3">
+      <Label>documents in volume</Label>
+      {volumePath && (
+        <div className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-600 -mt-1 mb-2 truncate">{volumePath}</div>
+      )}
+
+      {error && <div className="text-[11px] font-mono text-dbx-amber">[~] {error}</div>}
+
+      {/* File list */}
+      {files.length > 0 ? (
+        <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 overflow-hidden">
+          {files.map((file, i) => (
+            <div
+              key={file.name}
+              className={`flex items-center gap-2 px-3 py-2 group ${
+                i < files.length - 1 ? 'border-b border-dbx-gray-100 dark:border-dbx-gray-800/50' : ''
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-dbx-gray-300 dark:text-dbx-gray-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-mono text-dbx-gray-700 dark:text-dbx-gray-200 truncate">{file.name}</div>
+                <div className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500">{formatSize(file.size)}</div>
+              </div>
+              <button
+                onClick={() => handleDelete(file.name)}
+                disabled={deleting === file.name}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-dbx-gray-300 hover:text-red-500 transition-all disabled:opacity-50"
+                title="Delete from volume"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <InfoBox>No documents in volume yet. Upload PDFs below to get started.</InfoBox>
+      )}
+
+      {/* Upload controls */}
+      <div className="space-y-2 pt-1">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.txt,.md,.html"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading || !volumePath}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[12px] font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-red dark:hover:border-[#FF6B5A] hover:text-dbx-red dark:hover:text-[#FF6B5A] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          {uploading ? 'uploading...' : 'upload local files'}
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Link className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-dbx-gray-400" />
+            <input
+              type="text"
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleUrlUpload() }}
+              placeholder="paste URL..."
+              disabled={urlUploading || !volumePath}
+              className="w-full bg-white dark:bg-dbx-gray-900 font-mono text-[11px] text-dbx-gray-600 dark:text-dbx-gray-300 outline-none border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg pl-7 pr-3 py-2 focus:border-dbx-red dark:focus:border-[#FF6B5A] transition-colors disabled:opacity-50"
+            />
+          </div>
+          <button
+            onClick={handleUrlUpload}
+            disabled={!urlInput.trim() || urlUploading || !volumePath}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-gray-400 dark:hover:border-dbx-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {urlUploading ? '...' : 'fetch'}
+          </button>
+        </div>
+      </div>
+
+      {/* Feedback */}
+      {feedback.length > 0 && (
+        <div className="space-y-0.5">
+          {feedback.map((f, i) => (
+            <div key={i} className={`text-[11px] font-mono ${
+              f.text.startsWith('[+]') ? 'text-dbx-blue dark:text-dbx-green'
+              : f.text.startsWith('[x]') ? 'text-dbx-error'
+              : 'text-dbx-gray-400'
+            }`}>{f.text}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Dynamic table list (fetched from API) ───────────────────────────────────
+
+function SchemaTableList({ prefix }: { prefix: string }) {
+  const [tables, setTables] = useState<string[]>([])
+  useEffect(() => {
+    fetch('/api/gen/tables')
+      .then(r => r.json())
+      .then(data => setTables((data.tables || []).map((t: { name: string }) => t.name)))
+      .catch(() => setTables([]))
+  }, [])
+  if (tables.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no tables found</div>
+  return (
+    <>
+      {tables.map(t => (
+        <div key={t} className="flex items-center gap-2 py-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t}` : t}</span>
+        </div>
+      ))}
+    </>
+  )
+}
+
+// ─── Prompt editor ───────────────────────────────────────────────────────────
+
+interface PromptFile { name: string; content: string }
+
+function PromptEditor({ onDone }: { onDone: () => void }) {
+  const [files, setFiles] = useState<PromptFile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [active, setActive] = useState(0)
+  const [draft, setDraft] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const textRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    fetch('/api/setup/prompts')
+      .then(r => r.json())
+      .then(data => {
+        const f = (data.files || []) as PromptFile[]
+        setFiles(f)
+        if (f.length > 0) setDraft(f[0].content)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectFile = (i: number) => {
+    setActive(i)
+    setDraft(files[i].content)
+    setDirty(false)
+    setSaved(false)
+  }
+
+  const handleSave = async () => {
+    if (!files[active]) return
+    setSaving(true)
+    try {
+      await fetch('/api/setup/prompts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: files[active].name, content: draft }),
+      })
+      const updated = [...files]
+      updated[active] = { ...updated[active], content: draft }
+      setFiles(updated)
+      setDirty(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {}
+    setSaving(false)
+  }
+
+  if (loading) return <div className="text-[13px] text-dbx-gray-400 font-mono animate-pulse p-2">loading prompts...</div>
+  if (files.length === 0) return <div className="text-[13px] text-dbx-gray-400 font-mono p-2">no prompt files found in conf/prompt/</div>
+
+  const lineCount = draft.split('\n').length
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* File tabs */}
+      <div className="flex gap-1 px-1 pb-2 border-b border-dbx-gray-200 dark:border-dbx-gray-800 flex-shrink-0">
+        {files.map((f, i) => (
+          <button
+            key={f.name}
+            onClick={() => selectFile(i)}
+            className={`text-[11px] font-mono px-2.5 py-1 rounded-md transition-all ${
+              i === active
+                ? 'bg-dbx-red/10 dark:bg-[#FF6B5A]/10 text-dbx-red dark:text-[#FF6B5A] border border-dbx-red/20 dark:border-[#FF6B5A]/20'
+                : 'text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 border border-transparent'
+            }`}
+          >
+            {f.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Editor */}
+      <div className="flex-1 min-h-0 relative">
+        <textarea
+          ref={textRef}
+          value={draft}
+          onChange={e => { setDraft(e.target.value); setDirty(true); setSaved(false) }}
+          spellCheck={false}
+          className="w-full h-full resize-none bg-dbx-gray-950 text-dbx-gray-200 font-mono text-[12px] leading-relaxed p-3 outline-none border-none"
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-3 py-2 border-t border-dbx-gray-200 dark:border-dbx-gray-800 flex-shrink-0 bg-dbx-menu dark:bg-dbx-gray-900">
+        <span className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-600">
+          {lineCount} lines
+          {saved && <span className="ml-2 text-dbx-blue dark:text-dbx-green animate-fade-in">[+] saved</span>}
+        </span>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            className={`text-[11px] font-mono px-3 py-1 rounded-md transition-all ${
+              dirty && !saving
+                ? 'bg-dbx-red text-white hover:bg-dbx-red-dk'
+                : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'
+            }`}
+          >
+            {saving ? 'saving...' : 'save'}
+          </button>
+          <button
+            onClick={onDone}
+            className="text-[11px] font-mono px-3 py-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-400 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 transition-all"
+          >
+            done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Prompt generator ────────────────────────────────────────────────────────
+
+function PromptGenerator({ onDone }: { onDone: () => void }) {
+  const [domain, setDomain] = useState('')
+  const [tableSchemas, setTableSchemas] = useState<TableDef[]>([])
+  const [generated, setGenerated] = useState<{ main_prompt: string; knowledge_base: string; user_prompt: string } | null>(null)
+  const [trigger, setTrigger] = useState(0)
+  const [mode, setMode] = useState<'generate' | 'save' | null>(null)
+  const [preview, setPreview] = useState<'main' | 'kb' | 'user'>('main')
+  const [saving, setSaving] = useState(false)
+
+  // Load table schemas for context chips
+  useEffect(() => {
+    fetch('/api/gen/tables')
+      .then(r => r.json())
+      .then(data => {
+        const tables = (data.tables || []).map((t: { name: string; columns?: { name: string; type: string }[] }) => ({
+          name: t.name,
+          columns: t.columns || [],
+          row_count: 0,
+          instructions: '',
+        }))
+        setTableSchemas(tables)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleGenerate = () => {
+    setGenerated(null)
+    setMode('generate')
+    setTrigger(prev => prev + 1)
+  }
+
+  const handleResult = useCallback((data: unknown) => {
+    const result = data as { main_prompt: string; knowledge_base: string; user_prompt: string }
+    if (result.main_prompt) setGenerated(result)
+  }, [])
+
+  const handleDone = useCallback((ok: boolean) => {
+    setMode(null)
+    if (!ok) setGenerated(null)
+  }, [])
+
+  const handleSave = () => {
+    if (!generated) return
+    setSaving(true)
+    setMode('save')
+    setTrigger(prev => prev + 1)
+  }
+
+  const handleSaveResult = useCallback(() => {}, [])
+
+  const handleSaveDone = useCallback((ok: boolean) => {
+    setMode(null)
+    setSaving(false)
+    if (ok) onDone()
+  }, [onDone])
+
+  const previewContent = generated
+    ? preview === 'main' ? generated.main_prompt
+    : preview === 'kb' ? generated.knowledge_base
+    : generated.user_prompt
+    : ''
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
+        {/* Domain input */}
+        {!generated && (
+          <div className="animate-fade-in">
+            <Label>describe your agent domain</Label>
+            <textarea
+              value={domain}
+              onChange={e => setDomain(e.target.value)}
+              rows={3}
+              disabled={mode === 'generate'}
+              placeholder="e.g. car rental fleet management advisor that monitors vehicle availability, handles reservations, and tracks maintenance..."
+              className="w-full bg-white dark:bg-dbx-gray-900 font-mono text-[12px] text-dbx-gray-600 dark:text-dbx-gray-300 outline-none border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg px-3 py-2.5 focus:border-dbx-red dark:focus:border-[#FF6B5A] transition-colors resize-none leading-relaxed disabled:opacity-50"
+            />
+
+            {/* Table context chips */}
+            {tableSchemas.length > 0 && (
+              <div className="mt-3 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 px-3 py-2.5">
+                <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">available tables (auto-included as context)</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {tableSchemas.map(t => (
+                    <span key={t.name} className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-dbx-blue-bg dark:bg-dbx-green-bg/10 text-dbx-blue dark:text-dbx-green border border-dbx-blue/20 dark:border-dbx-green/20">
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Terminal */}
+        {mode === 'generate' && (
+          <div className="mt-3">
+            <GenTerminal
+              url="/api/gen/prompt-generate"
+              body={{ domain, tableSchemas }}
+              onResult={handleResult}
+              onDone={handleDone}
+              triggerKey={trigger}
+            />
+          </div>
+        )}
+
+        {mode === 'save' && generated && (
+          <div className="mt-3">
+            <GenTerminal
+              url="/api/gen/prompt-save"
+              body={generated}
+              onResult={handleSaveResult}
+              onDone={handleSaveDone}
+              triggerKey={trigger}
+            />
+          </div>
+        )}
+
+        {/* Preview */}
+        {generated && !mode && (
+          <div className="animate-fade-in">
+            <div className="flex items-center justify-between mb-2">
+              <Label>generated prompts -- review before saving</Label>
+            </div>
+
+            {/* File tabs */}
+            <div className="flex gap-1 mb-2">
+              {([['main', 'main.prompt'], ['kb', 'knowledge.base'], ['user', 'user.prompt']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setPreview(key as 'main' | 'kb' | 'user')}
+                  className={`text-[11px] font-mono px-2.5 py-1 rounded-md transition-all ${
+                    preview === key
+                      ? 'bg-dbx-red/10 dark:bg-[#FF6B5A]/10 text-dbx-red dark:text-[#FF6B5A] border border-dbx-red/20 dark:border-[#FF6B5A]/20'
+                      : 'text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 border border-transparent'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Content preview */}
+            <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-dbx-gray-950 overflow-hidden">
+              <pre className="p-3 text-[11px] font-mono text-dbx-gray-300 leading-relaxed overflow-x-auto max-h-[350px] overflow-y-auto whitespace-pre-wrap">
+                {previewContent}
+              </pre>
+            </div>
+            <div className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-600 mt-1">
+              {previewContent.split('\n').length} lines
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-1.5">
+        {!generated && !mode && (
+          <button
+            onClick={handleGenerate}
+            disabled={!domain.trim()}
+            className={`w-full text-[14px] py-2.5 rounded-lg font-mono font-medium transition-all duration-200 ${
+              domain.trim()
+                ? 'bg-dbx-red text-white hover:bg-dbx-red-dk shadow-dbx-md hover:shadow-dbx-glow active:scale-[0.98]'
+                : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'
+            }`}
+          >
+            generate prompts
+          </button>
+        )}
+        {generated && !mode && (
+          <>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="w-full text-[14px] py-2.5 rounded-lg font-mono font-medium bg-dbx-red text-white hover:bg-dbx-red-dk shadow-dbx-md hover:shadow-dbx-glow active:scale-[0.98] transition-all duration-200"
+            >
+              save to conf/prompt/
+            </button>
+            <button
+              onClick={handleGenerate}
+              className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 font-mono transition-all duration-150"
+            >
+              regenerate
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Editable schema field ────────────────────────────────────────────────────
+
+function EditableSchemaField({ value, onSaved }: { value: string; onSaved?: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { setDraft(value) }, [value])
+
+  const isValid = draft.includes('.') && draft.split('.').every(p => p.trim().length > 0)
+
+  const handleSave = async () => {
+    if (!isValid) return
+    setSaving(true)
+    try {
+      await fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_UNITY_CATALOG_SCHEMA: draft.trim() }),
+      })
+      setSaved(true)
+      setEditing(false)
+      setTimeout(() => setSaved(false), 2000)
+      onSaved?.()
+    } catch {}
+    setSaving(false)
+  }
+
+  const handleCancel = () => {
+    setDraft(value)
+    setEditing(false)
+  }
+
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">catalog / schema</div>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            autoFocus
+            placeholder="catalog.schema"
+            className={`flex-1 bg-transparent font-mono text-[12px] outline-none border rounded px-2 py-1 transition-colors ${
+              isValid
+                ? 'text-dbx-gray-800 dark:text-dbx-gray-100 border-dbx-gray-300 dark:border-dbx-gray-600 focus:border-dbx-red dark:focus:border-[#FF6B5A]'
+                : 'text-red-400 border-red-300 dark:border-red-700'
+            }`}
+            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel() }}
+          />
+          <button
+            onClick={handleSave}
+            disabled={!isValid || saving}
+            className="text-[10px] font-mono text-emerald-500 hover:text-emerald-400 disabled:opacity-40 transition-colors"
+          >
+            {saving ? '...' : 'save'}
+          </button>
+          <button
+            onClick={handleCancel}
+            className="text-[10px] font-mono text-dbx-gray-400 hover:text-dbx-gray-300 transition-colors"
+          >
+            cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 group">
+          <span className={`text-[12px] font-mono ${value ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400'}`}>
+            {value || 'not set'}
+          </span>
+          {saved && <span className="text-[10px] font-mono text-emerald-400 animate-fade-in">[+] saved</span>}
+          <button
+            onClick={() => setEditing(true)}
+            className="text-dbx-gray-400 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors"
+            title="Edit schema"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Atoms ─────────────────────────────────────────────────────────────────────
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div className="text-[15px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2 font-mono">{children}</div>
+  return <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-widest mb-2 font-mono font-medium">{children}</div>
 }
 
 function InfoBox({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded p-3 text-[16px] font-mono text-zinc-500 dark:text-zinc-400 leading-relaxed mb-3">
+    <div className="bg-dbx-menu dark:bg-dbx-gray-800/50 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg p-3 text-[13px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 leading-relaxed mb-3">
       {children}
     </div>
   )
 }
 
 function Spinner({ label }: { label: string }) {
-  return <div className="text-[16px] text-zinc-400 dark:text-zinc-500 font-mono">{label}</div>
+  return <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono animate-pulse">{label}</div>
 }
 
 function ErrMsg({ msg }: { msg: string }) {
-  return <div className="text-[16px] text-red-400 font-mono">{msg}</div>
+  return <div className="text-[13px] text-dbx-error font-mono animate-fade-in">{msg}</div>
 }
 
 function Dot({ color }: { color: 'green' | 'gray' | 'amber' | 'red' }) {
-  const cls = { green: 'bg-[#1D9E75]', gray: 'bg-zinc-300 dark:bg-zinc-600', amber: 'bg-[#EF9F27]', red: 'bg-[#E24B4A]' }
+  const cls = {
+    green: 'bg-dbx-blue dark:bg-dbx-green shadow-[0_0_4px_rgba(46,125,209,0.4)] dark:shadow-[0_0_4px_rgba(0,169,114,0.4)]',
+    gray:  'bg-dbx-gray-300 dark:bg-dbx-gray-600',
+    amber: 'bg-dbx-amber shadow-[0_0_4px_rgba(230,138,0,0.3)]',
+    red:   'bg-dbx-error shadow-[0_0_4px_rgba(226,75,74,0.4)]',
+  }
   return <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cls[color]}`} />
 }
 
 function Tag({ color, children }: { color: 'green' | 'purple'; children: React.ReactNode }) {
   const cls = color === 'green'
-    ? 'bg-[#E1F5EE] dark:bg-[#0f2a1e] text-[#0F6E56] dark:text-[#1D9E75]'
-    : 'bg-[#EEEDFE] dark:bg-[#1e1d40] text-[#534AB7] dark:text-[#9f9af5]'
-  return <span className={`text-[14px] rounded px-1.5 py-0.5 font-mono ${cls}`}>{children}</span>
+    ? 'bg-dbx-blue-bg dark:bg-dbx-green-bg/10 text-dbx-blue-dk dark:text-dbx-green border border-dbx-blue/20 dark:border-dbx-green/20'
+    : 'bg-dbx-red-bg dark:bg-dbx-red-bg-dk text-dbx-red dark:text-[#FF6B5A] border border-dbx-red/20'
+  return <span className={`text-[10px] rounded-full px-2 py-0.5 font-mono font-medium ${cls}`}>{children}</span>
 }
 
 function PickRow({ active, disabled = false, onClick, children }: {
@@ -168,12 +804,12 @@ function PickRow({ active, disabled = false, onClick, children }: {
       onClick={onClick}
       disabled={disabled}
       className={`
-        w-full flex items-center gap-2 px-3 py-2.5 rounded border mb-1.5 text-left transition-colors
+        w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border mb-1.5 text-left transition-all duration-150
         ${active
-          ? 'border-[#534AB7] dark:border-[#7b74e8] bg-[#EEEDFE] dark:bg-[#2d2960]/50'
+          ? 'border-dbx-red dark:border-[#FF6B5A] bg-dbx-red-bg dark:bg-dbx-red-bg-dk shadow-dbx'
           : disabled
-            ? 'border-zinc-100 dark:border-zinc-800/50 opacity-40 cursor-not-allowed bg-white dark:bg-zinc-900'
-            : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400 dark:hover:border-zinc-600'}
+            ? 'border-dbx-gray-100 dark:border-dbx-gray-800/50 opacity-40 cursor-not-allowed bg-white dark:bg-dbx-gray-900'
+            : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-red-lt dark:hover:border-dbx-gray-600 hover:shadow-node'}
       `}
     >
       {children}
@@ -187,7 +823,7 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (v: 
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full text-[18px] font-mono bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-3 py-2 outline-none focus:border-[#534AB7] dark:focus:border-[#7b74e8] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+      className="w-full text-[14px] font-mono bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg px-3 py-2.5 outline-none focus:border-dbx-red focus:shadow-dbx dark:focus:border-[#FF6B5A] text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-300 dark:placeholder:text-dbx-gray-600 transition-all duration-150"
     />
   )
 }
@@ -199,19 +835,20 @@ function Terminal({ lines }: { lines: ExecLine[] }) {
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight }, [lines])
 
   function color(text: string, stream: string) {
-    if (stream === 'err' && !text.startsWith('[+]')) return 'text-[#EF9F27]'
-    if (text.startsWith('[+]') || text.startsWith('✓')) return 'text-[#1D9E75]'
-    if (text.startsWith('[x]') || text.startsWith('✗')) return 'text-[#E24B4A]'
-    if (text.startsWith('[~]') || text.startsWith('▸') || text.startsWith('...')) return 'text-[#EF9F27]'
-    return 'text-zinc-400'
+    if (stream === 'err' && !text.startsWith('[+]')) return 'text-dbx-amber'
+    if (text.startsWith('[+]') || text.startsWith('\u2713')) return 'text-dbx-blue dark:text-dbx-green'
+    if (text.startsWith('[x]') || text.startsWith('\u2717')) return 'text-dbx-error'
+    if (text.startsWith('[~]') || text.startsWith('\u25b8') || text.startsWith('...')) return 'text-dbx-amber'
+    return 'text-dbx-gray-400'
   }
 
   return (
-    <div ref={ref} className="bg-[#0d0d10] rounded p-3 font-mono text-[16px] leading-relaxed h-[280px] overflow-y-auto border border-zinc-800/50">
-      {lines.length === 0 && <div className="text-zinc-600">running…</div>}
-      {lines.map((l, i) => (
-        <div key={i} className={color(l.text.trim(), l.stream)}>{l.text.trimEnd()}</div>
-      ))}
+    <div ref={ref} className="bg-dbx-gray-950 rounded-lg p-3 font-mono text-[13px] leading-relaxed h-[280px] overflow-y-auto border border-dbx-gray-800/50 shadow-inner">
+      {lines.length === 0 && <div className="text-dbx-gray-600 animate-pulse">running…</div>}
+      {lines.map((l, i) => {
+        const clean = l.text.replace(/\x1b\[[0-9;]*m/g, '')
+        return <div key={i} className={`animate-fade-in ${color(clean.trim(), l.stream)}`}>{clean.trimEnd()}</div>
+      })}
     </div>
   )
 }
@@ -225,10 +862,14 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
     case 'auth':      return v.DATABRICKS_TOKEN ? v.DATABRICKS_TOKEN.slice(0, 4) + '*'.repeat(Math.max(0, v.DATABRICKS_TOKEN.length - 4)) : ''
     case 'warehouse': return v.DATABRICKS_WAREHOUSE_ID || ''
     case 'schema':    return v.PROJECT_UNITY_CATALOG_SCHEMA || ''
+    case 'tables':    return v.TABLE_COUNT ? `${v.TABLE_COUNT} table(s)` : ''
+    case 'functions': return v.ROUTINE_COUNT ? `${v.ROUTINE_COUNT} routine(s)` : ''
     case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || ''
+    case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
     case 'genie':     return v.PROJECT_GENIE_CHECKIN || ''
     case 'ka':        return v.PROJECT_KA_PASSENGERS || ''
     case 'mlflow':    return v.MLFLOW_EXPERIMENT_ID || ''
+    case 'deploy':    return v.DBX_APP_NAME || ''
     default:          return ''
   }
 }
@@ -237,17 +878,34 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
 
 export function SetupDrawer({
   activeStep, phase, selectedChoice, execLines, currentValues,
-  onSelectChoice, onContinue, onBack, onReconfigure, onExecDone, onNext,
+  testCache, onTestResult,
+  onSelectChoice, onContinue, onBack, onReconfigure, onExecDone, onRefresh, onNext,
 }: SetupDrawerProps) {
   const step      = SETUP_STEPS.find(s => s.id === activeStep)!
   const choice    = selectedChoice !== null ? step.choices[selectedChoice] : null
   const keepLabel = currentValueLabel(activeStep, currentValues)
 
-  const TESTABLE_STEPS: StepId[] = ['host', 'auth', 'warehouse', 'schema', 'model', 'genie', 'ka', 'mlflow']
-  type TestState = { status: 'idle' | 'loading' | 'ok' | 'fail'; message: string }
-  const [testState, setTestState] = useState<TestState>({ status: 'idle', message: '' })
+  const abortRef = useRef<AbortController | null>(null)
 
-  useEffect(() => { setTestState({ status: 'idle', message: '' }) }, [activeStep])
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    onExecDone(false)
+  }, [onExecDone])
+
+  const TESTABLE_STEPS: StepId[] = ['host', 'auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'mlflow', 'deploy']
+  const testState: TestResult = testCache[activeStep] ?? { status: 'idle', message: '' }
+  const setTestState = useCallback((r: TestResult) => onTestResult(activeStep, r), [activeStep, onTestResult])
+
+  // Auto-test on step activation — only if not already cached
+  useEffect(() => {
+    if (testCache[activeStep]) return // already have a result, skip
+    if (keepLabel && TESTABLE_STEPS.includes(activeStep)) {
+      const timer = setTimeout(() => handleTest(), 150)
+      return () => clearTimeout(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep])
 
   const handleTest = useCallback(async () => {
     setTestState({ status: 'loading', message: '' })
@@ -275,13 +933,16 @@ export function SetupDrawer({
   const [selGenieName, setSelGenieName] = useState('')
   const [manualVal, setManualVal]       = useState('')
   const [genieName, setGenieName]       = useState('')
+  const [assetsSchema, setAssetsSchema] = useState('')
+  const [kaDocsReady, setKaDocsReady]   = useState(false)
 
   useEffect(() => {
     setSelProfile(''); setSelWhId(''); setSelWhName('')
     setSelCatalog(''); setCatSchema('main')
     setSelGenieId(''); setSelGenieName('')
-    setManualVal(''); setGenieName('')
-  }, [activeStep, selectedChoice])
+    setManualVal(''); setGenieName(''); setKaDocsReady(false)
+    setAssetsSchema(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
+  }, [activeStep, selectedChoice, currentValues.PROJECT_UNITY_CATALOG_SCHEMA])
 
   // SSE runner
   useEffect(() => {
@@ -293,14 +954,29 @@ export function SetupDrawer({
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
     if (action === 'cfg-genie'     && selGenieId) { action = 'save-genie';     Object.assign(params, { id: selGenieId, name: selGenieName }) }
     if (action === 'exec-genie'    && genieName)  { Object.assign(params, { name: genieName }) }
+    // Host: cfg-profile saves host from selected profile
+    if (action === 'cfg-profile' && activeStep === 'host' && selProfile) { action = 'save-host'; Object.assign(params, { profile: selProfile }) }
+    // Model: cfg-profile generates PAT + saves endpoint from selected profile
+    if (action === 'cfg-profile' && activeStep === 'model' && selProfile) { action = 'save-model-profile'; Object.assign(params, { profile: selProfile }) }
+    // cfg-new: run databricks auth login with provided host/profile
+    if (action === 'cfg-new' && manualVal) { action = 'exec-auth-login'; Object.assign(params, { host: manualVal, profile: genieName || '' }) }
+    // Deploy: cfg-deploy-name saves app name to .env.local
+    if (action === 'cfg-deploy-name' && manualVal) { action = 'save-deploy-name'; Object.assign(params, { name: manualVal.trim() }) }
+    // KA: cfg-ka configure phase uploads docs, execute phase creates the KA endpoint
+    if (action === 'cfg-ka') { action = 'exec-ka' }
+    // Create all assets: pass confirmed schema so backend saves it first
+    if (action === 'exec-assets' && assetsSchema) { Object.assign(params, { schema: assetsSchema.trim() }) }
 
     let aborted = false
+    const controller = new AbortController()
+    abortRef.current = controller
     async function run() {
       try {
         const resp = await fetch('/api/setup/exec', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, params }),
+          signal: controller.signal,
         })
         if (!resp.body) { onExecDone(false); return }
         const reader  = resp.body.getReader()
@@ -326,12 +1002,13 @@ export function SetupDrawer({
           }
         }
       } catch (e) {
+        if (controller.signal.aborted) return  // user cancelled
         console.error('[exec]', e)
         if (!aborted) onExecDone(false)
       }
     }
     run()
-    return () => { aborted = true }
+    return () => { aborted = true; controller.abort() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
@@ -344,35 +1021,66 @@ export function SetupDrawer({
       <>
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
           {step.choices.map((c, i) => (
-            <button
-              key={i}
-              onClick={() => onSelectChoice(i)}
-              className={`
-                w-full flex items-start gap-3 px-3 py-3 rounded border mb-2 text-left transition-colors
-                ${selectedChoice === i
-                  ? 'border-[#534AB7] dark:border-[#7b74e8] bg-[#EEEDFE] dark:bg-[#2d2960]/50'
-                  : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}
-              `}
-            >
-              <span className={`text-[12px] font-mono mt-0.5 min-w-[18px] ${selectedChoice === i ? 'text-[#534AB7] dark:text-[#9f9af5]' : 'text-zinc-400 dark:text-zinc-500'}`}>
-                {i + 1}
-              </span>
-              <div>
-                <div className="text-[13px] font-medium text-zinc-800 dark:text-zinc-100 leading-tight">{c.title}</div>
-                <div className="text-[12px] text-zinc-400 dark:text-zinc-500 leading-snug mt-0.5">{c.desc}</div>
-              </div>
-            </button>
+              <button
+                key={i}
+                onClick={() => onSelectChoice(i)}
+                className={`
+                  w-full flex items-start gap-3 px-3.5 py-3 rounded-lg border mb-2 text-left transition-all duration-150 animate-slide-up
+                  ${selectedChoice === i
+                    ? 'border-dbx-red dark:border-[#FF6B5A] bg-dbx-red-bg dark:bg-dbx-red-bg-dk shadow-dbx'
+                    : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-red-lt dark:hover:border-dbx-gray-700 hover:shadow-node hover:bg-dbx-gray-50/50 dark:hover:bg-dbx-gray-800/50'}
+                `}
+                style={{ animationDelay: `${i * 40}ms`, animationFillMode: 'backwards' }}
+              >
+                <span className={`text-[12px] font-mono mt-0.5 min-w-[18px] font-medium ${selectedChoice === i ? 'text-dbx-red dark:text-[#FF6B5A]' : 'text-dbx-gray-300 dark:text-dbx-gray-600'}`}>
+                  {i + 1}
+                </span>
+                <div>
+                  <div className="text-[13px] font-medium text-dbx-gray-800 dark:text-dbx-gray-100 leading-tight">{c.title}</div>
+                  <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 leading-snug mt-0.5">{c.desc}</div>
+                </div>
+              </button>
           ))}
+
+          {/* Help box */}
+          <div className="mt-3 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-dbx-menu dark:bg-dbx-gray-800/30 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">about this step</div>
+            <div className="text-[12px] leading-relaxed text-dbx-gray-500 dark:text-dbx-gray-400">{step.help}</div>
+            {activeStep === 'tables' && (
+              <>
+                <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">tables</div>
+                  <SchemaTableList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
+                </div>
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'data' }))}
+                  className="mt-2.5 text-[12px] font-mono text-dbx-blue dark:text-dbx-green hover:underline"
+                >
+                  view table schemas →
+                </button>
+              </>
+            )}
+            {activeStep === 'ka' && (
+              <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'ka' }))}
+                  className="text-[12px] font-mono text-dbx-blue dark:text-dbx-green hover:underline"
+                >
+                  manage documents {'->'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800">
           <button
             onClick={onContinue}
             disabled={selectedChoice === null}
             className={`
-              w-full text-[18px] py-2.5 rounded border font-mono transition-colors
+              w-full text-[14px] py-2.5 rounded-lg font-mono font-medium transition-all duration-200
               ${selectedChoice !== null
-                ? 'border-[#534AB7] dark:border-[#7b74e8] text-[#534AB7] dark:text-[#9f9af5] hover:bg-[#EEEDFE] dark:hover:bg-[#2d2960]/50'
-                : 'border-zinc-200 dark:border-zinc-800 text-zinc-300 dark:text-zinc-600 cursor-not-allowed'}
+                ? 'bg-dbx-red text-white hover:bg-dbx-red-dk shadow-dbx-md hover:shadow-dbx-glow active:scale-[0.98]'
+                : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'}
             `}
           >
             continue →
@@ -387,12 +1095,18 @@ export function SetupDrawer({
     if (!choice) return null
     const action = choice.action
 
+    const validSchema = /^\w+\.\w+$/.test(assetsSchema.trim())
+
     function canRun() {
       if (action === 'cfg-profile')   return !!selProfile
       if (action === 'cfg-warehouse') return !!selWhId
       if (action === 'cfg-catalog')   return !!selCatalog && !!catSchema
       if (action === 'cfg-genie')     return !!selGenieId
       if (action === 'exec-genie')    return !!genieName
+      if (action === 'cfg-new')         return !!manualVal.trim()
+      if (action === 'cfg-deploy-name') return !!manualVal.trim()
+      if (action === 'exec-assets')     return validSchema
+      if (action === 'cfg-ka')        return kaDocsReady
       if (action === 'manual')        return !!manualVal.trim()
       return true
     }
@@ -409,31 +1123,49 @@ export function SetupDrawer({
     else if (action === 'exec-genie')
       body = (<><Label>genie room name</Label><Input value={genieName} onChange={setGenieName} placeholder="Checkin Metrics" /></>)
     else if (action === 'manual')
-      body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[15px] text-zinc-400 dark:text-zinc-500 mt-2 font-mono">writes directly to .env.local</div></>)
+      body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">writes directly to .env.local</div></>)
+    else if (action === 'cfg-new')
+      body = (<><Label>workspace url</Label><Input value={manualVal} onChange={setManualVal} placeholder="https://....cloud.databricks.com" /><div className="mt-3"><Label>profile name (optional)</Label><Input value={genieName} onChange={setGenieName} placeholder="my-workspace" /></div><InfoBox>Will run `databricks auth login` automatically and open the browser for OAuth.</InfoBox></>)
+    else if (action === 'cfg-deploy-name')
+      body = (<><Label>app name</Label><Input value={manualVal} onChange={setManualVal} placeholder="my-agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">sets DBX_APP_NAME in .env.local -- used as the Databricks App name for deployment</div></>)
+    else if (action === 'cfg-prompt')
+      return (
+        <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
+          <PromptEditor onDone={() => { onExecDone(true) }} />
+        </div>
+      )
+    else if (action === 'cfg-prompt-gen')
+      return (
+        <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
+          <PromptGenerator onDone={() => { onExecDone(true) }} />
+        </div>
+      )
+    else if (action === 'cfg-ka')
+      body = <KaDocsPicker onReady={setKaDocsReady} />
     else if (action === 'cfg-grants')
       body = <InfoBox>Run the grant script to apply UC table, routine, and warehouse permissions to the app service principal.</InfoBox>
     else
-      body = <InfoBox>Run `! databricks auth login --host &lt;url&gt;` in your terminal, then come back.</InfoBox>
+      body = <InfoBox>This action will execute automatically.</InfoBox>
 
     return (
       <>
-        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">{body}</div>
-        <div className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 flex flex-col gap-1.5">
+        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">{body}</div>
+        <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-1.5">
           <button
             onClick={onContinue}
             disabled={!canRun()}
             className={`
-              w-full text-[18px] py-2.5 rounded border font-mono transition-colors
+              w-full text-[14px] py-2.5 rounded-lg font-mono font-medium transition-all duration-200
               ${canRun()
-                ? 'border-[#534AB7] dark:border-[#7b74e8] text-[#534AB7] dark:text-[#9f9af5] hover:bg-[#EEEDFE] dark:hover:bg-[#2d2960]/50'
-                : 'border-zinc-200 dark:border-zinc-800 text-zinc-300 dark:text-zinc-600 cursor-not-allowed'}
+                ? 'bg-dbx-red text-white hover:bg-dbx-red-dk shadow-dbx-md hover:shadow-dbx-glow active:scale-[0.98]'
+                : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'}
             `}
           >
-            run →
+            {action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
           </button>
           <button
             onClick={onBack}
-            className="w-full text-[17px] py-2 rounded border border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 font-mono transition-colors"
+            className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-700 font-mono transition-all duration-150"
           >
             back
           </button>
@@ -446,12 +1178,21 @@ export function SetupDrawer({
   function renderExecute() {
     return (
       <>
-        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
+        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">
           <Terminal lines={execLines} />
         </div>
-        <div className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
-          <button disabled className="w-full text-[18px] py-2.5 rounded border border-zinc-200 dark:border-zinc-800 text-zinc-300 dark:text-zinc-600 cursor-not-allowed font-mono">
-            running…
+        <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex gap-2">
+          <div className="flex-1 relative">
+            <button disabled className="w-full text-[14px] py-2.5 rounded-lg bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed font-mono relative overflow-hidden">
+              <span className="relative z-10">running…</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-dbx-red/5 to-transparent animate-pulse" />
+            </button>
+          </div>
+          <button
+            onClick={handleCancel}
+            className="px-4 py-2.5 rounded-lg text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 border border-dbx-gray-200 dark:border-dbx-gray-700 hover:text-red-400 hover:border-red-300 dark:hover:border-red-700 transition-colors"
+          >
+            cancel
           </button>
         </div>
       </>
@@ -462,23 +1203,25 @@ export function SetupDrawer({
   function renderDone() {
     return (
       <>
-        <div className="flex-1 flex flex-col items-center justify-center px-4 pt-4 pb-2">
-          <div className="text-[60px] text-[#1D9E75] mb-2 leading-none">✓</div>
-          <div className="text-[20px] font-medium text-zinc-800 dark:text-zinc-100 mb-1">configured</div>
-          <div className="text-[17px] text-zinc-400 dark:text-zinc-500 font-mono">{step.title}</div>
+        <div className="flex-1 flex flex-col items-center justify-center px-4 pt-4 pb-2 animate-pop">
+          <div className="w-16 h-16 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
+            <span className="text-[32px] text-dbx-blue dark:text-dbx-green leading-none">✓</span>
+          </div>
+          <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 mb-1">configured</div>
+          <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
         </div>
-        <div className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 flex flex-col gap-2">
+        <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-2">
           {onNext && (
             <button
               onClick={onNext}
-              className="w-full text-[18px] py-2.5 rounded border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE] dark:hover:bg-[#0f2a1e] font-mono transition-colors"
+              className="w-full text-[14px] py-2.5 rounded-lg bg-dbx-blue dark:bg-dbx-green text-white font-mono font-medium hover:bg-dbx-blue-dk dark:hover:bg-dbx-green-dk shadow-[0_2px_8px_rgba(46,125,209,0.25)] dark:shadow-[0_2px_8px_rgba(0,169,114,0.25)] hover:shadow-[0_0_16px_rgba(46,125,209,0.3)] dark:hover:shadow-[0_0_16px_rgba(0,169,114,0.3)] transition-all duration-200 active:scale-[0.98]"
             >
               next →
             </button>
           )}
           <button
             onClick={onReconfigure}
-            className="w-full text-[18px] py-2.5 rounded border border-[#534AB7] dark:border-[#7b74e8] text-[#534AB7] dark:text-[#9f9af5] hover:bg-[#EEEDFE] dark:hover:bg-[#2d2960]/50 font-mono transition-colors"
+            className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-red hover:border-dbx-red-lt font-mono transition-all duration-150"
           >
             reconfigure
           </button>
@@ -488,52 +1231,69 @@ export function SetupDrawer({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-zinc-900">
+    <div className="flex flex-col h-full bg-white dark:bg-dbx-gray-900">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
+      <div className="px-4 py-3 border-b border-dbx-gray-100 dark:border-dbx-gray-800 flex-shrink-0 bg-dbx-menu dark:bg-dbx-gray-900">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-[15px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-mono">{step.label}</div>
+          <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-widest font-mono font-medium">{step.label}</div>
           {phase !== 'choose' && (
             <button
               onClick={onBack}
-              className="text-[15px] text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-0.5 hover:text-zinc-600 dark:hover:text-zinc-300 font-mono transition-colors"
+              className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-md px-2 py-0.5 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 font-mono transition-all duration-150 hover:shadow-node"
             >
               ← back
             </button>
           )}
         </div>
-        <div className="text-[20px] font-medium text-zinc-800 dark:text-zinc-100 font-mono">{step.title}</div>
-        {keepLabel && (
-          <div className="flex items-center gap-2 mt-1">
-            <div className="text-[17px] font-mono text-[#1D9E75] truncate flex-1">{keepLabel}</div>
-            {TESTABLE_STEPS.includes(activeStep) && (
-              <button
-                onClick={handleTest}
-                disabled={testState.status === 'loading'}
-                className="flex-shrink-0 text-[11px] font-mono px-2 py-0.5 rounded border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE] dark:hover:bg-[#0f2a1e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {testState.status === 'loading' ? 'testing…' : 'test ↗'}
-              </button>
+        <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">{step.title}</div>
+        {(keepLabel || TESTABLE_STEPS.includes(activeStep)) && (
+          <>
+            {/* Line 1: current value — editable for schema step, read-only for others */}
+            <div className="flex items-center gap-2 mt-1.5">
+              {activeStep === 'schema' ? (
+                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
+              ) : testState.status === 'loading'
+                ? <div className="text-[13px] font-mono text-dbx-blue dark:text-dbx-green truncate flex-1 animate-pulse">verifying…</div>
+                : testState.status === 'fail'
+                  ? <div className="text-[13px] font-mono text-dbx-amber truncate flex-1">please configure {step.label}</div>
+                  : keepLabel
+                    ? <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <span className="text-[13px] font-mono text-dbx-blue truncate">{keepLabel}</span>
+                        <button onClick={onReconfigure} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="edit">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    : <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">not configured</div>
+              }
+              {TESTABLE_STEPS.includes(activeStep) && testState.status !== 'loading' && (
+                <button
+                  onClick={handleTest}
+                  className="flex-shrink-0 text-[10px] font-mono px-2.5 py-1 rounded-md border transition-all duration-150 bg-dbx-blue-bg dark:bg-dbx-green-bg/10 text-dbx-blue dark:text-dbx-green border-dbx-blue/20 dark:border-dbx-green/20 hover:shadow-[0_0_8px_rgba(46,125,209,0.2)] dark:hover:shadow-[0_0_8px_rgba(0,169,114,0.2)]"
+                >
+                  test ↗
+                </button>
+              )}
+            </div>
+            {/* Line 2: test result message (only when ok) */}
+            {testState.status === 'ok' && testState.message && (
+              <div className="text-[11px] font-mono text-dbx-green mt-0.5 truncate animate-fade-in">
+                [+] {testState.message}
+              </div>
             )}
-          </div>
-        )}
-        {testState.status !== 'idle' && testState.status !== 'loading' && (
-          <div className={`text-[11px] font-mono mt-1 truncate ${testState.status === 'ok' ? 'text-[#1D9E75]' : 'text-[#E24B4A]'}`}>
-            {testState.status === 'ok' ? '[+]' : '[x]'} {testState.message}
-          </div>
+          </>
         )}
       </div>
 
       {/* Trail */}
-      <div className="flex items-center px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
+      <div className="flex items-center px-4 py-2.5 border-b border-dbx-gray-100 dark:border-dbx-gray-800 flex-shrink-0">
         {PHASES.map((p, i) => (
           <span key={p} className="flex items-center">
-            <span className={`text-[15px] font-mono ${
-              i < phaseIdx ? 'text-[#1D9E75]' : p === phase ? 'text-zinc-800 dark:text-zinc-100 font-medium' : 'text-zinc-300 dark:text-zinc-600'
+            <span className={`text-[11px] font-mono transition-colors duration-200 ${
+              i < phaseIdx ? 'text-dbx-blue dark:text-dbx-green font-medium' : p === phase ? 'text-dbx-red dark:text-[#FF6B5A] font-semibold' : 'text-dbx-gray-300 dark:text-dbx-gray-600'
             }`}>
-              {p}
+              {i < phaseIdx ? `✓ ${p}` : p}
             </span>
-            {i < PHASES.length - 1 && <span className="text-[15px] text-zinc-200 dark:text-zinc-700 mx-2">›</span>}
+            {i < PHASES.length - 1 && <span className="text-[11px] text-dbx-gray-200 dark:text-dbx-gray-700 mx-2">›</span>}
           </span>
         ))}
       </div>

@@ -84,7 +84,7 @@ Everything needed to stand up the data layer from scratch.
 
 `create_all_assets.py` auto-discovers CSV files and matching `create_<name>.sql` files — adding both files is all that's needed to provision a new table.
 
-### `prompt/`
+### `conf/prompt/`
 | File | Purpose |
 |---|---|
 | `main.prompt` | Agent system prompt (ops advisor role and behavior) |
@@ -103,14 +103,14 @@ Full-stack chat application (npm monorepo). The React client is **built remotely
 | `packages/ai-sdk-providers` | Databricks AI SDK integration |
 | `packages/db` | Drizzle ORM + Lakebase schema for optional chat history |
 
-### `config/`
+### `conf/`
 Configuration files shared across the framework.
 
 | Path | Contents |
 |---|---|
-| `config/ka/ka_passengers.yml` | KA definition: display name, instructions, examples for EU passenger rights |
-| `config/ka/output_format.yml` | Shared output schema — JSON with answer + verbatim source excerpts |
-| `config/.env.example` | Environment variable reference template |
+| `conf/ka/ka_passengers.yml` | KA definition: display name, instructions, examples for EU passenger rights |
+| `conf/ka/output_format.yml` | Shared output schema — JSON with answer + verbatim source excerpts |
+| `conf/.env.example` | Environment variable reference template |
 
 ### `scripts/`
 | Script | Purpose |
@@ -125,7 +125,7 @@ Utilities for creating and managing Databricks Knowledge Assistants.
 
 | Script | Purpose |
 |---|---|
-| `create_kas_from_yml.py` | Creates KAs from `config/ka/` YAML files; waits for ACTIVE; writes `PROJECT_KA_<SLUG>` to `.env.local` |
+| `create_kas_from_yml.py` | Creates KAs from `conf/ka/` YAML files; waits for ACTIVE; writes `PROJECT_KA_<SLUG>` to `.env.local` |
 | `ka_instructions_merger.py` | Merges shared output format with KA-specific instructions |
 | `upload_pdfs.py` | Uploads PDF files to Databricks Volumes |
 | `create_volume.py` | Creates UC Volumes for storing KA source documents |
@@ -244,10 +244,10 @@ Agent Forge is a template. To build your own agent:
 
 1. **Swap the domain** — replace `flights.csv`, the flights table, and Genie space with your data
 2. **Add or replace tools** — use the `forge-add-tool` skill or drop new `@tool` functions in `tools/` and register them in `agent/agent.py`
-3. **Update prompts** — edit `prompt/main.prompt` and `prompt/knowledge.base` for your domain
+3. **Update prompts** — edit `conf/prompt/main.prompt` and `conf/prompt/knowledge.base` for your domain
 4. **Extend the data layer** — use the `forge-add-data` skill or add SQL functions/procedures in `data/func/` and `data/proc/`
 5. **Customize the UI** — the chat app is a generic streaming UI; extend as needed
-6. **Add a Knowledge Assistant** — use the `forge-add-ka` skill: create a YAML in `config/ka/`, upload PDFs via `scripts/py/ka/`, run `create_kas_from_yml.py`
+6. **Add a Knowledge Assistant** — use the `forge-add-ka` skill: create a YAML in `conf/ka/`, upload PDFs via `scripts/py/ka/`, run `create_kas_from_yml.py`
 7. **Wire a KA as an agent tool** — use the `forge-add-tool` skill (KA tool pattern) to call a KA endpoint from the agent
 8. **Evaluate and improve** — write test questions in `eval/data/`, run `eval/run_eval.py` to compare runs in MLflow
 
@@ -262,5 +262,5 @@ All infrastructure (DAB, MLflow, UC schema) is config-driven via `.env.local` an
 | `docs/Build & setup flow.md` | Step-by-step initialization flow with folder map |
 | `app/README.md` | Chat app setup, deployment, testing |
 | `app/CLAUDE.md` | Claude Code context, commands, conventions for the frontend |
-| `config/.env.example` | All environment variable definitions |
-| `config/ka/ka_passengers.yml` | Example KA configuration (EU passenger rights) |
+| `conf/.env.example` | All environment variable definitions |
+| `conf/ka/ka_passengers.yml` | Example KA configuration (EU passenger rights) |

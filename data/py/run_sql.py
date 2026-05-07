@@ -30,7 +30,10 @@ if __name__ == "__main__":
     wh_id = str(getattr(wh, "id", wh) or wh)
     content = substitute_schema(path.read_text().strip())
 
-    if "CALL " in content:
+    # Procedures with BEGIN...END must be sent as a single statement
+    if "BEGIN" in content and "END;" in content:
+        stmts = [content]
+    elif "CALL " in content:
         create, call = content.split("CALL ", 1)
         stmts = [create.strip(), "CALL " + call.strip()]
     else:

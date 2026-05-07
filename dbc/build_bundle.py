@@ -12,8 +12,7 @@ and generates a Vocareum courseware folder:
         ├── agent/                     (Python source, plain files)
         ├── tools/
         ├── data/
-        ├── prompt/
-        ├── config/
+        ├── conf/
         ├── pyproject.toml
         └── app/client/dist/           (pre-built frontend, if available)
 
@@ -74,17 +73,17 @@ BUNDLE_FILES: list[str] = [
     "data/py/__init__.py",
     "data/py/sql_utils.py",
     # SQL
-    "data/init/create_flights.sql",
-    "data/proc/update_flight_risk.sql",
-    "data/func/checkin_metrics.sql",
-    "data/func/flights_at_risk.sql",
+    "data/default/init/create_flights.sql",
+    "data/default/proc/update_flight_risk.sql",
+    "data/default/func/checkin_metrics.sql",
+    "data/default/func/flights_at_risk.sql",
     # Prompts
-    "prompt/main.prompt",
-    "prompt/knowledge.base",
+    "conf/prompt/main.prompt",
+    "conf/prompt/knowledge.base",
     # Config
-    "config/ka/ka_passengers.yml",
-    "config/ka/output_format.yml",
-    "config/vector-search/vs_passengers.yml",
+    "conf/ka/ka_passengers.yml",
+    "conf/ka/output_format.yml",
+    "conf/vector-search/vs_passengers.yml",
     # Project
     "pyproject.toml",
 ]

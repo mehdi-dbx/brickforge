@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create (or replace) all UC SQL functions from data/func/*.sql.
+"""Create (or replace) all UC SQL functions from data/default/func/*.sql.
 
 Only files that contain a CREATE statement are executed (SELECT-only
 query templates are skipped automatically).
@@ -90,7 +90,7 @@ def _is_ddl(sql_path: Path) -> bool:
 
 
 def main() -> None:
-    func_dir = ROOT / "data" / "func"
+    func_dir = ROOT / "data" / "default" / "func"
     all_sql = sorted(func_dir.glob("*.sql"))
     ddl_sql = [p for p in all_sql if _is_ddl(p)]
     skipped = len(all_sql) - len(ddl_sql)

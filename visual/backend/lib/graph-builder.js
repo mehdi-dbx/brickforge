@@ -128,7 +128,7 @@ function buildGraph() {
         label: 'flights_at_risk',
         subtitle: 'SQL function',
         dataVariant: 'function',
-        sourceFile: 'data/func/flights_at_risk.sql',
+        sourceFile: 'data/default/func/flights_at_risk.sql',
         meta: {
           params: 'zone, time_start, time_end',
           returns: 'flight_number, departure_time',
@@ -144,7 +144,7 @@ function buildGraph() {
         label: 'update_flight_risk',
         subtitle: 'SQL procedure',
         dataVariant: 'procedure',
-        sourceFile: 'data/proc/update_flight_risk.sql',
+        sourceFile: 'data/default/proc/update_flight_risk.sql',
         meta: {
           params: 'flight_number, at_risk',
           action: 'UPDATE delay_risk field',

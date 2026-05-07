@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload data/csv/*.csv to Delta tables in PROJECT_UNITY_CATALOG_SCHEMA. Creates volume 'data' if missing."""
+"""Upload CSVs from data/default/csv/ + data/gen/csv/ to Delta tables in PROJECT_UNITY_CATALOG_SCHEMA. Creates volume 'data' if missing."""
 import os
 import re
 import sys
@@ -15,7 +15,16 @@ load_dotenv(ROOT / ".env.local", override=True)
 
 TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "CANCELED", "CLOSED"})
 
-CSV_DIR = Path(__file__).resolve().parent.parent / "csv"
+DATA_ROOT = Path(__file__).resolve().parent.parent
+
+def _active_csv_dirs() -> list[Path]:
+    """Return CSV directories based on USE_DEFAULT_DATA / USE_GEN_DATA flags."""
+    dirs = []
+    if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
+        dirs.append(DATA_ROOT / "default" / "csv")
+    if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+        dirs.append(DATA_ROOT / "gen" / "csv")
+    return dirs
 
 
 def _wait_for_statement(w, wh_id: str, statement: str) -> None:
@@ -99,9 +108,7 @@ def main():
     vol = f"/Volumes/{catalog}/{schema}/{vol_name}"
 
     if len(sys.argv) > 1:
-        csv_path = Path(sys.argv[1])
-        if not csv_path.is_absolute():
-            csv_path = (CSV_DIR / csv_path).resolve()
+        csv_path = Path(sys.argv[1]).resolve()
         if not csv_path.exists():
             print(f"File not found: {csv_path}", file=sys.stderr)
             sys.exit(1)
@@ -110,7 +117,7 @@ def main():
             sys.exit(1)
         csv_files = [csv_path]
     else:
-        csv_files = sorted(CSV_DIR.glob("*.csv"))
+        csv_files = sorted(f for d in _active_csv_dirs() if d.exists() for f in d.glob("*.csv"))
 
     for csv in csv_files:
         rpath = f"{vol}/{csv.name}"

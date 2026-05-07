@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create Databricks Knowledge Assistants from config/ka/*.yml files.
+"""Create Databricks Knowledge Assistants from conf/ka/*.yml files.
 
 Volume path is derived at runtime from PROJECT_UNITY_CATALOG_SCHEMA in .env.local.
 The {volume_path} placeholder in YAML configs is substituted before parsing.
@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ka_instructions_merger import load_shared_output_format, merge_instructions
 
-CONFIG_DIR = ROOT / "config" / "ka"
+CONFIG_DIR = ROOT / "conf" / "ka"
 ENV_FILE = ROOT / ".env.local"
 
 # ANSI colors
@@ -307,12 +307,12 @@ def main() -> int:
         epilog="""
 Examples:
   uv run python scripts/py/ka/create_kas_from_yml.py
-  uv run python scripts/py/ka/create_kas_from_yml.py config/ka/ka_passengers.yml --no-wait
+  uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_passengers.yml --no-wait
   uv run python scripts/py/ka/create_kas_from_yml.py --dry-run
   uv run python scripts/py/ka/create_kas_from_yml.py --skip-existing
         """,
     )
-    parser.add_argument("configs", nargs="*", metavar="CONFIG", help="Specific YAML file(s). If omitted, all ka_*.yml in config/ka/.")
+    parser.add_argument("configs", nargs="*", metavar="CONFIG", help="Specific YAML file(s). If omitted, all ka_*.yml in conf/ka/.")
     parser.add_argument("--config-dir", default=str(CONFIG_DIR), help="Directory containing ka_*.yml files")
     parser.add_argument("--dry-run", action="store_true", help="Load configs and validate only; do not create")
     parser.add_argument("--skip-existing", action="store_true", help="Skip KAs that already exist (by display_name)")

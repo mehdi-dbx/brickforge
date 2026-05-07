@@ -1,10 +1,10 @@
-"""Load shared `output.format` from config/ka/output_format.yml and merge with per-agent instructions."""
+"""Load shared `output.format` from conf/ka/output_format.yml and merge with per-agent instructions."""
 from __future__ import annotations
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SHARED_OUTPUT_FORMAT_PATH = ROOT / "config" / "ka" / "output_format.yml"
+SHARED_OUTPUT_FORMAT_PATH = ROOT / "conf" / "ka" / "output_format.yml"
 
 
 def load_shared_output_format() -> str:

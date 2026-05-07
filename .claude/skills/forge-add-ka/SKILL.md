@@ -9,16 +9,16 @@ Guides through creating a new KA agent: write the YAML config, deploy it, and ve
 
 ## Key Files
 
-- `config/ka/ka_<name>.yml` — per-KA definition (display_name, description, instructions, knowledge_sources)
-- `config/ka/output_format.yml` — shared output format prepended to every KA's instructions automatically
-- `config/ka/ka_passengers.yml` — reference example
+- `conf/ka/ka_<name>.yml` — per-KA definition (display_name, description, instructions, knowledge_sources)
+- `conf/ka/output_format.yml` — shared output format prepended to every KA's instructions automatically
+- `conf/ka/ka_passengers.yml` — reference example
 - `scripts/py/ka/create_kas_from_yml.py` — creates KAs in Databricks from YAML configs
 - `scripts/py/ka/list_ka_states.py` — lists all KAs with state (ACTIVE / FAILED / CREATING)
 - `scripts/py/ka/ka_instructions_merger.py` — merges shared output_format + per-KA instructions
 
 ## YAML Schema
 
-File must be named `ka_<slug>.yml` and placed in `config/ka/`.
+File must be named `ka_<slug>.yml` and placed in `conf/ka/`.
 
 ```yaml
 knowledge_assistant:
@@ -66,12 +66,12 @@ Ask the user for:
 3. What documents will be indexed (they must already be in the UC Volume at `{volume_path}`)
 4. Key instructions (how to cite, what to cover, limitations)
 
-Then write `config/ka/ka_<slug>.yml` following the schema above. Use `config/ka/ka_passengers.yml` as a style reference.
+Then write `conf/ka/ka_<slug>.yml` following the schema above. Use `conf/ka/ka_passengers.yml` as a style reference.
 
 ### Step 2 — Dry-run validate
 
 ```bash
-uv run python scripts/py/ka/create_kas_from_yml.py config/ka/ka_<slug>.yml --dry-run
+uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_<slug>.yml --dry-run
 ```
 
 Confirm: config loaded, volume path resolved, env key shown. Fix any errors before proceeding.
@@ -79,7 +79,7 @@ Confirm: config loaded, volume path resolved, env key shown. Fix any errors befo
 ### Step 3 — Create the KA
 
 ```bash
-uv run python scripts/py/ka/create_kas_from_yml.py config/ka/ka_<slug>.yml
+uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_<slug>.yml
 ```
 
 - Waits for ACTIVE state (up to 10 min). Press ESC to detach and check later.
@@ -129,5 +129,5 @@ uv run python scripts/py/ka/upload_pdfs.py
 uv run python scripts/py/ka/create_kas_from_yml.py --skip-existing
 
 # Create without waiting for ACTIVE
-uv run python scripts/py/ka/create_kas_from_yml.py config/ka/ka_<slug>.yml --no-wait
+uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_<slug>.yml --no-wait
 ```

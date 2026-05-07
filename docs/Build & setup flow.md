@@ -17,7 +17,7 @@
 | `setup_dbx_env.sh` / `setup_dbx_env.py` | Interactive setup — configure env vars, verify all Databricks resources; warns on FM workspace flavor mismatch (Azure vs AWS) |
 | `start_local.sh` | Boot backend (8000) + Node API (3001) + frontend (3000) locally |
 | `reset_workspace.py` | Delete workspace resources (Genie space, tables, procs, functions, MLflow experiment); keeps Unity Catalog and Knowledge Assistants |
-| `ka/create_kas_from_yml.py` | Create Knowledge Assistants from `config/ka/` YAML files; writes `PROJECT_KA_<SLUG>` to `.env.local` on ACTIVE |
+| `ka/create_kas_from_yml.py` | Create Knowledge Assistants from `conf/ka/` YAML files; writes `PROJECT_KA_<SLUG>` to `.env.local` on ACTIVE |
 
 ↓
 
@@ -50,7 +50,7 @@ New tools: use `.claude/skills/forge-add-tool` (SQL read, action, or KA patterns
 |---|---|
 | `agent.py` | Wires tools + model + Genie MCP; tool list at `~line 58` |
 | `start_server.py` | Exposes agent + table endpoints via MLflow AgentServer |
-| `prompt/` | System prompt + knowledge base + user starters |
+| `conf/prompt/` | System prompt + knowledge base + user starters |
 
 ↓
 

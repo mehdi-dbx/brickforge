@@ -81,31 +81,31 @@ BUNDLE_FILES: list[str] = [
     "data/__init__.py",
     "data/py/__init__.py",
     "data/py/sql_utils.py",
-    "data/init/create_flights.sql",
-    "data/init/create_checkin_agents.sql",
-    "data/init/create_checkin_metrics.sql",
-    "data/init/create_border_officers.sql",
-    "data/init/create_border_terminals.sql",
-    "data/proc/update_flight_risk.sql",
-    "data/proc/update_checkin_agents_procedure.sql",
-    "data/proc/update_border_officer_procedure.sql",
-    "data/proc/confirm_arrival_procedure.sql",
-    "data/func/checkin_metrics.sql",
-    "data/func/flights_at_risk.sql",
-    "data/func/checkin_performance_metrics.sql",
-    "data/func/checkin_agent_staffing.sql",
-    "data/func/border_officer_staffing.sql",
-    "data/func/egate_availability.sql",
-    "data/func/available_agents_for_redeployment.sql",
-    "data/func/border_terminal_details.sql",
-    "data/func/border_officers_by_post.sql",
-    "data/func/checkin_agents_by_counter_status.sql",
-    "data/func/staffing_duties.sql",
-    "prompt/main.prompt",
-    "prompt/knowledge.base",
-    "config/ka/ka_passengers.yml",
-    "config/ka/output_format.yml",
-    "config/vector-search/vs_passengers.yml",
+    "data/default/init/create_flights.sql",
+    "data/default/init/create_checkin_agents.sql",
+    "data/default/init/create_checkin_metrics.sql",
+    "data/default/init/create_border_officers.sql",
+    "data/default/init/create_border_terminals.sql",
+    "data/default/proc/update_flight_risk.sql",
+    "data/default/proc/update_checkin_agents_procedure.sql",
+    "data/default/proc/update_border_officer_procedure.sql",
+    "data/default/proc/confirm_arrival_procedure.sql",
+    "data/default/func/checkin_metrics.sql",
+    "data/default/func/flights_at_risk.sql",
+    "data/default/func/checkin_performance_metrics.sql",
+    "data/default/func/checkin_agent_staffing.sql",
+    "data/default/func/border_officer_staffing.sql",
+    "data/default/func/egate_availability.sql",
+    "data/default/func/available_agents_for_redeployment.sql",
+    "data/default/func/border_terminal_details.sql",
+    "data/default/func/border_officers_by_post.sql",
+    "data/default/func/checkin_agents_by_counter_status.sql",
+    "data/default/func/staffing_duties.sql",
+    "conf/prompt/main.prompt",
+    "conf/prompt/knowledge.base",
+    "conf/ka/ka_passengers.yml",
+    "conf/ka/output_format.yml",
+    "conf/vector-search/vs_passengers.yml",
     "pyproject.toml",
 ]
 
@@ -551,8 +551,8 @@ def _cell_knowledge_assistant() -> str:
             warn("No PDFs found in data/pdf/ — KA will have no knowledge sources")
 
         # --- Load KA config from bundle ---
-        ka_yml = Path(LOCAL_DIR) / "config" / "ka" / "ka_passengers.yml"
-        output_yml = Path(LOCAL_DIR) / "config" / "ka" / "output_format.yml"
+        ka_yml = Path(LOCAL_DIR) / "conf" / "ka" / "ka_passengers.yml"
+        output_yml = Path(LOCAL_DIR) / "conf" / "ka" / "output_format.yml"
 
         raw = ka_yml.read_text(encoding="utf-8").replace("{{volume_path}}", VOLUME_PATH)
         cfg = yaml.safe_load(raw)

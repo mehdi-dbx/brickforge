@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=DM+Mono:wght@300;400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 * {
   box-sizing: border-box;
@@ -13,8 +14,24 @@ html, body, #root {
   margin: 0;
 }
 
+/* ─── Scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(100,100,120,0.25); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(100,100,120,0.4); }
-* { scrollbar-width: thin; scrollbar-color: rgba(100,100,120,0.25) transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,53,34,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,53,34,0.30); }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,53,34,0.15) transparent; }
+
+/* ─── Accent underline for active tab ────────────────────────────────── */
+.tab-active {
+  position: relative;
+}
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: #FF3522;
+  border-radius: 1px;
+}

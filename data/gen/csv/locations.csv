@@ -1,0 +1,9 @@
+location_id,name,city,state,airport_code,phone
+LOC-001,LAX Airport Branch,Los Angeles,CA,LAX,(310) 555-0142
+LOC-002,JFK Airport Branch,New York,NY,JFK,(718) 555-0287
+LOC-003,ORD Airport Branch,Chicago,IL,ORD,(773) 555-0364
+LOC-004,DFW Airport Branch,Dallas,TX,DFW,(972) 555-0419
+LOC-005,MIA Airport Branch,Miami,FL,MIA,(305) 555-0531
+LOC-006,SFO Airport Branch,San Francisco,CA,SFO,(650) 555-0678
+LOC-007,SEA Airport Branch,Seattle,WA,SEA,(206) 555-0745
+LOC-008,ATL Airport Branch,Atlanta,GA,ATL,(404) 555-0893

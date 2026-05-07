@@ -5,9 +5,9 @@ Logs everything to create_all_assets.log (including errors).
 
 Order:
   1. create_catalog_schema.py
-  2. create_<table>.sql for each CSV in data/csv/ (derived dynamically)
+  2. create_<table>.sql for each CSV in data/default/csv/ + data/gen/csv/ (derived dynamically)
   3. create_genie_space.py
-  4. All *.sql in data/proc
+  4. All *.sql in data/default/proc
 
 Usage: uv run python data/init/create_all_assets.py
 """
@@ -24,26 +24,36 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 LOG_FILE = ROOT / "logs" / "create_all_assets.log"
 
+def _active_sources() -> list[tuple[Path, Path]]:
+    """Return (csv_dir, init_dir) pairs based on USE_DEFAULT_DATA / USE_GEN_DATA flags."""
+    sources = []
+    if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
+        sources.append((ROOT / "data" / "default" / "csv", ROOT / "data" / "default" / "init"))
+    if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+        sources.append((ROOT / "data" / "gen" / "csv", ROOT / "data" / "gen" / "init"))
+    return sources
+
+
 def _get_init_sql() -> list[str]:
-    """Derive init SQL paths from data/csv/*.csv — one create_<table>.sql per CSV."""
-    csv_dir = ROOT / "data" / "csv"
-    init_dir = ROOT / "data" / "init"
-    if not csv_dir.exists():
-        return []
+    """Derive init SQL paths from active data sources."""
     paths = []
-    for csv_path in sorted(csv_dir.glob("*.csv")):
-        table = csv_path.stem.replace("-", "_")
-        sql_path = init_dir / f"create_{table}.sql"
-        if sql_path.exists():
-            paths.append(str(sql_path.relative_to(ROOT)))
+    for csv_dir, init_dir in _active_sources():
+        if not csv_dir.exists():
+            continue
+        for csv_path in sorted(csv_dir.glob("*.csv")):
+            table = csv_path.stem.replace("-", "_")
+            sql_path = init_dir / f"create_{table}.sql"
+            if sql_path.exists():
+                paths.append(str(sql_path.relative_to(ROOT)))
     return paths
 
 
 def _get_tables_to_verify() -> list[str]:
-    csv_dir = ROOT / "data" / "csv"
-    if not csv_dir.exists():
-        return []
-    return sorted(p.stem.replace("-", "_") for p in csv_dir.glob("*.csv"))
+    tables = []
+    for csv_dir, _ in _active_sources():
+        if csv_dir.exists():
+            tables.extend(p.stem.replace("-", "_") for p in csv_dir.glob("*.csv"))
+    return sorted(set(tables))
 
 
 INIT_SQL = _get_init_sql()
@@ -187,6 +197,31 @@ def verify_assets() -> bool:
                 _log_plain(f"FAIL verify genie space {space_id}: {e}")
                 ok = False
 
+        # Lakebase instance
+        lakebase_name = os.environ.get("LAKEBASE_INSTANCE_NAME", "").strip()
+        if lakebase_name:
+            try:
+                import subprocess as _sp
+                _args = ["databricks", "database", "get-database-instance", lakebase_name, "--output", "json"]
+                _profile = os.environ.get("DATABRICKS_CONFIG_PROFILE")
+                if _profile:
+                    _args += ["-p", _profile]
+                _r = _sp.run(_args, capture_output=True, text=True)
+                if _r.returncode == 0:
+                    import json as _json
+                    _data = _json.loads(_r.stdout)
+                    _state = _data.get("state", "UNKNOWN")
+                    print(f"  {OK} Lakebase {C}({lakebase_name} — {_state}){W}")
+                    _log_plain(f"OK verify lakebase: {lakebase_name} ({_state})")
+                else:
+                    print(f"  {FAIL} Lakebase {C}({lakebase_name}: {_r.stderr.strip()}){W}")
+                    _log_plain(f"FAIL verify lakebase {lakebase_name}: {_r.stderr.strip()}")
+                    ok = False
+            except Exception as e:
+                print(f"  {FAIL} Lakebase {C}({e}){W}")
+                _log_plain(f"FAIL verify lakebase {lakebase_name}: {e}")
+                ok = False
+
     except Exception as e:
         print(f"  {FAIL} {e}{W}")
         _log_plain(f"FAIL verify setup: {e}")
@@ -196,8 +231,8 @@ def verify_assets() -> bool:
 
 
 def main() -> None:
-    # 1 (schema) + tables + 1 (genie) + 1 (functions) + 1 (procedures) + 1 (verify)
-    total_steps = 1 + len(INIT_SQL) + 1 + 1 + 1 + 1
+    # 1 (schema) + tables + 1 (genie) + 1 (functions) + 1 (procedures) + 1 (lakebase) + 1 (verify)
+    total_steps = 1 + len(INIT_SQL) + 1 + 1 + 1 + 1 + 1
 
     print(f"\n{BOLD}{M}╔══════════════════════════════════════════╗{W}")
     print(f"{BOLD}{M}║  Create All Assets                       ║{W}")
@@ -226,6 +261,10 @@ def main() -> None:
 
     step += 1
     if not run_step("create_all_procedures", ["uv", "run", "python", "data/init/create_all_procedures.py"], step, total_steps):
+        sys.exit(1)
+
+    step += 1
+    if not run_step("create_lakebase", ["uv", "run", "python", "data/init/create_lakebase.py"], step, total_steps):
         sys.exit(1)
 
     step += 1

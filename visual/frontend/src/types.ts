@@ -36,7 +36,7 @@ export interface GraphResponse {
 
 // ─── Setup types ──────────────────────────────────────────────────────────────
 
-export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'model' | 'genie' | 'ka' | 'mlflow' | 'grants'
+export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'mlflow' | 'grants' | 'deploy'
 export type StepStatus = 'done' | 'warning' | 'error' | 'missing' | 'unknown'
 export type SetupPhase = 'choose' | 'configure' | 'execute' | 'done'
 
@@ -50,6 +50,7 @@ export interface SetupStep {
   id: StepId
   label: string
   title: string
+  help: string
   choices: StepChoice[]
 }
 
@@ -79,3 +80,44 @@ export interface StepState {
   status: StepStatus
   values: Record<string, string>
 }
+
+// ─── Data generation types ───────────────────────────────────────────────────
+
+export interface TableColumn {
+  name: string
+  type: string
+}
+
+export interface TableDef {
+  name: string
+  columns: TableColumn[]
+  row_count: number
+  instructions: string
+}
+
+export interface GenStatus {
+  modelReady: boolean
+  manifest: { generated_at: string; tables: TableDef[] } | null
+}
+
+export type GenStep = 'domain' | 'schema' | 'data' | 'provision' | 'done'
+export type DataMode = 'tables' | 'generate' | 'generate-routines'
+
+// ─── Routine generation types ───────────────────────────────────────────────
+
+export interface RoutineParam {
+  name: string
+  sql_type: string
+}
+
+export interface RoutineDef {
+  name: string
+  type: 'function' | 'procedure'
+  description: string
+  parameters: RoutineParam[]
+  tables_referenced: string[]
+  instructions: string
+  sql?: string
+}
+
+export type FuncGenStep = 'domain' | 'schema' | 'sql' | 'provision' | 'done'

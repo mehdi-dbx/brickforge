@@ -77,7 +77,7 @@ $DRY_RUN && echo -e "\n  ${WARN}  ${DIM}Dry-run — validation only, no deployme
 section "Environment"
 
 if [[ ! -f "$ROOT/.env.local" ]]; then
-  abort ".env.local not found — copy config/.env.example and fill in values"
+  abort ".env.local not found — copy conf/.env.example and fill in values"
 fi
 set -a; source "$ROOT/.env.local"; set +a
 ok "Loaded .env.local"

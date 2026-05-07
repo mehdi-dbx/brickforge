@@ -101,9 +101,9 @@ Each tool is one `@tool`-decorated function in `tools/<tool_name>.py`. Register 
 
 Use the `forge-add-ka` skill:
 
-1. Write `config/ka/ka_<slug>.yml` — display name, instructions, knowledge sources (PDF files in a UC Volume)
-2. Dry-run validate: `uv run python scripts/py/ka/create_kas_from_yml.py config/ka/ka_<slug>.yml --dry-run`
-3. Deploy and wait for ACTIVE: `uv run python scripts/py/ka/create_kas_from_yml.py config/ka/ka_<slug>.yml`
+1. Write `conf/ka/ka_<slug>.yml` — display name, instructions, knowledge sources (PDF files in a UC Volume)
+2. Dry-run validate: `uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_<slug>.yml --dry-run`
+3. Deploy and wait for ACTIVE: `uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_<slug>.yml`
 4. The endpoint is written to `.env.local` automatically as `PROJECT_KA_<SLUG>`
 5. Wire it as an agent tool using the KA tool pattern in `forge-add-tool`
 
@@ -156,6 +156,6 @@ Drops tables, stored procedures, functions, Genie space, and MLflow experiment �
 |---|---|
 | `docs/agent-forge_overview.md` | Full component-by-component reference |
 | `docs/Build & setup flow.md` | Layered build and setup flow diagram |
-| `config/.env.example` | All environment variable definitions |
-| `config/ka/ka_passengers.yml` | Example KA configuration |
+| `conf/.env.example` | All environment variable definitions |
+| `conf/ka/ka_passengers.yml` | Example KA configuration |
 | `app/CLAUDE.md` | Frontend conventions and commands |

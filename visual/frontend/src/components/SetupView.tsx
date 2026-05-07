@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { StepId, SetupPhase, StepState, ExecLine } from '../types'
 import { SetupDag } from './SetupDag'
-import { SetupDrawer } from './SetupDrawer'
+import { SetupDrawer, type TestResult } from './SetupDrawer'
 import { SETUP_STEPS } from '../setupSteps'
 
 const ALL_STEP_IDS = SETUP_STEPS.map(s => s.id)
@@ -16,6 +16,7 @@ export function SetupView() {
   const [phase, setPhase]                   = useState<SetupPhase>('choose')
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null)
   const [execLines, setExecLines]           = useState<ExecLine[]>([])
+  const [testCache, setTestCache]           = useState<Partial<Record<StepId, TestResult>>>({})
 
   const refreshStatus = useCallback(() => {
     fetch('/api/setup/status')
@@ -68,7 +69,7 @@ export function SetupView() {
     }
 
     const NEEDS_CONFIGURE = ['cfg-profile', 'cfg-warehouse', 'cfg-catalog', 'cfg-genie',
-      'cfg-grants', 'cfg-new', 'cfg-ka', 'manual', 'exec-genie']
+      'cfg-grants', 'cfg-new', 'cfg-ka', 'cfg-deploy-name', 'cfg-prompt', 'cfg-prompt-gen', 'manual', 'exec-genie']
     if (NEEDS_CONFIGURE.includes(action)) { setPhase('configure'); return }
 
     setExecLines([])
@@ -89,31 +90,48 @@ export function SetupView() {
     if (idx < ALL_STEP_IDS.length - 1) handleActivate(ALL_STEP_IDS[idx + 1])
   }, [activeStep, handleActivate])
 
+  const handleTestResult = useCallback((step: StepId, result: TestResult) => {
+    setTestCache(prev => ({ ...prev, [step]: result }))
+  }, [])
+
   const handleReconfigure = useCallback(() => {
     setPhase('choose')
     setSelectedChoice(null)
     setExecLines([])
-  }, [])
+    // Invalidate cache for this step so it re-tests after reconfigure
+    setTestCache(prev => { const next = { ...prev }; delete next[activeStep]; return next })
+  }, [activeStep])
 
   const handleExecDone = useCallback((ok: boolean) => {
     setStepStates(prev => ({
       ...prev,
       [activeStep]: { ...prev[activeStep], status: ok ? 'done' : 'error' },
     }))
+    // Invalidate test cache — value changed, needs re-verification next visit
+    setTestCache(prev => { const next = { ...prev }; delete next[activeStep]; return next })
     setTimeout(() => {
       setPhase('done')
       if (ok) refreshStatus()
     }, 600)
   }, [activeStep, refreshStatus])
 
-  const readyCount = ALL_STEP_IDS.filter(id => stepStates[id].status === 'done').length
+  // Merge test results into step states: configured + test fail = warning (amber)
+  const effectiveStates = { ...stepStates }
+  for (const id of ALL_STEP_IDS) {
+    const test = testCache[id]
+    if (effectiveStates[id].status === 'done' && test?.status === 'fail') {
+      effectiveStates[id] = { ...effectiveStates[id], status: 'warning' }
+    }
+  }
+
+  const readyCount = ALL_STEP_IDS.filter(id => effectiveStates[id].status === 'done').length
 
   return (
-    <div className="flex h-full bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex h-full bg-dbx-gray-50 dark:bg-dbx-gray-950">
       {/* Left: DAG fills remaining space */}
       <div className="flex-1 min-w-0">
         <SetupDag
-          stepStates={stepStates}
+          stepStates={effectiveStates}
           activeStep={activeStep}
           onActivate={handleActivate}
           readyCount={readyCount}
@@ -122,19 +140,22 @@ export function SetupView() {
       </div>
 
       {/* Right: fixed 480px drawer stuck to right edge */}
-      <div className="w-[480px] flex-shrink-0 border-l border-zinc-200 dark:border-zinc-800">
+      <div className="w-[480px] flex-shrink-0 border-l border-dbx-gray-200 dark:border-dbx-gray-800">
         <SetupDrawer
           activeStep={activeStep}
           phase={phase}
           selectedChoice={selectedChoice}
           execLines={execLines}
-          currentValues={stepStates[activeStep].values}
+          currentValues={{ ...stepStates.schema.values, ...stepStates[activeStep].values }}
+          testCache={testCache}
+          onTestResult={handleTestResult}
           onSelectChoice={setSelectedChoice}
           onContinue={handleContinue}
           onBack={handleBack}
           onReconfigure={handleReconfigure}
           onNext={ALL_STEP_IDS.indexOf(activeStep) < ALL_STEP_IDS.length - 1 ? handleNext : undefined}
           onExecDone={handleExecDone}
+          onRefresh={refreshStatus}
         />
       </div>
     </div>

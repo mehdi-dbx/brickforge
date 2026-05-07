@@ -883,11 +883,17 @@ def list_serving_endpoints() -> list[tuple[str, str]]:
 
 
 def get_csv_tables() -> list[str]:
-    """Return table names derived from data/csv/*.csv (stem, - replaced with _)."""
-    csv_dir = ROOT / "data" / "csv"
-    if not csv_dir.exists():
-        return []
-    return sorted(p.stem.replace("-", "_") for p in csv_dir.glob("*.csv"))
+    """Return table names from active data sources (USE_DEFAULT_DATA / USE_GEN_DATA flags)."""
+    dirs = []
+    if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
+        dirs.append(ROOT / "data" / "default" / "csv")
+    if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+        dirs.append(ROOT / "data" / "gen" / "csv")
+    tables = []
+    for csv_dir in dirs:
+        if csv_dir.exists():
+            tables.extend(p.stem.replace("-", "_") for p in csv_dir.glob("*.csv"))
+    return sorted(set(tables))
 
 
 TABLES_TO_VERIFY = get_csv_tables()
@@ -922,10 +928,10 @@ def _generate_create_sql(table: str, csv_path: Path) -> str:
 
 
 def ensure_init_sql_files() -> list[Path]:
-    """Check data/csv/*.csv against data/init/create_<table>.sql. Generate stubs for missing ones.
+    """Check data/default/csv/*.csv against data/default/init/create_<table>.sql. Generate stubs for missing ones.
     Returns list of all init SQL paths (existing + newly created)."""
-    csv_dir = ROOT / "data" / "csv"
-    init_dir = ROOT / "data" / "init"
+    csv_dir = ROOT / "data" / "default" / "csv"
+    init_dir = ROOT / "data" / "default" / "init"
     if not csv_dir.exists():
         return []
     csvs = sorted(csv_dir.glob("*.csv"))
@@ -2359,9 +2365,9 @@ def run_resource_tables() -> None:
 
 
 def run_resource_functions() -> None:
-    """Create/replace UC functions from data/func/."""
-    section("UC Functions (data/func/)")
-    _func_sql = sorted((ROOT / "data" / "func").glob("*.sql"))
+    """Create/replace UC functions from data/default/func/."""
+    section("UC Functions (data/default/func/)")
+    _func_sql = sorted((ROOT / "data" / "default" / "func").glob("*.sql"))
     _func_ddl = [p for p in _func_sql if re.search(r"\bCREATE\b", p.read_text(), re.IGNORECASE)]
     if _func_ddl:
         print(f"  {C}Will CREATE OR REPLACE:{W}")
@@ -2370,7 +2376,7 @@ def run_resource_functions() -> None:
         if len(_func_sql) > len(_func_ddl):
             print(f"  {DIM}Skipping {len(_func_sql) - len(_func_ddl)} query template(s) without CREATE{W}")
     else:
-        print(f"  {DIM}No CREATE function files found in data/func/{W}")
+        print(f"  {DIM}No CREATE function files found in data/default/func/{W}")
     try:
         raw = input(f"\n  {C}Create/replace all UC functions? [y/N]: {W}").strip().lower()
         if raw in ("y", "yes"):
@@ -2387,15 +2393,15 @@ def run_resource_functions() -> None:
 
 
 def run_resource_procedures() -> None:
-    """Create/replace UC procedures from data/proc/."""
-    section("UC Procedures (data/proc/)")
-    _proc_sql = sorted((ROOT / "data" / "proc").glob("*.sql"))
+    """Create/replace UC procedures from data/default/proc/."""
+    section("UC Procedures (data/default/proc/)")
+    _proc_sql = sorted((ROOT / "data" / "default" / "proc").glob("*.sql"))
     if _proc_sql:
         print(f"  {C}Will CREATE OR REPLACE:{W}")
         for p in _proc_sql:
             print(f"    {B}+{W} {p.stem}")
     else:
-        print(f"  {DIM}No procedure files found in data/proc/{W}")
+        print(f"  {DIM}No procedure files found in data/default/proc/{W}")
     try:
         raw = input(f"\n  {C}Create/replace all UC procedures? [y/N]: {W}").strip().lower()
         if raw in ("y", "yes"):
@@ -2461,8 +2467,8 @@ STEPS: list[tuple[str, str, object]] = [
     ("warehouse",   "DATABRICKS_WAREHOUSE_ID",        run_resource_warehouse),
     ("schema",      "PROJECT_UNITY_CATALOG_SCHEMA",   run_step_schema),
     ("tables",      "Delta tables (data/sql/)",       run_resource_tables),
-    ("functions",   "UC Functions (data/func/)",      run_resource_functions),
-    ("procedures",  "UC Procedures (data/proc/)",     run_resource_procedures),
+    ("functions",   "UC Functions (data/default/func/)",  run_resource_functions),
+    ("procedures",  "UC Procedures (data/default/proc/)", run_resource_procedures),
     ("genie",       "PROJECT_GENIE_CHECKIN",          run_resource_genie),
     ("ka",          "Knowledge Assistants",           run_resource_ka),
     ("vs",          "Vector Search (KA fallback)",    run_resource_vs),

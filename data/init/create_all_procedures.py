@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create (or replace) all stored procedures from data/proc/*.sql.
+"""Create (or replace) all stored procedures from data/default/proc/*.sql.
 
 Runs each SQL file through data/py/run_sql.py which handles
 __SCHEMA_QUALIFIED__ substitution and Databricks auth.
@@ -81,7 +81,7 @@ def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> boo
 
 
 def main() -> None:
-    proc_dir = ROOT / "data" / "proc"
+    proc_dir = ROOT / "data" / "default" / "proc"
     proc_sql = sorted(proc_dir.glob("*.sql"))
 
     print(f"\n{BOLD}{M}╔══════════════════════════════════════════╗{W}")

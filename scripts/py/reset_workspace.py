@@ -6,9 +6,9 @@ Deletes:
   - MLflow experiment (MLFLOW_EXPERIMENT_ID)
   - Genie space (PROJECT_GENIE_CHECKIN)
   - UC Volume (derived from PROJECT_UNITY_CATALOG_SCHEMA)
-  - UC tables from data/init/create_*.sql
-  - UC functions from data/func/*.sql
-  - UC procedures from data/proc/*.sql
+  - UC tables from data/default/init/ + data/gen/init/
+  - UC functions from data/default/func/*.sql
+  - UC procedures from data/default/proc/*.sql
   - DAB bundle state (.databricks/bundle/)
   - Clears PROJECT_GENIE_CHECKIN + MLFLOW_EXPERIMENT_ID from .env.local
 
@@ -129,9 +129,14 @@ def main() -> int:
     catalog, schema = schema_spec.split(".", 1) if "." in schema_spec else ("", "")
     volume_name = "doc"  # convention from create_volume.py
 
-    table_names = _parse_sql_table_names(ROOT / "data" / "init")
-    func_names  = _parse_sql_object_names(ROOT / "data" / "func", "FUNCTION")
-    proc_names  = _parse_sql_object_names(ROOT / "data" / "proc", "PROCEDURE")
+    # Scan active data sources based on flags
+    table_names: list[str] = []
+    if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
+        table_names += _parse_sql_table_names(ROOT / "data" / "default" / "init")
+    if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+        table_names += _parse_sql_table_names(ROOT / "data" / "gen" / "init")
+    func_names  = _parse_sql_object_names(ROOT / "data" / "default" / "func", "FUNCTION")
+    proc_names  = _parse_sql_object_names(ROOT / "data" / "default" / "proc", "PROCEDURE")
     bundle_dir  = ROOT / ".databricks" / "bundle"
 
     # ── Preview ───────────────────────────────────────────────────────────────
@@ -239,7 +244,7 @@ def main() -> int:
                 else:
                     print(f"  {SKIP} Skipped")
     else:
-        print(f"  {SKIP} No tables found in data/init/" if not table_names else f"  {SKIP} Schema not set")
+        print(f"  {SKIP} No tables found in data/default/init/ or data/gen/init/" if not table_names else f"  {SKIP} Schema not set")
 
     # ── UC Functions ───────────────────────────────────────────────────────────
     section("UC Functions")
@@ -263,7 +268,7 @@ def main() -> int:
                 else:
                     print(f"  {SKIP} Skipped")
     else:
-        print(f"  {SKIP} No functions found in data/func/" if not func_names else f"  {SKIP} Schema not set")
+        print(f"  {SKIP} No functions found in data/default/func/" if not func_names else f"  {SKIP} Schema not set")
 
     # ── UC Procedures ──────────────────────────────────────────────────────────
     section("UC Procedures")
@@ -287,7 +292,7 @@ def main() -> int:
                 else:
                     print(f"  {SKIP} Skipped")
     else:
-        print(f"  {SKIP} No procedures found in data/proc/" if not proc_names else f"  {SKIP} Schema not set")
+        print(f"  {SKIP} No procedures found in data/default/proc/" if not proc_names else f"  {SKIP} Schema not set")
 
     # ── DAB Bundle State ───────────────────────────────────────────────────────
     section("DAB Bundle State")

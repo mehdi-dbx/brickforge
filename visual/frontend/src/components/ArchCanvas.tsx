@@ -1,6 +1,5 @@
 import {
   ReactFlow,
-  Background,
   Controls,
   MiniMap,
   useNodesState,
@@ -69,7 +68,7 @@ export function ArchCanvas({ nodes: initialNodes, edges, onNodeClick }: ArchCanv
       fitViewOptions={{ padding: 0.15 }}
       proOptions={{ hideAttribution: true }}
     >
-      <Background color="#e4e4e7" gap={20} />
+      {/* no grid — clean transparent background */}
       <Controls showInteractive={false} />
       <MiniMap
         nodeColor={(node) => {

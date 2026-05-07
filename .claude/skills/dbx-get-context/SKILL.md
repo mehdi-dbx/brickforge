@@ -41,7 +41,7 @@ Read the following in parallel to build a mental model:
 - Glob `tools/*.py` and read the first ~30 lines of each to capture docstrings and function signatures.
 
 **Config files:**
-- Glob `config/**/*.yml` and read the first ~20 lines of each.
+- Glob `conf/**/*.yml` and read the first ~20 lines of each.
 
 **Scripts:**
 - Glob `scripts/**/*.{py,sh}` — list them and read the first ~15 lines of each to capture purpose comments.
@@ -55,7 +55,7 @@ Read the following in parallel to build a mental model:
 - This is a local-only React Flow dashboard for architecture visualization, setup wizard, and env editing.
 
 **Prompt templates:**
-- Glob `prompt/**/*` and read each file.
+- Glob `conf/prompt/**/*` and read each file.
 
 ### 3. Write the context file
 
@@ -80,12 +80,12 @@ Create `docs/context-for-claude-code.md` with the following structure. Be concis
 |-----------|---------|
 | `agent/`  | ... |
 | `tools/`  | ... |
-| `config/` | ... |
+| `conf/` | ... |
+| `conf/prompt/` | ... |
 | `scripts/`| ... |
 | `visual/` | Local dev dashboard (React Flow) — architecture graph, setup wizard, env editor. NOT the chat UI |
 | `app/` | End-user chat UI (React + Node.js proxy) deployed on Databricks Apps |
 | `docs/`   | ... |
-| `prompt/` | ... |
 | `deploy/` | ... |
 | `eval/`   | ... |
 | `data/`   | ... |

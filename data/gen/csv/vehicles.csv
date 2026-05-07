@@ -1,0 +1,21 @@
+vehicle_id,make,model,year,category,daily_rate,is_available,license_plate,location_id
+VEH-001,Toyota,Camry,2022,Compact,65.99,True,KJT-4821,LOC-001
+VEH-002,Honda,Civic,2023,Economy,39.99,True,MNP-7734,LOC-002
+VEH-003,Ford,Explorer,2022,SUV,119.99,False,BXQ-2291,LOC-001
+VEH-004,BMW,3 Series,2023,Luxury,189.99,True,LRZ-5503,LOC-003
+VEH-005,Tesla,Model 3,2023,Electric,149.99,True,ELX-9901,LOC-002
+VEH-006,Chevrolet,Malibu,2021,Compact,59.99,False,GHT-3347,LOC-004
+VEH-007,Hyundai,Elantra,2022,Economy,37.5,True,PQW-8812,LOC-003
+VEH-008,Jeep,Grand Cherokee,2023,SUV,134.99,True,DFV-6620,LOC-005
+VEH-009,Mercedes-Benz,C-Class,2023,Luxury,219.99,False,RNK-1145,LOC-001
+VEH-010,Tesla,Model Y,2023,Electric,174.99,True,EVQ-4478,LOC-004
+VEH-011,Nissan,Altima,2021,Compact,62.5,False,WCB-5593,LOC-002
+VEH-012,Kia,Soul,2022,Economy,42,True,YJM-7761,LOC-005
+VEH-013,Ford,Escape,2022,SUV,109.99,True,TBH-2234,LOC-003
+VEH-014,Audi,A4,2023,Luxury,209.99,True,ZKP-8890,LOC-001
+VEH-015,Chevrolet,Bolt EV,2023,Electric,129.99,False,EBT-3312,LOC-002
+VEH-016,Toyota,Corolla,2021,Economy,35.99,True,HVL-6647,LOC-004
+VEH-017,GMC,Terrain,2022,SUV,114.99,False,SXN-9923,LOC-005
+VEH-018,Lexus,ES 350,2023,Luxury,245,True,FQD-1178,LOC-003
+VEH-019,Volkswagen,ID.4,2023,Electric,139.99,True,EVN-5541,LOC-001
+VEH-020,Honda,CR-V,2022,SUV,124.99,False,CLR-4456,LOC-005

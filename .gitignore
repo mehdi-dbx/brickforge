@@ -35,3 +35,4 @@ app/client/dist/
 
 # Vocareum bundle output (now tracked)
 # dbc/output/
+.env copy.backup
