@@ -24,6 +24,16 @@ venv/
 logs/*
 !logs/.gitkeep
 
+# Generated data (user-specific, never share)
+data/gen/csv/
+data/gen/init/
+data/gen/func/
+data/gen/proc/
+data/gen/manifest.json
+data/gen/routine_manifest.json
+data/gen/wizard-state.json
+data/gen/routine-wizard-state.json
+
 # OS
 .DS_Store
 
