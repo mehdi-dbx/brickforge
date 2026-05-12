@@ -2,9 +2,7 @@
 
 app/client/node_modules/
 app/server/node_modules/
-visual/backend/node_modules/
 visual/frontend/node_modules/
-visual/frontend/dist/
 visual/graph-layout.json
 node_modules/
 

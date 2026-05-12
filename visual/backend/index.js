@@ -10,7 +10,8 @@ const { execFile }   = require('child_process')
 const multer         = require('multer')
 const { buildGraph } = require('./lib/graph-builder')
 
-const PORT        = process.env.VISUAL_BACKEND_PORT || 9001
+const DIST_DIR    = path.resolve(__dirname, '../frontend/dist')
+const PORT        = process.env.VISUAL_PORT || 9000
 const LAYOUT_FILE = path.resolve(__dirname, '../graph-layout.json')
 const ENV_FILE    = path.resolve(__dirname, '../../.env.local')
 const PROJECT_ROOT = path.resolve(__dirname, '../..')
@@ -97,6 +98,11 @@ app.use((req, res, next) => {
   next()
 })
 app.use(express.json())
+
+// Serve pre-built frontend (no Vite / npm needed)
+if (fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
+  app.use(express.static(DIST_DIR))
+}
 
 function loadLayout() {
   try {
@@ -1719,6 +1725,12 @@ else: out('[+] cleanup complete')
   res.on('close', () => { if (!finished) try { proc.kill() } catch {} })
 })
 
+// SPA fallback — serve index.html for non-API routes
+const indexHtml = path.join(DIST_DIR, 'index.html')
+if (fs.existsSync(indexHtml)) {
+  app.get('*', (req, res) => res.sendFile(indexHtml))
+}
+
 app.listen(PORT, () => {
-  console.log(`[visual-backend] listening on http://localhost:${PORT}`)
+  console.log(`[visual] http://localhost:${PORT}`)
 })
