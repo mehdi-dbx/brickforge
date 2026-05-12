@@ -100,7 +100,7 @@ Validates, syncs config, bundles, deploys to Databricks Apps, and applies grants
 | `scripts/` | Setup, local dev, KA management |
 | `docs/` | Overview, guide, build flow |
 
-See [`docs/Build & setup flow.md`](docs/Build%20&%20setup%20flow.md) for the full technical walkthrough.
+See [`docs/brickforge-guide.md`](docs/brickforge-guide.md) for the full getting started guide.
 
 ---
 
