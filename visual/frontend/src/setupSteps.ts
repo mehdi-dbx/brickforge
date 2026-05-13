@@ -114,6 +114,16 @@ export const SETUP_STEPS: SetupStep[] = [
     ],
   },
   {
+    id: 'vs',
+    label: 'vector search',
+    title: 'Vector search index',
+    help: 'A Databricks Vector Search index the agent uses via MCP for semantic document retrieval. Serves as a fallback or complement to Knowledge Assistants. Specify the full three-level index path: catalog.schema.index_name.',
+    choices: [
+      { title: 'keep current',      desc: 'use index already set in .env.local',   action: 'done' },
+      { title: 'enter index path',  desc: 'paste a vector search index path',      action: 'manual' },
+    ],
+  },
+  {
     id: 'mlflow',
     label: 'mlflow experiment',
     title: 'Mlflow experiment id',

@@ -20,7 +20,7 @@ export function SetupView() {
 
   const refreshStatus = useCallback(() => {
     fetch('/api/setup/status')
-      .then(r => r.json() as Promise<{ steps: Record<string, { status: string; values: Record<string, string> }> }>)
+      .then(r => r.json() as Promise<{ steps: Record<string, { status: string; values: Record<string, string>; instances?: { key: string; value: string; enabled: boolean; label: string }[] }> }>)
       .then(({ steps }) => {
         const next = makeDefaultStates()
         for (const [id, s] of Object.entries(steps)) {
@@ -28,6 +28,7 @@ export function SetupView() {
             next[id as StepId] = {
               status: s.status === 'configured' ? 'done' : s.status === 'unknown' ? 'unknown' : 'missing',
               values: s.values,
+              instances: s.instances,
             }
           }
         }
@@ -126,6 +127,33 @@ export function SetupView() {
 
   const readyCount = ALL_STEP_IDS.filter(id => effectiveStates[id].status === 'done').length
 
+  const handleToggleInstance = useCallback(async (key: string) => {
+    try {
+      await fetch('/api/setup/toggle', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      })
+      refreshStatus()
+    } catch {}
+  }, [refreshStatus])
+
+  const handleToggleAllInstances = useCallback(async (stepId: StepId) => {
+    const instances = stepStates[stepId]?.instances || []
+    if (!instances.length) return
+    // If any enabled -> disable all; if all disabled -> enable all
+    const anyEnabled = instances.some(i => i.enabled)
+    const toToggle = instances.filter(i => i.enabled === anyEnabled)
+    for (const inst of toToggle) {
+      await fetch('/api/setup/toggle', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: inst.key }),
+      })
+    }
+    refreshStatus()
+  }, [stepStates, refreshStatus])
+
   return (
     <div className="flex h-full bg-dbx-gray-50 dark:bg-dbx-gray-950">
       {/* Left: DAG fills remaining space */}
@@ -134,6 +162,8 @@ export function SetupView() {
           stepStates={effectiveStates}
           activeStep={activeStep}
           onActivate={handleActivate}
+          onToggleInstance={handleToggleInstance}
+          onToggleAllInstances={handleToggleAllInstances}
           readyCount={readyCount}
           totalCount={ALL_STEP_IDS.length}
         />

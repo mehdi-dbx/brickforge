@@ -36,7 +36,7 @@ export interface GraphResponse {
 
 // ─── Setup types ──────────────────────────────────────────────────────────────
 
-export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'mlflow' | 'grants' | 'deploy'
+export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mlflow' | 'grants' | 'deploy'
 export type StepStatus = 'done' | 'warning' | 'error' | 'missing' | 'unknown'
 export type SetupPhase = 'choose' | 'configure' | 'execute' | 'done'
 
@@ -76,9 +76,17 @@ export interface ExecLine {
   stream: 'out' | 'err'
 }
 
+export interface StepInstance {
+  key: string        // e.g. PROJECT_GENIE_CHECKIN
+  value: string      // e.g. space_id or endpoint name
+  enabled: boolean   // true = active, false = commented out
+  label: string      // derived slug: "checkin", "passengers"
+}
+
 export interface StepState {
   status: StepStatus
   values: Record<string, string>
+  instances?: StepInstance[]  // for multi-instance steps (genie, ka)
 }
 
 // ─── Data generation types ───────────────────────────────────────────────────

@@ -90,6 +90,81 @@ function commentOutKeys(keys) {
   fs.writeFileSync(ENV_FILE, out.join('\n'))
 }
 
+// Return all env entries (active + commented-out) matching a prefix.
+// Returns [{key, value, enabled, label}]
+// When a key appears both active and commented, the active entry wins.
+function parseMultiInstanceKeys(prefix) {
+  let raw = ''
+  try { raw = fs.readFileSync(ENV_FILE, 'utf8') } catch { return [] }
+
+  // Collect all entries, active ones override commented-out ones
+  const byKey = new Map() // key -> {key, value, enabled, label}
+
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    let enabled = true
+    let content = trimmed
+    if (content.startsWith('#')) {
+      enabled = false
+      content = content.replace(/^#\s*/, '')
+    }
+
+    const eq = content.indexOf('=')
+    if (eq < 0) continue
+    const key = content.slice(0, eq).trim()
+    const value = content.slice(eq + 1).trim()
+
+    if (!key.startsWith(prefix)) continue
+
+    const existing = byKey.get(key)
+    // Active entry always wins over commented-out; later active wins over earlier active
+    if (!existing || enabled || (!existing.enabled && !enabled)) {
+      const slug = key.slice(prefix.length)
+      byKey.set(key, { key, value, enabled, label: slug.toLowerCase().replace(/_/g, ' ') })
+    }
+  }
+  return Array.from(byKey.values())
+}
+
+// Toggle a specific env key: comment out if active, uncomment last commented if disabled.
+function toggleEnvKey(key) {
+  let raw = ''
+  try { raw = fs.readFileSync(ENV_FILE, 'utf8') } catch { return false }
+
+  const lines = raw.split('\n')
+
+  // First pass: find the last active line and last commented line for this key
+  let lastActiveLine = -1
+  let lastCommentLine = -1
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('#')) {
+      const content = trimmed.replace(/^#\s*/, '')
+      const eq = content.indexOf('=')
+      if (eq >= 0 && content.slice(0, eq).trim() === key) lastCommentLine = i
+    } else {
+      const eq = trimmed.indexOf('=')
+      if (eq >= 0 && trimmed.slice(0, eq).trim() === key) lastActiveLine = i
+    }
+  }
+
+  if (lastActiveLine >= 0) {
+    // Active line exists -> comment it out
+    lines[lastActiveLine] = '#' + lines[lastActiveLine]
+  } else if (lastCommentLine >= 0) {
+    // No active, but commented line exists -> uncomment it
+    lines[lastCommentLine] = lines[lastCommentLine].replace(/^#\s*/, '')
+  } else {
+    return false
+  }
+
+  fs.writeFileSync(ENV_FILE, lines.join('\n'))
+  return true
+}
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS')
@@ -186,6 +261,7 @@ const STEP_ENV_KEYS = {
   prompt:    [],  // file-based, not env-based
   genie:     ['PROJECT_GENIE_CHECKIN'],
   ka:        ['PROJECT_KA_PASSENGERS'],
+  vs:        ['PROJECT_VS_INDEX'],
   mlflow:    ['MLFLOW_EXPERIMENT_ID'],
   grants:    [],  // always re-runnable, no single env key
   deploy:    ['DBX_APP_NAME'],
@@ -243,6 +319,25 @@ app.get('/api/setup/status', (_req, res) => {
         values = { PROMPT_FILES: files.join(', ') }
       }
 
+      // Multi-instance steps: attach instances array
+      if (step === 'genie') {
+        const instances = parseMultiInstanceKeys('PROJECT_GENIE_')
+        steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values, instances }
+        continue
+      }
+      if (step === 'ka') {
+        const instances = parseMultiInstanceKeys('PROJECT_KA_')
+        steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values, instances }
+        continue
+      }
+      if (step === 'vs') {
+        const instances = parseMultiInstanceKeys('PROJECT_VS_')
+        // Filter to only index entries (not endpoint)
+        const indexInstances = instances.filter(i => i.key.includes('INDEX'))
+        steps[step] = { status: indexInstances.some(i => i.enabled) ? 'configured' : (indexInstances.length ? 'missing' : 'missing'), values, instances: indexInstances }
+        continue
+      }
+
       steps[step] = { status, values }
     }
 
@@ -250,6 +345,18 @@ app.get('/api/setup/status', (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
+})
+
+// PUT /api/setup/toggle — enable/disable an env key (comment/uncomment in .env.local)
+app.put('/api/setup/toggle', (req, res) => {
+  const { key } = req.body
+  if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key required' })
+  // Only allow toggling PROJECT_GENIE_* and PROJECT_KA_* keys
+  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_')) {
+    return res.status(400).json({ error: 'can only toggle genie/ka/vs keys' })
+  }
+  const ok = toggleEnvKey(key)
+  res.json({ ok })
 })
 
 // GET /api/setup/profiles — list databricks CLI profiles
@@ -364,17 +471,26 @@ try:
     w.schemas.get(full_name=spec)
     print('[+] schema exists:', spec)
 except:
+    # Schema does not exist -- check if catalog exists first
+    cat_exists = False
     try:
         w.catalogs.get(name='${catalog}')
-        w.schemas.create(name='${schema}', catalog_name='${catalog}')
-        print('[+] schema created:', spec)
-    except Exception as e2:
+        cat_exists = True
+    except:
+        pass
+    if cat_exists:
+        try:
+            w.schemas.create(name='${schema}', catalog_name='${catalog}')
+            print('[+] schema created:', spec)
+        except Exception as e2:
+            print('[x] cannot create schema in catalog ${catalog} -- check permissions:', str(e2)[:200]); exit(1)
+    else:
         try:
             w.catalogs.create(name='${catalog}')
             w.schemas.create(name='${schema}', catalog_name='${catalog}')
             print('[+] catalog + schema created:', spec)
         except Exception as e3:
-            print('[x]', str(e3)); exit(1)
+            print('[x]', str(e3)[:200]); exit(1)
 f = Path('.env.local')
 lines = f.read_text().splitlines() if f.exists() else []
 new = []; found = False
@@ -881,32 +997,8 @@ except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim(),
 
-  genie: `
-from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-from databricks.sdk import WorkspaceClient; import os
-sid = os.environ.get('PROJECT_GENIE_CHECKIN','').strip()
-if not sid: print('[x] PROJECT_GENIE_CHECKIN not set'); exit(1)
-w = WorkspaceClient()
-try:
-    sp = w.genie.get_space(space_id=sid)
-    print('[+] found — ' + getattr(sp, 'title', sid))
-except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
-`.trim(),
-
-  ka: `
-from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-from databricks.sdk import WorkspaceClient; import os
-ka_name = os.environ.get('PROJECT_KA_PASSENGERS','').strip()
-if not ka_name: print('[x] PROJECT_KA_PASSENGERS not set'); exit(1)
-w = WorkspaceClient()
-try:
-    ep = w.serving_endpoints.get(name=ka_name)
-    state = str(ep.state.ready).split('.')[-1] if ep.state else '?'
-    print('[+] active — ' + ep.name + ' (' + state + ')')
-except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
-`.trim(),
+  genie: null, // dynamic — uses per-instance test below
+  ka: null,    // dynamic — uses per-instance test below
 
   mlflow: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
@@ -955,7 +1047,57 @@ except Exception as e:
 
 app.get('/api/setup/test', (req, res) => {
   const step = req.query.step
-  const script = TEST_SCRIPTS[step]
+  const envKey = req.query.key // optional: per-instance key for genie/ka
+
+  // Dynamic test scripts for genie/ka per-instance testing
+  let script = TEST_SCRIPTS[step]
+  if (step === 'genie') {
+    const key = envKey || 'PROJECT_GENIE_CHECKIN'
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+from databricks.sdk import WorkspaceClient; import os
+sid = os.environ.get('${key}','').strip()
+if not sid: print('[x] ${key} not set'); exit(1)
+w = WorkspaceClient()
+try:
+    sp = w.genie.get_space(space_id=sid)
+    print('[+] found — ' + getattr(sp, 'title', sid))
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  } else if (step === 'ka') {
+    const key = envKey || 'PROJECT_KA_PASSENGERS'
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+from databricks.sdk import WorkspaceClient; import os
+ka_name = os.environ.get('${key}','').strip()
+if not ka_name: print('[x] ${key} not set'); exit(1)
+w = WorkspaceClient()
+try:
+    ep = w.serving_endpoints.get(name=ka_name)
+    state = str(ep.state.ready).split('.')[-1] if ep.state else '?'
+    print('[+] active — ' + ep.name + ' (' + state + ')')
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  } else if (step === 'vs') {
+    const key = envKey || 'PROJECT_VS_INDEX'
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+from databricks.sdk import WorkspaceClient; import os
+idx = os.environ.get('${key}','').strip()
+if not idx: print('[x] ${key} not set'); exit(1)
+w = WorkspaceClient()
+try:
+    parts = idx.rsplit('.', 2)
+    if len(parts) < 3: print('[x] expected catalog.schema.index format'); exit(1)
+    ep = w.vector_search_indexes.get_index(index_name=idx)
+    print('[+] found — ' + idx)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  }
+
   if (!script) return res.json({ ok: false, message: 'no test for step: ' + step })
 
   execFile('uv', ['run', 'python', '-c', script], {

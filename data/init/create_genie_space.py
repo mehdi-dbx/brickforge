@@ -65,7 +65,12 @@ def main():
         {"id": gen_id(), "question": ["What are total check-ins by airline?"]},
         {"id": gen_id(), "question": ["Show load factor and SLA by airline"]},
     ]
-    env_var = "PROJECT_GENIE_CHECKIN"
+    # Derive env var name from GENIE_ENV_KEY (if set) or room name slug
+    env_var = os.environ.get("GENIE_ENV_KEY", "").strip()
+    if not env_var:
+        import re as _re
+        slug = _re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_").upper()
+        env_var = f"PROJECT_GENIE_{slug}"
 
     serialized = {
         "version": 2,
@@ -93,11 +98,20 @@ def main():
     print(space.space_id)
 
     env_path = ROOT / ".env.local"
-    line = f"{env_var}={space.space_id}"
+    import re as _re
+    new_val = f"{env_var}={space.space_id}"
     lines = env_path.read_text().splitlines() if env_path.exists() else []
-    lines = [ln for ln in lines if not ln.strip().startswith(env_var)]
-    lines.append(line)
-    env_path.write_text("\n".join(lines) + "\n")
+    new_lines, replaced = [], False
+    for ln in lines:
+        m = _re.match(r"^(\s*)(#?\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=", ln)
+        if m and m.group(3) == env_var and not ln.strip().startswith("#"):
+            new_lines.append(new_val)
+            replaced = True
+        else:
+            new_lines.append(ln)
+    if not replaced:
+        new_lines.append(new_val)
+    env_path.write_text("\n".join(new_lines) + "\n")
     print(f"Updated {env_path} with {env_var}={space.space_id}", file=sys.stderr)
 
 

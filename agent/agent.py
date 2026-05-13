@@ -36,7 +36,7 @@ from tools.query_checkin_metrics import query_checkin_metrics
 from tools.query_checkin_performance_metrics import query_checkin_performance_metrics
 from tools.query_egate_availability import query_egate_availability
 from tools.query_flights_at_risk import query_flights_at_risk
-from tools.query_passengers_ka import query_passengers_ka
+from tools.ka_factory import discover_ka_tools
 from tools.query_staffing_duties import query_staffing_duties
 from tools.update_border_officer import update_border_officer
 from tools.update_checkin_agent import update_checkin_agent
@@ -52,15 +52,18 @@ def _build_mcp_servers(workspace_client: WorkspaceClient) -> list[DatabricksMCPS
     """Build list of MCP server configs (does not connect yet)."""
     host_name = get_databricks_host_from_env()
     servers = []
-    genie_checkin_id = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
-    if genie_checkin_id:
-        servers.append(
-            DatabricksMCPServer(
-                name="genie-checkin",
-                url=f"{host_name}/api/2.0/mcp/genie/{genie_checkin_id}",
-                workspace_client=workspace_client,
-            ),
-        )
+    # Register all PROJECT_GENIE_* env vars as MCP servers
+    for key in sorted(os.environ):
+        if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
+            space_id = os.environ[key].strip()
+            slug = key.replace("PROJECT_GENIE_", "").lower()
+            servers.append(
+                DatabricksMCPServer(
+                    name=f"genie-{slug}",
+                    url=f"{host_name}/api/2.0/mcp/genie/{space_id}",
+                    workspace_client=workspace_client,
+                ),
+            )
 
     # Vector Search MCP server (fallback when KA is unavailable)
     vs_index = os.environ.get("PROJECT_VS_INDEX", "").strip()
@@ -107,12 +110,12 @@ async def init_agent(workspace_client: Optional[WorkspaceClient] = None):
     """
     mcp_tools = await _get_mcp_tools_safe(workspace_client or sp_workspace_client)
     wrapped_tools = [wrap_for_genie_capture(t) for t in mcp_tools]
-    tools = list(wrapped_tools) + [
+    ka_tools = discover_ka_tools()
+    tools = list(wrapped_tools) + ka_tools + [
         # Existing
         query_flights_at_risk,
         update_flight_risk,
         query_checkin_metrics,
-        query_passengers_ka,
         # Checkin performance monitoring flow
         get_current_time,
         query_checkin_performance_metrics,
