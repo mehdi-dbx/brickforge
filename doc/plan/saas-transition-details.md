@@ -2,6 +2,20 @@
 
 > The hard stuff. What actually needs to change and why.
 > Companion to saas-master-plan.md.
+> NEVER DELETE OR OVERWRITE THIS FILE.
+
+## Resolved Design Decisions
+
+| Question | Answer |
+|----------|--------|
+| Hosted mode auth | Databricks SSO -- user authenticates via SSO to their workspace |
+| Can DBX App deploy another DBX App? | Yes -- it's just Python code executing from App, calls Apps REST API |
+| Local mode | Still supported -- `node visual/backend/index.js`, uses `.env.local` |
+| dbc/ courseware | Separated to `forge-dbc` branch -- different project entirely |
+| `.forge` storage | UC Volume on user's workspace |
+| User writes YAML? | NEVER -- wizard generates it, user only sees UI |
+| Tools need custom Python? | NO -- 3 declarative patterns, framework generates code at runtime |
+| Notebooks? | STRICTLY PROHIBITED -- code-first only |
 
 ---
 
