@@ -564,71 +564,354 @@ The abstraction is the right answer. Same pattern as ConfigProvider -- detect mo
 
 ---
 
-## PART 8c: Packaging & Distribution
+## PART 8c: Packaging & Distribution -- Millimeter Detail
+
+### Current State: What We're Shipping
+
+**Clean repo size (no .git, .venv, node_modules, __pycache__, .mypy_cache): 25MB**
+With visual backend node_modules (committed, 8MB): **33MB**
+Compressed: **~10-12MB estimated**
+
+Bloat to exclude from any distribution:
+- `.mypy_cache/` -- 1.1GB (!!) across agent/, tools/, data/, scripts/
+- `.venv/` -- 662MB
+- `app/client/node_modules/` -- 100MB
+- `app/server/node_modules/` -- 18MB
+- `visual/frontend/node_modules/` -- (already gitignored)
+- `__pycache__/` -- ~1MB
+- `.git/` -- varies
+- `.DS_Store` files
 
 ### The Two-Runtime Problem
 
 BrickForge needs BOTH Node.js (Setup App server) and Python (Databricks SDK, agent, data gen).
 No single package manager handles both. Don't try to force it.
 
-### Distribution Options (simplest to most complex)
+### Distribution Path 1: GitHub Release (FIRST PRIORITY)
 
-| Method | Effort | UX | Prereqs |
-|--------|--------|----|---------|
-| **GitHub Release (zip/tar)** | LOW | Download, extract, `./start.sh` | Node.js + Python |
-| **pip install brickforge** | MEDIUM | `pip install brickforge && brickforge` | Node.js + Python |
-| **brickforge deploy-setup** | MEDIUM | One CLI command deploys Setup App to workspace | Python + databricks auth |
-| **Docker image** | MEDIUM | `docker run brickforge` | Docker |
-| npm / Electron / Homebrew | SWAMP | AVOID | -- |
+**mm D1.1: What goes in the archive?**
 
-### Path: GitHub Release First
-
-1. Build a release archive (zip/tar) with everything needed:
-   - `visual/` (backend + pre-built frontend + node_modules = ~8MB)
-   - Python code (`agent/`, `tools/`, `data/`, `scripts/`, `deploy/`, `conf/`, `eval/`)
-   - `pyproject.toml`, `requirements.txt`
-   - `start.sh` (Mac/Linux) + `start.bat` (Windows)
-   - NO `.git/`, `.venv/`, `app/client/node_modules/` (100MB), `app/server/node_modules/` (18MB)
-2. Estimated size: ~15-20MB compressed
-3. `start.sh` checks Node.js + Python, installs Python deps, starts server
-
-### Path: pip install (upgrade)
-
-```python
-# setup.py / pyproject.toml entry point:
-[project.scripts]
-brickforge = "brickforge.cli:main"
+```
+brickforge-v1.0.0/
+  visual/
+    backend/
+      index.js
+      lib/
+      node_modules/     <-- 8MB, committed, required
+      package.json
+    frontend/
+      dist/             <-- 580KB, pre-built
+    start.sh            <-- existing
+  agent/                <-- 5 Python files, ~30KB
+  app/
+    client/src/         <-- 528KB React source
+    server/src/         <-- 60KB Express source
+    packages/           <-- 38MB shared packages (THIS IS A PROBLEM -- see mm D1.2)
+    CLAUDE.md
+    app.yaml            <-- Agent App manifest (renamed)
+  tools/                <-- framework tools only, ~20KB
+  data/
+    init/               <-- provisioning scripts
+    gen/                <-- data generation scripts
+    py/                 <-- shared Python utilities
+    default/            <-- empty (domain content in stash)
+  conf/
+    prompt/             <-- skeleton prompts
+    ka/                 <-- output_format.yml only
+    .env.example
+  scripts/              <-- setup, KA management
+  deploy/               <-- deploy pipeline
+  eval/                 <-- framework eval scripts
+  stash/                <-- airops example (optional, include for demo)
+  doc/
+  edu/
+  pyproject.toml
+  requirements.txt
+  start.sh              <-- root launcher
+  start.bat             <-- Windows launcher
+  setup-app.yaml        <-- Setup App DBX App manifest
+  README.md
 ```
 
-Package bundles the Node.js app as package data (pre-built, 8MB).
-`brickforge` CLI command starts the Node server.
-User still needs Node.js installed -- pip can't install it.
+**mm D1.2: The app/packages/ problem**
 
-### Path: DBX App Deploy (Mode B)
+`app/packages/` is 38MB, 5367 files. This is the shared npm workspace packages (core, auth, ai-sdk-providers, db, utils). These are SOURCE packages -- they're compiled at build time.
+
+Options:
+- Include them (38MB of source -- meh but works)
+- Pre-build the client and server, include only `dist/` (smaller, but user can't edit)
+- Include them but strip `node_modules` within packages
+
+For developer mode (user wants to edit), we NEED the source. Include them.
+For non-developer mode, we could ship only `dist/`.
+
+**Decision:** Include source. 38MB is acceptable in a ~50MB archive. Users who don't need to edit won't notice.
+
+**mm D1.3: Building the release archive**
+
+A `build-release.sh` script:
+```bash
+#!/bin/bash
+VERSION=${1:-"dev"}
+OUT="brickforge-${VERSION}"
+
+# Create clean directory
+rm -rf "$OUT" "$OUT.tar.gz"
+mkdir -p "$OUT"
+
+# Copy files (exclude bloat)
+rsync -a --exclude='.git' --exclude='.venv' --exclude='node_modules' \
+         --exclude='__pycache__' --exclude='.mypy_cache' \
+         --exclude='.DS_Store' --exclude='.claude' \
+         --exclude='.env.local' --exclude='.env.*.local' \
+         ./ "$OUT/"
+
+# Include ONLY the visual backend node_modules (required, pre-committed)
+cp -r visual/backend/node_modules "$OUT/visual/backend/"
+
+# Include pre-built frontend dist
+cp -r visual/frontend/dist "$OUT/visual/frontend/"
+
+# Compress
+tar czf "$OUT.tar.gz" "$OUT"
+echo "Built: $OUT.tar.gz ($(du -h "$OUT.tar.gz" | cut -f1))"
+```
+
+**mm D1.4: The start.sh launcher**
+
+```bash
+#!/bin/bash
+set -e
+
+echo "BrickForge Setup App"
+echo "===================="
+
+# Check Node.js
+if ! command -v node &>/dev/null; then
+  echo "ERROR: Node.js not found. Install from https://nodejs.org/"
+  exit 1
+fi
+
+# Check Python
+PYTHON=""
+for cmd in python3 python; do
+  if command -v "$cmd" &>/dev/null; then
+    PYTHON="$cmd"
+    break
+  fi
+done
+if [ -z "$PYTHON" ]; then
+  echo "ERROR: Python 3.11+ not found. Install from https://python.org/"
+  exit 1
+fi
+
+# Install Python deps (first run only)
+if [ ! -f ".deps_installed" ]; then
+  echo "Installing Python dependencies (first run)..."
+  $PYTHON -m pip install -r requirements.txt --quiet
+  touch .deps_installed
+fi
+
+# Start
+echo "Starting BrickForge at http://localhost:9000"
+node visual/backend/index.js
+```
+
+**mm D1.5: The start.bat launcher (Windows)**
+
+```batch
+@echo off
+echo BrickForge Setup App
+echo ====================
+
+where node >nul 2>&1 || (echo ERROR: Node.js not found. Install from https://nodejs.org/ & exit /b 1)
+where python >nul 2>&1 || (echo ERROR: Python not found. Install from https://python.org/ & exit /b 1)
+
+if not exist ".deps_installed" (
+  echo Installing Python dependencies...
+  python -m pip install -r requirements.txt --quiet
+  echo. > .deps_installed
+)
+
+echo Starting BrickForge at http://localhost:9000
+node visual\backend\index.js
+```
+
+**mm D1.6: BUT WAIT -- the backend calls `uv run python`, not `python`**
+
+The `start.sh` installs deps with `pip`. But 41 subprocess calls in the backend use `uv run python`.
+If uv isn't installed, those fail.
+
+Options:
+- A: `start.sh` also installs uv: `pip install uv && uv sync`
+- B: Change backend to use `python` directly (abstraction layer from Part 8b)
+- C: `start.sh` installs deps with pip, AND creates a `uv` wrapper that just calls `python`
+
+**Best:** Option B. The `pythonCmd()` abstraction. In local mode without uv, it uses `python`. With uv, it uses `uv run python`. The release archive runs without uv.
+
+This means the release archive doesn't need uv at all. Just Python + pip + Node.js.
+
+**mm D1.7: GitHub Release workflow**
+
+1. Tag a release: `git tag v1.0.0`
+2. Run `build-release.sh v1.0.0`
+3. Upload `brickforge-v1.0.0.tar.gz` to GitHub Releases
+4. GitHub Actions can automate this (on tag push)
+
+User flow:
+```bash
+curl -L https://github.com/mehdi-dbx/brickforge/releases/latest/download/brickforge.tar.gz | tar xz
+cd brickforge-*
+./start.sh
+# Open http://localhost:9000
+```
+
+### Distribution Path 2: pip install brickforge
+
+**mm D2.1: What would the pip package look like?**
+
+```toml
+[project]
+name = "brickforge"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-sdk>=0.102.0",
+    # ... all Python deps
+]
+
+[project.scripts]
+brickforge = "brickforge.cli:main"
+
+[tool.setuptools.package-data]
+brickforge = [
+    "visual/backend/**/*",
+    "visual/frontend/dist/**/*",
+    # ... all non-Python files
+]
+```
+
+**mm D2.2: The problem with pip for this project**
+
+pip packages are designed for Python libraries, not multi-runtime applications.
+Including 8MB of Node.js files as package data works but is unusual.
+
+More importantly: the user STILL needs Node.js installed separately. pip can't install Node.js.
+So the pip package saves them `git clone` but they still need to install Node.js manually.
+
+**Is it worth it?** Marginal improvement over GitHub Release. The release archive is simpler and doesn't pretend to be a Python package.
+
+**Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later.
+
+### Distribution Path 3: DBX App Deploy
+
+**mm D3.1: One-command deploy to user's workspace**
 
 ```bash
 pip install brickforge
 brickforge deploy-setup --workspace https://xxx.cloud.databricks.com
 ```
 
-Authenticates, uploads package files to workspace, creates DBX App, prints URL.
-OR: one-click deploy link from GitHub README.
+Or without pip install:
+```bash
+python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/scripts/deploy-setup.py)"
+```
+
+**mm D3.2: What deploy-setup actually does**
+
+1. Authenticate: `databricks auth login --host <workspace>` (opens browser)
+2. Create the DBX App: `POST /api/2.0/apps` with name `brickforge-setup`
+3. Upload source files to workspace: files API
+4. Create deployment: `POST /api/2.0/apps/{name}/deployments`
+5. Wait for app to start
+6. Print URL
+
+**mm D3.3: What files get uploaded?**
+
+Same as the release archive, but uploaded to workspace files instead of extracted locally.
+The upload script needs to walk the file tree and PUT each file.
+
+**mm D3.4: Auth for deploy-setup**
+
+User needs a Databricks PAT or CLI profile. The script uses the SDK which reads from:
+- `DATABRICKS_HOST` + `DATABRICKS_TOKEN` env vars
+- Or `~/.databrickscfg` CLI profile
+- Or interactive `databricks auth login`
+
+No new auth mechanism needed -- standard Databricks SDK auth.
+
+### Distribution Path 4: Docker
+
+**mm D4.1: Dockerfile**
+
+```dockerfile
+FROM node:20-slim
+RUN apt-get update && apt-get install -y python3 python3-pip
+COPY . /app
+WORKDIR /app
+RUN pip3 install -r requirements.txt
+EXPOSE 9000
+CMD ["node", "visual/backend/index.js"]
+```
+
+**mm D4.2: Pros/cons**
+
+Pros: zero prereqs (just Docker), works everywhere, reproducible.
+Cons: Docker Desktop required (not everyone has it), ~500MB image size, overkill for a dev tool.
+
+**Decision:** Nice-to-have. Build the Dockerfile but don't make it the primary path.
 
 ### Windows Compatibility
 
-Node.js + Python work on Windows. Two walls:
-1. `start.sh` needs `start.bat` -- trivial
-2. `bash deploy/deploy.sh` and `bash deploy/run_all_grants.sh` -- bash doesn't exist on Windows.
-   - `deploy.sh` being replaced with REST API anyway (Challenge 6)
-   - `run_all_grants.sh` just calls Python scripts -- make it a Python script too
+**mm W.1: Two bash scripts to replace**
+
+| Script | What it does | Python replacement |
+|--------|-------------|-------------------|
+| `deploy/deploy.sh` | Full DAB deploy pipeline | Being replaced with REST API (`deploy_via_api.py`) -- Part 8b |
+| `deploy/run_all_grants.sh` | Calls 5 Python grant scripts | Trivial: `run_all_grants.py` that calls them in sequence |
+
+After these two replacements, ZERO bash dependency. Works on Windows natively.
+
+**mm W.2: Path separators**
+
+All Python code uses `pathlib.Path` or `os.path` -- cross-platform by default.
+The Node.js backend uses `path.resolve()` -- cross-platform.
+No hardcoded `/` path separators in critical code.
+
+**mm W.3: The uv question on Windows**
+
+`uv` works on Windows (pip-installable). But with the `pythonCmd()` abstraction, uv becomes optional on all platforms. Users who have it get venv isolation; users who don't just use system Python.
 
 ### What NOT to Do
 
-- Don't build an npm package (Python bundling nightmare)
-- Don't build an Electron app (desktop app for a server tool -- wrong paradigm)
-- Don't build Homebrew/apt/snap packages (platform-specific hell)
-- Don't build a custom installer (maintenance burden)
-- Docker is fine but not the first priority
+- Don't publish to npm (Python bundling nightmare)
+- Don't build Electron/Tauri (desktop wrapper for a web server -- wrong paradigm)
+- Don't build platform installers (MSI, DMG, deb -- maintenance hell)
+- Don't build Homebrew formula (Mac-only, another package to maintain)
+- Don't build snap/flatpak (Linux-only, containerization overhead)
+- Don't build a custom update mechanism (just release new versions on GitHub)
+
+### Summary: Delivery Priority
+
+| Priority | Method | Prereqs | Effort | When |
+|----------|--------|---------|--------|------|
+| 1 | **GitHub Release** (tar.gz/zip) | Node.js + Python | `build-release.sh` script | FIRST |
+| 2 | **deploy-setup** (one-command DBX App deploy) | Python + Databricks auth | `deploy-setup.py` script | SECOND |
+| 3 | **Docker image** | Docker | Dockerfile | THIRD |
+| 4 | **pip install** | Node.js + Python | pyproject.toml refactor | STRETCH |
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `build-release.sh` | Builds the GitHub Release archive |
+| `start.sh` (root) | Local launcher (Mac/Linux) |
+| `start.bat` (root) | Local launcher (Windows) |
+| `setup-app.yaml` | Setup App DBX App manifest |
+| `scripts/deploy-setup.py` | One-command DBX App deploy |
+| `Dockerfile` | Docker image build |
+| `.releaseignore` | Files to exclude from release archive |
+| `deploy/run_all_grants.py` | Python replacement for bash grants script |
 
 ---
 
