@@ -164,6 +164,59 @@ stash/airops/
 
 The airops extraction defined the `.forge` schema by example.
 
+### Loading a Stash -- Verification & Integrity Check
+
+When a `.forge` bundle is loaded (from UC Volume, local stash, or wizard output), the system MUST verify every piece before proceeding:
+
+**Step 1: Parse `.forge` manifest**
+- Validate YAML syntax
+- Check `forge:` version field exists
+- Check all required sections present (data, tools, prompt, config)
+
+**Step 2: Verify sidecar files exist**
+For each reference in the manifest, check the file is actually there:
+
+| Manifest Section | Expected Files | Check |
+|-----------------|----------------|-------|
+| `data.tables[].ddl` | `data/init/create_*.sql` | File exists, contains `CREATE` |
+| `data.tables[].seed` | `data/csv/*.csv` | File exists, non-empty |
+| `data.functions[]` | `data/func/*.sql` | File exists |
+| `data.procedures[]` | `data/proc/*.sql` | File exists |
+| `tools[].file` | `tools/*.py` | File exists, contains `@tool` |
+| `prompt.system` | `conf/prompt/main.prompt` | File exists |
+| `prompt.knowledge_base` | `conf/prompt/knowledge.base` | File exists (can be empty) |
+| `prompt.starters` | `conf/prompt/user.prompt` | File exists (can be empty) |
+| `knowledge_assistants[].config` | `conf/ka/*.yml` | File exists, valid YAML |
+| `eval.dataset` | `eval/data/*.jsonl` | File exists (optional section) |
+
+**Step 3: Report status**
+Output a clear report:
+```
+[+] airops.forge -- valid YAML, version 1.0
+[+] data/csv/flights.csv -- found (5 rows)
+[+] data/init/create_flights.sql -- found (CREATE TABLE)
+[x] data/func/missing_function.sql -- NOT FOUND
+[+] conf/prompt/main.prompt -- found (211 lines)
+[!] eval/data/dataset.jsonl -- not found (optional, eval won't work)
+```
+
+**Step 4: Suggest fixes for missing assets**
+- Missing CSV: "Run the Data Gen wizard to generate seed data"
+- Missing SQL: "Generate from table schema using the Routines wizard"
+- Missing prompt: "Generate from domain description using the Prompt wizard"
+- Missing KA config: "Create a KA from the Knowledge Assistant setup step"
+- Missing tool file: "Tool will be auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka)"
+
+**Step 5: Provision check (live workspace verification)**
+After loading files, optionally verify against the live Databricks workspace:
+- Do the UC tables exist? If not -> offer to provision
+- Do the UC functions exist? If not -> offer to create
+- Is the Genie space accessible? If not -> offer to create
+- Is the KA endpoint ACTIVE? If not -> offer to provision
+- Is the schema accessible? If not -> offer to create
+
+This turns the load process into a guided setup: load -> verify -> fix gaps -> ready.
+
 ---
 
 ## PART 5: The 7 Engineering Challenges
