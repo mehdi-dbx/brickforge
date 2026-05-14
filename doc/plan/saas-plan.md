@@ -564,6 +564,74 @@ The abstraction is the right answer. Same pattern as ConfigProvider -- detect mo
 
 ---
 
+## PART 8c: Packaging & Distribution
+
+### The Two-Runtime Problem
+
+BrickForge needs BOTH Node.js (Setup App server) and Python (Databricks SDK, agent, data gen).
+No single package manager handles both. Don't try to force it.
+
+### Distribution Options (simplest to most complex)
+
+| Method | Effort | UX | Prereqs |
+|--------|--------|----|---------|
+| **GitHub Release (zip/tar)** | LOW | Download, extract, `./start.sh` | Node.js + Python |
+| **pip install brickforge** | MEDIUM | `pip install brickforge && brickforge` | Node.js + Python |
+| **brickforge deploy-setup** | MEDIUM | One CLI command deploys Setup App to workspace | Python + databricks auth |
+| **Docker image** | MEDIUM | `docker run brickforge` | Docker |
+| npm / Electron / Homebrew | SWAMP | AVOID | -- |
+
+### Path: GitHub Release First
+
+1. Build a release archive (zip/tar) with everything needed:
+   - `visual/` (backend + pre-built frontend + node_modules = ~8MB)
+   - Python code (`agent/`, `tools/`, `data/`, `scripts/`, `deploy/`, `conf/`, `eval/`)
+   - `pyproject.toml`, `requirements.txt`
+   - `start.sh` (Mac/Linux) + `start.bat` (Windows)
+   - NO `.git/`, `.venv/`, `app/client/node_modules/` (100MB), `app/server/node_modules/` (18MB)
+2. Estimated size: ~15-20MB compressed
+3. `start.sh` checks Node.js + Python, installs Python deps, starts server
+
+### Path: pip install (upgrade)
+
+```python
+# setup.py / pyproject.toml entry point:
+[project.scripts]
+brickforge = "brickforge.cli:main"
+```
+
+Package bundles the Node.js app as package data (pre-built, 8MB).
+`brickforge` CLI command starts the Node server.
+User still needs Node.js installed -- pip can't install it.
+
+### Path: DBX App Deploy (Mode B)
+
+```bash
+pip install brickforge
+brickforge deploy-setup --workspace https://xxx.cloud.databricks.com
+```
+
+Authenticates, uploads package files to workspace, creates DBX App, prints URL.
+OR: one-click deploy link from GitHub README.
+
+### Windows Compatibility
+
+Node.js + Python work on Windows. Two walls:
+1. `start.sh` needs `start.bat` -- trivial
+2. `bash deploy/deploy.sh` and `bash deploy/run_all_grants.sh` -- bash doesn't exist on Windows.
+   - `deploy.sh` being replaced with REST API anyway (Challenge 6)
+   - `run_all_grants.sh` just calls Python scripts -- make it a Python script too
+
+### What NOT to Do
+
+- Don't build an npm package (Python bundling nightmare)
+- Don't build an Electron app (desktop app for a server tool -- wrong paradigm)
+- Don't build Homebrew/apt/snap packages (platform-specific hell)
+- Don't build a custom installer (maintenance burden)
+- Docker is fine but not the first priority
+
+---
+
 ## PART 9: Current State
 
 - [x] Domain extraction complete (stash/airops/)
