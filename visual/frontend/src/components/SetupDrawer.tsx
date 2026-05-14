@@ -21,6 +21,8 @@ interface SetupDrawerProps {
   onExecDone: (ok: boolean) => void
   onRefresh: () => void
   onNext?: () => void
+  selectedInstanceKey?: string | null
+  instances?: { key: string; value: string; enabled: boolean; label: string }[]
 }
 
 // ─── Resource hook ─────────────────────────────────────────────────────────────
@@ -132,6 +134,26 @@ function GenieList({ selected, onSelect }: { selected: string; onSelect: (id: st
           <Dot color="green" />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{s.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{s.id.slice(0, 8)}…</span>
+        </PickRow>
+      ))}
+    </>
+  )
+}
+
+function LakebaseList({ selected, onSelect }: { selected: string; onSelect: (name: string) => void }) {
+  const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=lakebase')
+  const instances = (data as { id: string; name: string; state: string }[]) || []
+  if (loading) return <Spinner label="loading lakebase instances…" />
+  if (error)   return <ErrMsg msg={error} />
+  if (instances.length === 0) return <InfoBox>No Lakebase instances found -- use "create instance" instead.</InfoBox>
+  return (
+    <>
+      <Label>available lakebase instances</Label>
+      {instances.map(i => (
+        <PickRow key={i.name} active={selected === i.name} onClick={() => onSelect(i.name)}>
+          <Dot color={i.state === 'AVAILABLE' ? 'green' : i.state === 'CREATING' ? 'amber' : 'red'} />
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{i.name}</span>
+          <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{i.state}</span>
         </PickRow>
       ))}
     </>
@@ -356,6 +378,47 @@ function SchemaTableList({ prefix }: { prefix: string }) {
           <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t}` : t}</span>
         </div>
       ))}
+    </>
+  )
+}
+
+// ─── Dynamic routine list (functions + procedures from API) ─────────────────
+
+function SchemaRoutineList({ prefix }: { prefix: string }) {
+  const [routines, setRoutines] = useState<{ name: string; kind: string; source: string }[]>([])
+  useEffect(() => {
+    fetch('/api/gen/routines')
+      .then(r => r.json())
+      .then(data => setRoutines(data.routines || []))
+      .catch(() => setRoutines([]))
+  }, [])
+  const functions = routines.filter(r => r.kind === 'function')
+  const procedures = routines.filter(r => r.kind === 'procedure')
+  if (routines.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no routines found</div>
+  return (
+    <>
+      {functions.length > 0 && (
+        <div className="mb-2">
+          <div className="text-[9px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1">functions ({functions.length})</div>
+          {functions.map(r => (
+            <div key={r.name} className="flex items-center gap-2 py-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+              <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${r.name}` : r.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {procedures.length > 0 && (
+        <div>
+          <div className="text-[9px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1">procedures ({procedures.length})</div>
+          {procedures.map(r => (
+            <div key={r.name} className="flex items-center gap-2 py-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-dbx-amber flex-shrink-0" />
+              <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${r.name}` : r.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   )
 }
@@ -866,8 +929,10 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
     case 'functions': return v.ROUTINE_COUNT ? `${v.ROUTINE_COUNT} routine(s)` : ''
     case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || ''
     case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
-    case 'genie':     return v.PROJECT_GENIE_CHECKIN || ''
-    case 'ka':        return v.PROJECT_KA_PASSENGERS || ''
+    case 'genie':     return ''
+    case 'ka':        return ''
+    case 'vs':        return v.PROJECT_VS_INDEX || ''
+    case 'lakebase':  return v.LAKEBASE_INSTANCE_NAME || ''
     case 'mlflow':    return v.MLFLOW_EXPERIMENT_ID || ''
     case 'deploy':    return v.DBX_APP_NAME || ''
     default:          return ''
@@ -880,20 +945,31 @@ export function SetupDrawer({
   activeStep, phase, selectedChoice, execLines, currentValues,
   testCache, onTestResult,
   onSelectChoice, onContinue, onBack, onReconfigure, onExecDone, onRefresh, onNext,
+  selectedInstanceKey, instances,
 }: SetupDrawerProps) {
   const step      = SETUP_STEPS.find(s => s.id === activeStep)!
   const choice    = selectedChoice !== null ? step.choices[selectedChoice] : null
   const keepLabel = currentValueLabel(activeStep, currentValues)
 
   const abortRef = useRef<AbortController | null>(null)
+  const [lastExecOk, setLastExecOk] = useState(true)
+
+  // Reset exec status when step changes
+  useEffect(() => { setLastExecOk(true) }, [activeStep])
+
+  // Wrap onExecDone to track success/failure for renderDone
+  const wrappedExecDone = useCallback((ok: boolean) => {
+    setLastExecOk(ok)
+    onExecDone(ok)
+  }, [onExecDone])
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
-    onExecDone(false)
-  }, [onExecDone])
+    wrappedExecDone(false)
+  }, [wrappedExecDone])
 
-  const TESTABLE_STEPS: StepId[] = ['host', 'auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'mlflow', 'deploy']
+  const TESTABLE_STEPS: StepId[] = ['host', 'auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'deploy']
   const testState: TestResult = testCache[activeStep] ?? { status: 'idle', message: '' }
   const setTestState = useCallback((r: TestResult) => onTestResult(activeStep, r), [activeStep, onTestResult])
 
@@ -935,12 +1011,57 @@ export function SetupDrawer({
   const [genieName, setGenieName]       = useState('')
   const [assetsSchema, setAssetsSchema] = useState('')
   const [kaDocsReady, setKaDocsReady]   = useState(false)
+  const [mcpSlug, setMcpSlug]           = useState('')
+  const [mcpHeader, setMcpHeader]       = useState('')
+  const [apiMethod, setApiMethod]       = useState('GET')
+  const [apiPath, setApiPath]           = useState('/')
+  const [apiDesc, setApiDesc]           = useState('')
+  const [apiParams, setApiParams]       = useState('')
+  const [selLakebaseId, setSelLakebaseId] = useState('')
+  const [instanceTest, setInstanceTest] = useState<TestResult>({ status: 'idle', message: '' })
+  const [instanceTools, setInstanceTools] = useState<{ name: string; description: string }[] | null>(null)
+  const [toolsLoading, setToolsLoading] = useState(false)
+
+  // Test a specific instance by env key
+  const handleInstanceTest = useCallback(async (key: string) => {
+    setInstanceTest({ status: 'loading', message: '' })
+    try {
+      const r = await fetch(`/api/setup/test?step=${activeStep}&key=${encodeURIComponent(key)}`)
+      const text = await r.text()
+      let data: { ok: boolean; message: string }
+      try { data = JSON.parse(text) } catch { data = { ok: false, message: text.slice(0, 120) } }
+      setInstanceTest({ status: data.ok ? 'ok' : 'fail', message: data.message })
+    } catch (e) {
+      setInstanceTest({ status: 'fail', message: String(e) })
+    }
+  }, [activeStep])
+
+  // Auto-test instance on selection + fetch tools for MCP/A2A
+  useEffect(() => {
+    setInstanceTest({ status: 'idle', message: '' })
+    setInstanceTools(null)
+    if (selectedInstanceKey) {
+      const timer = setTimeout(() => handleInstanceTest(selectedInstanceKey), 200)
+      // Fetch tools for MCP/A2A instances
+      if (['mcp', 'a2a'].includes(activeStep)) {
+        setToolsLoading(true)
+        fetch(`/api/setup/mcp-tools?key=${encodeURIComponent(selectedInstanceKey)}`)
+          .then(r => r.json())
+          .then(data => { if (data.tools) setInstanceTools(data.tools); })
+          .catch(() => {})
+          .finally(() => setToolsLoading(false))
+      }
+      return () => clearTimeout(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInstanceKey])
 
   useEffect(() => {
     setSelProfile(''); setSelWhId(''); setSelWhName('')
     setSelCatalog(''); setCatSchema('main')
     setSelGenieId(''); setSelGenieName('')
     setManualVal(''); setGenieName(''); setKaDocsReady(false)
+    setMcpSlug(''); setMcpHeader('')
     setAssetsSchema(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
   }, [activeStep, selectedChoice, currentValues.PROJECT_UNITY_CATALOG_SCHEMA])
 
@@ -953,6 +1074,7 @@ export function SetupDrawer({
     if (action === 'cfg-warehouse' && selWhId)    { action = 'save-warehouse'; Object.assign(params, { id: selWhId, name: selWhName }) }
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
     if (action === 'cfg-genie'     && selGenieId) { action = 'save-genie';     Object.assign(params, { id: selGenieId, name: selGenieName }) }
+    if (action === 'cfg-lakebase'  && selLakebaseId) { action = 'save-lakebase'; Object.assign(params, { name: selLakebaseId }) }
     if (action === 'exec-genie'    && genieName)  { Object.assign(params, { name: genieName }) }
     // Host: cfg-profile saves host from selected profile
     if (action === 'cfg-profile' && activeStep === 'host' && selProfile) { action = 'save-host'; Object.assign(params, { profile: selProfile }) }
@@ -962,8 +1084,25 @@ export function SetupDrawer({
     if (action === 'cfg-new' && manualVal) { action = 'exec-auth-login'; Object.assign(params, { host: manualVal, profile: genieName || '' }) }
     // Deploy: cfg-deploy-name saves app name to .env.local
     if (action === 'cfg-deploy-name' && manualVal) { action = 'save-deploy-name'; Object.assign(params, { name: manualVal.trim() }) }
+    // API: cfg-api-uc or cfg-api-direct saves API config to .env.local
+    if (action === 'cfg-api-uc' && mcpSlug && manualVal) {
+      const slug = mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
+      action = 'save-api'
+      Object.assign(params, { slug, type: 'uc', conn: manualVal.trim(), method: apiMethod || 'GET', path: apiPath || '/', desc: apiDesc, apiParams, header: '' })
+    }
+    if (action === 'cfg-api-direct' && mcpSlug && manualVal) {
+      const slug = mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
+      action = 'save-api'
+      Object.assign(params, { slug, type: 'direct', url: manualVal.trim(), method: apiMethod || 'GET', path: apiPath || '/', desc: apiDesc, apiParams, header: mcpHeader })
+    }
     // KA: cfg-ka configure phase uploads docs, execute phase creates the KA endpoint
     if (action === 'cfg-ka') { action = 'exec-ka' }
+    // MCP/A2A: manual action saves slug + url + optional header
+    if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a') && mcpSlug && manualVal) {
+      const prefix = activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'
+      action = 'save-multi-instance'
+      Object.assign(params, { prefix, slug: mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_'), url: manualVal.trim(), header: mcpHeader.trim() })
+    }
     // Create all assets: pass confirmed schema so backend saves it first
     if (action === 'exec-assets' && assetsSchema) { Object.assign(params, { schema: assetsSchema.trim() }) }
 
@@ -978,7 +1117,7 @@ export function SetupDrawer({
           body: JSON.stringify({ action, params }),
           signal: controller.signal,
         })
-        if (!resp.body) { onExecDone(false); return }
+        if (!resp.body) { wrappedExecDone(false); return }
         const reader  = resp.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
@@ -998,13 +1137,13 @@ export function SetupDrawer({
             if (!evtData) continue
             const parsed = JSON.parse(evtData)
             if (evtType === 'line')      window.dispatchEvent(new CustomEvent('exec-line', { detail: parsed }))
-            else if (evtType === 'done' && !aborted) onExecDone(parsed.ok)
+            else if (evtType === 'done' && !aborted) wrappedExecDone(parsed.ok)
           }
         }
       } catch (e) {
         if (controller.signal.aborted) return  // user cancelled
         console.error('[exec]', e)
-        if (!aborted) onExecDone(false)
+        if (!aborted) wrappedExecDone(false)
       }
     }
     run()
@@ -1060,6 +1199,12 @@ export function SetupDrawer({
                 </button>
               </>
             )}
+            {activeStep === 'functions' && (
+              <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
+                <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">routines</div>
+                <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
+              </div>
+            )}
             {activeStep === 'ka' && (
               <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                 <button
@@ -1102,11 +1247,15 @@ export function SetupDrawer({
       if (action === 'cfg-warehouse') return !!selWhId
       if (action === 'cfg-catalog')   return !!selCatalog && !!catSchema
       if (action === 'cfg-genie')     return !!selGenieId
+      if (action === 'cfg-lakebase')  return !!selLakebaseId
       if (action === 'exec-genie')    return !!genieName
       if (action === 'cfg-new')         return !!manualVal.trim()
       if (action === 'cfg-deploy-name') return !!manualVal.trim()
       if (action === 'exec-assets')     return validSchema
       if (action === 'cfg-ka')        return kaDocsReady
+      if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual')        return !!manualVal.trim()
       return true
     }
@@ -1120,8 +1269,60 @@ export function SetupDrawer({
       body = <CatalogPicker catalog={selCatalog} schema={catSchema} onCatalog={setSelCatalog} onSchema={setCatSchema} />
     else if (action === 'cfg-genie')
       body = <GenieList selected={selGenieId} onSelect={(id, name) => { setSelGenieId(id); setSelGenieName(name) }} />
+    else if (action === 'cfg-lakebase')
+      body = <LakebaseList selected={selLakebaseId} onSelect={setSelLakebaseId} />
     else if (action === 'exec-genie')
       body = (<><Label>genie room name</Label><Input value={genieName} onChange={setGenieName} placeholder="Checkin Metrics" /></>)
+    else if (action === 'cfg-api-uc')
+      body = (<>
+        <Label>API name</Label>
+        <Input value={mcpSlug} onChange={setMcpSlug} placeholder="weather" />
+        <div className="mt-3"><Label>UC connection name</Label></div>
+        <Input value={manualVal} onChange={setManualVal} placeholder="my-weather-api" />
+        <div className="mt-3"><Label>method</Label></div>
+        <Input value={apiMethod} onChange={setApiMethod} placeholder="GET" />
+        <div className="mt-3"><Label>path</Label></div>
+        <Input value={apiPath} onChange={setApiPath} placeholder="/v1/current" />
+        <div className="mt-3"><Label>description</Label></div>
+        <Input value={apiDesc} onChange={setApiDesc} placeholder="Get current weather for a city" />
+        <div className="mt-3"><Label>params (optional, comma-separated name:type)</Label></div>
+        <Input value={apiParams} onChange={setApiParams} placeholder="city:str,units:str" />
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_CONN to .env.local
+        </div>
+      </>)
+    else if (action === 'cfg-api-direct')
+      body = (<>
+        <Label>API name</Label>
+        <Input value={mcpSlug} onChange={setMcpSlug} placeholder="weather" />
+        <div className="mt-3"><Label>base URL</Label></div>
+        <Input value={manualVal} onChange={setManualVal} placeholder="https://api.weather.com" />
+        <div className="mt-3"><Label>method</Label></div>
+        <Input value={apiMethod} onChange={setApiMethod} placeholder="GET" />
+        <div className="mt-3"><Label>path</Label></div>
+        <Input value={apiPath} onChange={setApiPath} placeholder="/v1/current" />
+        <div className="mt-3"><Label>description</Label></div>
+        <Input value={apiDesc} onChange={setApiDesc} placeholder="Get current weather for a city" />
+        <div className="mt-3"><Label>params (optional, comma-separated name:type)</Label></div>
+        <Input value={apiParams} onChange={setApiParams} placeholder="city:str,units:str" />
+        <div className="mt-3"><Label>auth header (optional)</Label></div>
+        <Input value={mcpHeader} onChange={setMcpHeader} placeholder="X-API-Key:sk-abc123" />
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_URL to .env.local
+        </div>
+      </>)
+    else if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a'))
+      body = (<>
+        <Label>name</Label>
+        <Input value={mcpSlug} onChange={setMcpSlug} placeholder={activeStep === 'mcp' ? 'weather' : 'planner'} />
+        <div className="mt-3"><Label>{activeStep === 'mcp' ? 'server URL' : 'agent URL'}</Label></div>
+        <Input value={manualVal} onChange={setManualVal} placeholder="https://..." />
+        <div className="mt-3"><Label>auth header (optional)</Label></div>
+        <Input value={mcpHeader} onChange={setMcpHeader} placeholder="Authorization:Bearer sk-..." />
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves as {activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'}{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'} in .env.local
+        </div>
+      </>)
     else if (action === 'manual')
       body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">writes directly to .env.local</div></>)
     else if (action === 'cfg-new')
@@ -1131,13 +1332,13 @@ export function SetupDrawer({
     else if (action === 'cfg-prompt')
       return (
         <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
-          <PromptEditor onDone={() => { onExecDone(true) }} />
+          <PromptEditor onDone={() => { wrappedExecDone(true) }} />
         </div>
       )
     else if (action === 'cfg-prompt-gen')
       return (
         <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
-          <PromptGenerator onDone={() => { onExecDone(true) }} />
+          <PromptGenerator onDone={() => { wrappedExecDone(true) }} />
         </div>
       )
     else if (action === 'cfg-ka')
@@ -1201,14 +1402,29 @@ export function SetupDrawer({
 
   // ── Done ───────────────────────────────────────────────────────────────────
   function renderDone() {
+    const failed = !lastExecOk
+
     return (
       <>
         <div className="flex-1 flex flex-col items-center justify-center px-4 pt-4 pb-2 animate-pop">
-          <div className="w-16 h-16 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
-            <span className="text-[32px] text-dbx-blue dark:text-dbx-green leading-none">✓</span>
-          </div>
-          <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 mb-1">configured</div>
-          <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
+          {failed ? (
+            <>
+              <div className="w-16 h-16 rounded-full bg-dbx-error/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(226,75,74,0.2)]">
+                <span className="text-[32px] text-dbx-error leading-none">✗</span>
+              </div>
+              <div className="text-[16px] font-semibold text-dbx-error mb-1">failed</div>
+              <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
+              <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 text-center max-w-[280px]">Check the terminal output above for details. Use "reconfigure" to try again.</div>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
+                <span className="text-[32px] text-dbx-blue dark:text-dbx-green leading-none">✓</span>
+              </div>
+              <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 mb-1">configured</div>
+              <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
+            </>
+          )}
         </div>
         <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-2">
           {onNext && (
@@ -1298,8 +1514,73 @@ export function SetupDrawer({
         ))}
       </div>
 
+      {/* Instance detail panel (when a sub-instance is clicked) */}
+      {selectedInstanceKey && phase === 'choose' && (() => {
+        const inst = instances?.find(i => i.key === selectedInstanceKey)
+        return (
+          <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
+            <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 p-4 animate-slide-up">
+              <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">instance</div>
+              <div className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono mb-1">
+                {inst?.label || selectedInstanceKey}
+              </div>
+              <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mb-1">
+                {selectedInstanceKey}
+              </div>
+              <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 font-mono mb-4 break-all">
+                {inst?.value || '(not set)'}
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${inst?.enabled ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300'}`} />
+                <span className="text-[11px] text-dbx-gray-500 dark:text-dbx-gray-400">{inst?.enabled ? 'enabled' : 'disabled'}</span>
+              </div>
+
+              {/* Test button */}
+              <button
+                onClick={() => handleInstanceTest(selectedInstanceKey)}
+                disabled={instanceTest.status === 'loading'}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all"
+              >
+                {instanceTest.status === 'loading' ? (
+                  <span className="text-dbx-amber animate-pulse">testing...</span>
+                ) : instanceTest.status === 'ok' ? (
+                  <span className="text-dbx-blue dark:text-dbx-green">&#10003; {instanceTest.message}</span>
+                ) : instanceTest.status === 'fail' ? (
+                  <span className="text-dbx-error">&#10007; {instanceTest.message}</span>
+                ) : (
+                  <span className="text-dbx-gray-500">test connection</span>
+                )}
+              </button>
+
+              {/* Tools list for MCP/A2A */}
+              {['mcp', 'a2a'].includes(activeStep) && (
+                <div className="mt-4">
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">
+                    {toolsLoading ? 'discovering tools...' : instanceTools ? `${instanceTools.length} tool${instanceTools.length !== 1 ? 's' : ''} available` : 'tools'}
+                  </div>
+                  {toolsLoading && <div className="text-[11px] text-dbx-amber animate-pulse font-mono">connecting...</div>}
+                  {instanceTools && instanceTools.length > 0 && (
+                    <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+                      {instanceTools.map(t => (
+                        <div key={t.name} className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800/50 px-3 py-2">
+                          <div className="text-[12px] font-semibold font-mono text-dbx-gray-800 dark:text-dbx-gray-100">{t.name}</div>
+                          {t.description && <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">{t.description}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {instanceTools && instanceTools.length === 0 && (
+                    <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">no tools exposed</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Body + footer */}
-      {phase === 'choose'    && renderChoose()}
+      {(!selectedInstanceKey || phase !== 'choose') && phase === 'choose' && renderChoose()}
       {phase === 'configure' && renderConfigure()}
       {phase === 'execute'   && renderExecute()}
       {phase === 'done'      && renderDone()}

@@ -4,8 +4,8 @@ Creates databricks.yml and app.yaml from templates if they don't exist.
 
 Updates:
   - databricks.yml: sql_warehouse.id, genie_space.space_id, serving_endpoint.name, ka_endpoint.name, app name
-  - app.yaml: AGENT_MODEL_ENDPOINT, PROJECT_UNITY_CATALOG_SCHEMA, DATABRICKS_WAREHOUSE_ID, PROJECT_KA_PASSENGERS
-  - Databricks Secrets: pushes AGENT_MODEL_TOKEN to scope 'agent-forge' (cross-workspace only)
+  - app.yaml: AGENT_MODEL_ENDPOINT, PROJECT_UNITY_CATALOG_SCHEMA, DATABRICKS_WAREHOUSE_ID, PROJECT_KA_*
+  - Databricks Secrets: pushes AGENT_MODEL_TOKEN to app scope (cross-workspace only)
 
 Usage:
   uv run python deploy/sync_databricks_yml_from_env.py [--dry-run]
@@ -32,7 +32,7 @@ WARN = f"{Y}⚠{W}"
 FAIL = f"{R}✗{W}"
 ARR = f"{C}←{W}"
 
-SECRET_SCOPE = "agent-forge"
+SECRET_SCOPE = os.environ.get("DBX_APP_NAME", "brickforge").strip()
 
 
 def _resource_exists(api_path: str) -> bool:
@@ -94,7 +94,7 @@ resources:
             permission: 'CAN_USE'
         - name: 'genie_space'
           genie_space:
-            name: 'agent-forge-checkin'
+            name: 'PLACEHOLDER_GENIE_NAME'
             space_id: 'PLACEHOLDER_GENIE_ID'
             permission: 'CAN_RUN'
         - name: 'serving_endpoint'
@@ -149,7 +149,7 @@ env:
     value: "PLACEHOLDER_SCHEMA"
   - name: DATABRICKS_WAREHOUSE_ID
     value: "PLACEHOLDER_WAREHOUSE_ID"
-  - name: PROJECT_KA_PASSENGERS
+  - name: PROJECT_KA_ENDPOINT
     value: "PLACEHOLDER_KA_ENDPOINT"
 """
 
@@ -259,20 +259,35 @@ def main() -> int:
             )
             changes.append(("sql_warehouse.id", "DATABRICKS_WAREHOUSE_ID", wh_id))
 
-    # genie_space.space_id + name <- PROJECT_GENIE_CHECKIN
-    genie_id = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
+    # genie_space.space_id + name <- first PROJECT_GENIE_* env var
+    genie_id = ""
+    genie_env_key = ""
+    for key in sorted(os.environ):
+        if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
+            genie_id = os.environ[key].strip()
+            genie_env_key = key
+            break
     if genie_id and not _genie_space_exists(genie_id):
-        print(f"  {FAIL} Genie space '{genie_id}' not found on workspace — fix PROJECT_GENIE_CHECKIN in .env.local")
+        print(f"  {FAIL} Genie space '{genie_id}' not found on workspace — fix {genie_env_key} in .env.local")
         return 1
     if genie_id:
         m = re.search(r"genie_space:.*?space_id: '([^']*)'", content, re.DOTALL)
         if m and m.group(1) != genie_id:
             content = re.sub(r"space_id: '[^']*'", f"space_id: '{genie_id}'", content, count=1)
-            changes.append(("genie_space.space_id", "PROJECT_GENIE_CHECKIN", genie_id))
-        # Replace placeholder name with a fixed DAB label (name is a bundle ref, not workspace-specific)
+            changes.append(("genie_space.space_id", genie_env_key, genie_id))
         if "PLACEHOLDER_GENIE_NAME" in content:
-            content = content.replace("PLACEHOLDER_GENIE_NAME", "agent-forge-checkin", 1)
-            changes.append(("genie_space.name", None, "agent-forge-checkin"))
+            genie_label = os.environ.get("GENIE_ROOM_NAME", "").strip() or "genie-space"
+            content = content.replace("PLACEHOLDER_GENIE_NAME", genie_label, 1)
+            changes.append(("genie_space.name", None, genie_label))
+    else:
+        # No genie configured — remove genie_space resource block
+        new_content = re.sub(
+            r"\s*- name: 'genie_space'\s*\n\s+genie_space:\s*\n\s+name: '[^']*'\s*\n\s+space_id: '[^']*'\s*\n\s+permission: '[^']*'",
+            "", content,
+        )
+        if new_content != content:
+            content = new_content
+            changes.append(("genie_space resource", None, "removed (not configured)"))
 
     # serving_endpoint <- AGENT_MODEL_ENDPOINT
     # Cross-workspace URL: remove serving_endpoint resource (can't grant on external workspace),
@@ -371,8 +386,14 @@ def main() -> int:
             )
             changes.append(("serving_endpoint.name", "AGENT_MODEL_ENDPOINT", endpoint))
 
-    # ka_endpoint.name <- PROJECT_KA_PASSENGERS
-    ka_endpoint = os.environ.get("PROJECT_KA_PASSENGERS", "").strip()
+    # ka_endpoint.name <- first PROJECT_KA_* env var
+    ka_endpoint = ""
+    ka_env_key = ""
+    for key in sorted(os.environ):
+        if key.startswith("PROJECT_KA_") and os.environ[key].strip():
+            ka_endpoint = os.environ[key].strip()
+            ka_env_key = key
+            break
     if ka_endpoint and not _endpoint_exists(ka_endpoint):
         print(f"  {WARN} KA endpoint '{ka_endpoint}' not found on workspace — removing from bundle")
         ka_endpoint = ""
@@ -385,7 +406,7 @@ def main() -> int:
                 content,
                 count=1,
             )
-            changes.append(("ka_endpoint.name", "PROJECT_KA_PASSENGERS", ka_endpoint))
+            changes.append(("ka_endpoint.name", ka_env_key or "PROJECT_KA_*", ka_endpoint))
     else:
         # Remove ka_endpoint resource block so PLACEHOLDER check doesn't abort
         new_content = re.sub(
@@ -395,7 +416,7 @@ def main() -> int:
         )
         if new_content != content:
             content = new_content
-            changes.append(("ka_endpoint resource", "PROJECT_KA_PASSENGERS", "removed (not configured)"))
+            changes.append(("ka_endpoint resource", ka_env_key or "PROJECT_KA_*", "removed (not configured)"))
 
     # production target app name <- DBX_APP_NAME
     app_name = os.environ.get("DBX_APP_NAME", "").strip()
@@ -464,13 +485,17 @@ def main() -> int:
         # Standard value fields
         vs_index = os.environ.get("PROJECT_VS_INDEX", "").strip()
         vs_endpoint = os.environ.get("PROJECT_VS_ENDPOINT", "").strip()
-        for env_name, value in [
+        app_sync_vars = [
             ("PROJECT_UNITY_CATALOG_SCHEMA", schema_spec),
             ("DATABRICKS_WAREHOUSE_ID", wh_id),
-            ("PROJECT_KA_PASSENGERS", ka_endpoint),
             ("PROJECT_VS_INDEX", vs_index),
             ("PROJECT_VS_ENDPOINT", vs_endpoint),
-        ]:
+        ]
+        # Dynamically add all PROJECT_GENIE_* and PROJECT_KA_* vars
+        for key in sorted(os.environ):
+            if (key.startswith("PROJECT_GENIE_") or key.startswith("PROJECT_KA_")) and os.environ[key].strip():
+                app_sync_vars.append((key, os.environ[key].strip()))
+        for env_name, value in app_sync_vars:
             if not value:
                 # Remove if present (not configured)
                 if _app_has(env_name):
@@ -494,19 +519,26 @@ def main() -> int:
 
     # Always print current config summary
     host = os.environ.get("DATABRICKS_HOST", "").strip()
-    genie_id_display = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
     print(f"\n{BOLD}Current config:{W}")
-    for label, val in [
+    config_items = [
         ("DATABRICKS_HOST              ", host),
         ("DATABRICKS_WAREHOUSE_ID      ", wh_id),
         ("PROJECT_UNITY_CATALOG_SCHEMA ", schema_spec),
-        ("PROJECT_GENIE_CHECKIN        ", genie_id_display),
-        ("PROJECT_KA_PASSENGERS        ", ka_endpoint),
+    ]
+    # Dynamic genie/KA entries
+    for key in sorted(os.environ):
+        if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
+            config_items.append((f"{key:<32}", os.environ[key].strip()))
+    for key in sorted(os.environ):
+        if key.startswith("PROJECT_KA_") and os.environ[key].strip():
+            config_items.append((f"{key:<32}", os.environ[key].strip()))
+    config_items.extend([
         ("PROJECT_VS_INDEX             ", os.environ.get("PROJECT_VS_INDEX", "").strip()),
         ("PROJECT_VS_ENDPOINT          ", os.environ.get("PROJECT_VS_ENDPOINT", "").strip()),
         ("AGENT_MODEL_ENDPOINT         ", endpoint),
         ("DBX_APP_NAME                 ", app_name),
-    ]:
+    ])
+    for label, val in config_items:
         marker = OK if val else WARN
         display = val if val else f"{DIM}not set{W}"
         print(f"  {marker}  {label}{C}{display}{W}")

@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Optional
 import mlflow
 from databricks.sdk import WorkspaceClient
 from databricks_langchain import ChatDatabricks, DatabricksMCPServer, DatabricksMultiServerMCPClient
+from databricks_langchain.multi_server_mcp_client import MCPServer
 from langchain.agents import create_agent
 from mlflow.genai.agent_server import invoke, stream
 from mlflow.types.responses import (
@@ -21,38 +22,52 @@ from agent.utils import (
     get_databricks_host_from_env,
     process_agent_astream_events,
 )
-from tools.back_to_normal import back_to_normal
-from tools.confirm_arrival import confirm_arrival
-from tools.create_border_incident import create_border_incident
-from tools.create_checkin_incident import create_checkin_incident
 from tools.get_current_time import get_current_time
-from tools.query_available_agents_for_redeployment import query_available_agents_for_redeployment
-from tools.query_border_officer_staffing import query_border_officer_staffing
-from tools.query_border_officers_by_post import query_border_officers_by_post
-from tools.query_border_terminal_details import query_border_terminal_details
-from tools.query_checkin_agent_staffing import query_checkin_agent_staffing
-from tools.query_checkin_agents_by_counter_status import query_checkin_agents_by_counter_status
-from tools.query_checkin_metrics import query_checkin_metrics
-from tools.query_checkin_performance_metrics import query_checkin_performance_metrics
-from tools.query_egate_availability import query_egate_availability
-from tools.query_flights_at_risk import query_flights_at_risk
+from tools.generate_chart import generate_chart
 from tools.ka_factory import discover_ka_tools
-from tools.query_staffing_duties import query_staffing_duties
-from tools.update_border_officer import update_border_officer
-from tools.update_checkin_agent import update_checkin_agent
-from tools.update_flight_risk import update_flight_risk
+from tools.api_factory import discover_api_tools
+from tools.a2a_factory import discover_a2a_tools
 
-# New same-domain tools: append to tools in init_agent and implement under tools/<name>/
+import importlib
+import pkgutil
+
+_FRAMEWORK_MODULES = {"sql_executor", "ka_factory", "api_factory", "a2a_factory", "generate_chart", "get_current_time", "__init__"}
+
+
+def _discover_domain_tools() -> list:
+    """Auto-discover @tool functions from tools/ (excluding framework utilities)."""
+    tools_dir = Path(__file__).resolve().parents[1] / "tools"
+    discovered = []
+    for _, name, _ in pkgutil.iter_modules([str(tools_dir)]):
+        if name in _FRAMEWORK_MODULES:
+            continue
+        try:
+            mod = importlib.import_module(f"tools.{name}")
+            for attr in vars(mod).values():
+                if callable(attr) and hasattr(attr, "name") and hasattr(attr, "args_schema"):
+                    discovered.append(attr)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to load tool module '%s': %s", name, e)
+    return discovered
 mlflow.langchain.autolog()
-sp_workspace_client = WorkspaceClient()
 _log = logging.getLogger(__name__)
 
+_sp_workspace_client = None
 
-def _build_mcp_servers(workspace_client: WorkspaceClient) -> list[DatabricksMCPServer]:
+
+def _get_workspace_client() -> WorkspaceClient:
+    """Lazy-init workspace client -- avoids SDK call at import time."""
+    global _sp_workspace_client
+    if _sp_workspace_client is None:
+        _sp_workspace_client = WorkspaceClient()
+    return _sp_workspace_client
+
+
+def _build_mcp_servers(workspace_client: WorkspaceClient) -> list[MCPServer]:
     """Build list of MCP server configs (does not connect yet)."""
     host_name = get_databricks_host_from_env()
-    servers = []
-    # Register all PROJECT_GENIE_* env vars as MCP servers
+    servers: list[MCPServer] = []
+    # Register all PROJECT_GENIE_* env vars as Databricks MCP servers
     for key in sorted(os.environ):
         if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
             space_id = os.environ[key].strip()
@@ -76,6 +91,25 @@ def _build_mcp_servers(workspace_client: WorkspaceClient) -> list[DatabricksMCPS
                     name="vector-search-docs",
                     url=f"{host_name}/api/2.0/mcp/vector-search/{cat}/{sch}",
                     workspace_client=workspace_client,
+                ),
+            )
+
+    # External MCP servers (PROJECT_MCP_<SLUG>=<url>)
+    for key in sorted(os.environ):
+        if key.startswith("PROJECT_MCP_") and not key.endswith("_HEADER") and os.environ[key].strip():
+            url = os.environ[key].strip()
+            slug = key.replace("PROJECT_MCP_", "").lower()
+            # Optional auth header: PROJECT_MCP_<SLUG>_HEADER=HeaderName:HeaderValue
+            headers = None
+            header_val = os.environ.get(f"{key}_HEADER", "").strip()
+            if header_val and ":" in header_val:
+                hname, hval = header_val.split(":", 1)
+                headers = {hname.strip(): hval.strip()}
+            servers.append(
+                MCPServer(
+                    name=f"mcp-{slug}",
+                    url=url,
+                    headers=headers,
                 ),
             )
 
@@ -108,32 +142,16 @@ async def init_agent(workspace_client: Optional[WorkspaceClient] = None):
     only — LangGraph's "messages" mode forces the LLM into streaming regardless
     of the ChatDatabricks.streaming attribute.
     """
-    mcp_tools = await _get_mcp_tools_safe(workspace_client or sp_workspace_client)
+    mcp_tools = await _get_mcp_tools_safe(workspace_client or _get_workspace_client())
     wrapped_tools = [wrap_for_genie_capture(t) for t in mcp_tools]
     ka_tools = discover_ka_tools()
-    tools = list(wrapped_tools) + ka_tools + [
-        # Existing
-        query_flights_at_risk,
-        update_flight_risk,
-        query_checkin_metrics,
-        # Checkin performance monitoring flow
-        get_current_time,
-        query_checkin_performance_metrics,
-        create_checkin_incident,
-        create_border_incident,
-        query_checkin_agent_staffing,
-        query_border_officer_staffing,
-        query_egate_availability,
-        query_available_agents_for_redeployment,
-        query_border_terminal_details,
-        query_border_officers_by_post,
-        query_checkin_agents_by_counter_status,
-        query_staffing_duties,
-        update_checkin_agent,
-        update_border_officer,
-        back_to_normal,
-        confirm_arrival,
-    ]
+    api_tools = discover_api_tools()
+    a2a_tools = discover_a2a_tools()
+    domain_tools = _discover_domain_tools()
+    _log.info("Discovered %d domain tools, %d KA tools, %d API tools, %d A2A tools", len(domain_tools), len(ka_tools), len(api_tools), len(a2a_tools))
+    # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
+    chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
+    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + chart_tools + [get_current_time] + domain_tools
     endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
     databricks_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
 

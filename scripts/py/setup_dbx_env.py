@@ -444,15 +444,18 @@ def run_resource_profile() -> bool:
 
 
 def run_resource_genie() -> bool:
-    """Interactive config for PROJECT_GENIE_CHECKIN with Genie space list as choices."""
+    """Interactive config for PROJECT_GENIE_* with Genie space list as choices."""
     load_dotenv(ENV_FILE, override=True)
 
-    key = "PROJECT_GENIE_CHECKIN"
+    # Find first active PROJECT_GENIE_* key, or default to PROJECT_GENIE_DEFAULT
     active, inactive, _ = parse_env_file(ENV_FILE)
+    key = next((k for k in sorted(active) if k.startswith("PROJECT_GENIE_") and active[k].strip()), "")
+    if not key:
+        key = next((k for k in sorted(inactive) if k.startswith("PROJECT_GENIE_")), "PROJECT_GENIE_DEFAULT")
     cur = active.get(key, "").strip()
     inact = inactive.get(key, [])
 
-    section("PROJECT_GENIE_CHECKIN")
+    section(f"Genie Space ({key})")
 
     spaces = list_genie_spaces()
     if spaces:
@@ -996,7 +999,7 @@ def verify_schema() -> tuple[bool, str]:
 
 
 def verify_tables() -> tuple[bool, str]:
-    """Verify checkin_metrics, flights, checkin_agents, border_officers, border_terminals exist. Return (ok, msg)."""
+    """Verify tables discovered from data CSV dirs exist in UC schema. Return (ok, msg)."""
     spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
     if "." not in spec:
         return False, "PROJECT_UNITY_CATALOG_SCHEMA not set"
@@ -1019,9 +1022,14 @@ def verify_tables() -> tuple[bool, str]:
 
 
 def verify_genie() -> tuple[bool, str]:
-    sid = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
+    # Find first active PROJECT_GENIE_* env var
+    sid = ""
+    for k in sorted(os.environ):
+        if k.startswith("PROJECT_GENIE_") and os.environ[k].strip():
+            sid = os.environ[k].strip()
+            break
     if not sid:
-        return False, "not set"
+        return False, "not set (optional)"
     try:
         w = WorkspaceClient()
         sp = w.genie.get_space(space_id=sid)
@@ -1722,7 +1730,7 @@ def run_resource(
         return True
 
     # Genie invalid and only "add new" → branch to asset creation dialog
-    ASSET_KEYS = ("PROJECT_GENIE_CHECKIN",)
+    ASSET_KEYS = tuple(k for k in sorted(os.environ) if k.startswith("PROJECT_GENIE_") and os.environ[k].strip()) or ("PROJECT_GENIE_DEFAULT",)
     if key in ASSET_KEYS and choices == ["add new"]:
         try:
             raw = input(f"  {C}Create project assets now? [y/N]: {W}").strip().lower()
@@ -1912,11 +1920,16 @@ def run_resource(
 
 
 def verify_ka() -> tuple[bool, str]:
-    """Check that PROJECT_KA_PASSENGERS is set and the KA is ACTIVE."""
+    """Check that a PROJECT_KA_* endpoint is set and the KA is ACTIVE."""
     load_dotenv(ENV_FILE, override=True)
-    endpoint_name = os.environ.get("PROJECT_KA_PASSENGERS", "").strip()
+    # Find first active PROJECT_KA_* env var
+    endpoint_name = ""
+    for k in sorted(os.environ):
+        if k.startswith("PROJECT_KA_") and os.environ[k].strip():
+            endpoint_name = os.environ[k].strip()
+            break
     if not endpoint_name:
-        return False, "PROJECT_KA_PASSENGERS not set"
+        return False, "no PROJECT_KA_* set (optional)"
     try:
         w = WorkspaceClient()
         for ka in w.knowledge_assistants.list_knowledge_assistants():
@@ -1932,7 +1945,7 @@ def verify_ka() -> tuple[bool, str]:
 
 
 def run_resource_ka() -> bool:
-    """Interactive setup for the passenger rights Knowledge Assistant."""
+    """Interactive setup for Knowledge Assistant endpoints."""
     load_dotenv(ENV_FILE, override=True)
 
     section("Knowledge Assistants (data/pdf/)")
@@ -2001,10 +2014,13 @@ def run_resource_ka() -> bool:
             label = choice[len("use: "):]  # "name [STATE]"
             for name, ep, state in existing_kas:
                 if label == f"{name} [{state}]":
-                    comment_active_for_key(ENV_FILE, "PROJECT_KA_PASSENGERS")
-                    write_env_entry(ENV_FILE, "PROJECT_KA_PASSENGERS", ep)
+                    import re as _re
+                    ka_slug = _re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_").upper()
+                    ka_key = f"PROJECT_KA_{ka_slug}"
+                    comment_active_for_key(ENV_FILE, ka_key)
+                    write_env_entry(ENV_FILE, ka_key, ep)
                     load_dotenv(ENV_FILE, override=True)
-                    print(f"  {OK} PROJECT_KA_PASSENGERS set to {C}{ep}{W}")
+                    print(f"  {OK} {ka_key} set to {C}{ep}{W}")
                     print(f"\n  {CONF}✓  Knowledge Assistant registered.{W}")
                     vok, vmsg = verify_ka()
                     if vok:
@@ -2205,13 +2221,13 @@ def run_check_only() -> None:
 
     section("Genie")
     ok, msg = verify_genie()
-    print(f"  {OK if ok else FAIL} PROJECT_GENIE_CHECKIN {C}({msg}){W}")
+    print(f"  {OK if ok else FAIL} Genie space {C}({msg}){W}")
     if not ok:
         all_ok = False
 
     section("Knowledge Assistants")
     ok, msg = verify_ka()
-    print(f"  {OK if ok else FAIL} PROJECT_KA_PASSENGERS {C}({msg}){W}")
+    print(f"  {OK if ok else FAIL} Knowledge Assistant {C}({msg}){W}")
     if not ok:
         all_ok = False
 
@@ -2469,7 +2485,7 @@ STEPS: list[tuple[str, str, object]] = [
     ("tables",      "Delta tables (data/sql/)",       run_resource_tables),
     ("functions",   "UC Functions (data/default/func/)",  run_resource_functions),
     ("procedures",  "UC Procedures (data/default/proc/)", run_resource_procedures),
-    ("genie",       "PROJECT_GENIE_CHECKIN",          run_resource_genie),
+    ("genie",       "Genie Space (PROJECT_GENIE_*)",  run_resource_genie),
     ("ka",          "Knowledge Assistants",           run_resource_ka),
     ("vs",          "Vector Search (KA fallback)",    run_resource_vs),
     ("mlflow",      "MLFLOW_EXPERIMENT_ID",           run_resource_mlflow),

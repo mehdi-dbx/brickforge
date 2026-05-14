@@ -3,7 +3,7 @@
 
 Usage:
   uv run python scripts/py/vs/verify_vs_index.py
-  uv run python scripts/py/vs/verify_vs_index.py --query "flight delay compensation"
+  uv run python scripts/py/vs/verify_vs_index.py --query "my test query"
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ INFO = f"{C}[*]{W}"
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify VS index")
-    parser.add_argument("--query", default="passenger rights compensation", help="Test query")
+    parser.add_argument("--query", default="test query", help="Test query")
     parser.add_argument("--num-results", type=int, default=3)
     args = parser.parse_args()
 

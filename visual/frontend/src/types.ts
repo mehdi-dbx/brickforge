@@ -36,7 +36,7 @@ export interface GraphResponse {
 
 // ─── Setup types ──────────────────────────────────────────────────────────────
 
-export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mlflow' | 'grants' | 'deploy'
+export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mcp' | 'api' | 'a2a' | 'features' | 'lakebase' | 'mlflow' | 'grants' | 'deploy'
 export type StepStatus = 'done' | 'warning' | 'error' | 'missing' | 'unknown'
 export type SetupPhase = 'choose' | 'configure' | 'execute' | 'done'
 
@@ -77,10 +77,10 @@ export interface ExecLine {
 }
 
 export interface StepInstance {
-  key: string        // e.g. PROJECT_GENIE_CHECKIN
+  key: string        // e.g. PROJECT_GENIE_<SLUG>
   value: string      // e.g. space_id or endpoint name
   enabled: boolean   // true = active, false = commented out
-  label: string      // derived slug: "checkin", "passengers"
+  label: string      // derived slug from env key suffix
 }
 
 export interface StepState {

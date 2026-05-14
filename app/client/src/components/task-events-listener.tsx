@@ -8,7 +8,7 @@ import { TaskNotificationToast } from '@/components/task-notification-toast';
 
 /**
  * Listens for task_created SSE events when role is Agent.
- * On event: refreshes checkin_agents table, shows toast, and sets unread badge.
+ * On event: refreshes tables, shows toast, and sets unread badge.
  */
 export function TaskEventsListener() {
   const { agentId } = useRole();
@@ -20,7 +20,7 @@ export function TaskEventsListener() {
     agentId ?? null,
     (payload) => {
       setUnread();
-      refresh('checkin_agents');
+      refresh('*');
       toast.custom(
         (id) => (
           <TaskNotificationToast
@@ -32,7 +32,7 @@ export function TaskEventsListener() {
               if (agentId) {
                 showStaffingDutyOnly(agentId);
                 setTimeout(() => {
-                  const el = document.getElementById('checkin-agents-table');
+                  const el = document.querySelector('[data-table-panel]');
                   const scrollParent = el?.closest('.overflow-auto');
                   if (scrollParent && el) {
                     const containerRect = scrollParent.getBoundingClientRect();

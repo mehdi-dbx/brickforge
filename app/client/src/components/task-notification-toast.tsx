@@ -14,11 +14,10 @@ function agentDisplayName(fullName: string): string {
 
 export function TaskNotificationToast({
   agentName,
-  managerName = 'Check-in Manager',
+  managerName = 'Manager',
   onGoToTask,
 }: TaskNotificationToastProps) {
-  const managerDisplay =
-    managerName === 'Check-in Manager' ? 'Check-in Manager' : `Check-in Manager ${managerName}`;
+  const managerDisplay = managerName;
   return (
     <div
       data-testid="toast"

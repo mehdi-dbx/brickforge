@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Add genie_space resource to databricks.yml so app SP gets CAN_RUN.
-Reads space_id from PROJECT_GENIE_CHECKIN in .env.local or databricks.yml."""
+Reads space_id from first PROJECT_GENIE_* env var or from databricks.yml."""
 import os
 import re
 import sys
@@ -14,7 +14,7 @@ def main() -> int:
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env.local")
 
-    # Try databricks.yml first, then env var
+    # Try databricks.yml first, then first PROJECT_GENIE_* env var
     space_id = None
     if YML.exists():
         content = YML.read_text()
@@ -23,11 +23,14 @@ def main() -> int:
             space_id = m.group(1)
 
     if not space_id:
-        space_id = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
+        for key in sorted(os.environ):
+            if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
+                space_id = os.environ[key].strip()
+                break
 
     if not space_id:
-        print("Error: No space_id found. Set PROJECT_GENIE_CHECKIN in .env.local", file=sys.stderr)
-        return 1
+        print("No Genie space configured — skipping (optional)", file=sys.stderr)
+        return 0
 
     if not YML.exists():
         print(f"Error: {YML} not found. Run deploy/sync_databricks_yml_from_env.py first.", file=sys.stderr)

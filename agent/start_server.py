@@ -39,12 +39,33 @@ async def start_frontend():
 
 from tools.sql_executor import execute_query, get_warehouse  # noqa: E402
 
-_ALLOWED_TABLES = {"flights", "checkin_metrics", "checkin_agents", "border_officers", "border_terminals"}
+_ALLOWED_TABLES: set[str] | None = None
+
+
+def _get_allowed_tables() -> set[str]:
+    """Discover allowed tables from UC schema. Cached after first call."""
+    global _ALLOWED_TABLES
+    if _ALLOWED_TABLES is not None:
+        return _ALLOWED_TABLES
+    schema_spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+    if not schema_spec or "." not in schema_spec:
+        _ALLOWED_TABLES = set()
+        return _ALLOWED_TABLES
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        catalog, schema = schema_spec.split(".", 1)
+        _ALLOWED_TABLES = {t.name for t in w.tables.list(catalog_name=catalog, schema_name=schema) if t.name}
+    except Exception:
+        _ALLOWED_TABLES = set()
+    return _ALLOWED_TABLES
+
 
 @app.get("/tables/{table_name}")
 def get_table(table_name: str):
     """Return table data from UC."""
-    if table_name not in _ALLOWED_TABLES:
+    allowed = _get_allowed_tables()
+    if allowed and table_name not in allowed:
         raise HTTPException(status_code=400, detail=f"Table not allowed: {table_name}")
     schema_spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
     if not schema_spec or "." not in schema_spec:

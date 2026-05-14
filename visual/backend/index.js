@@ -71,7 +71,9 @@ function writeEnvValues(updates) {
     }
   }
 
-  fs.writeFileSync(ENV_FILE, lines.join('\n'))
+  // Ensure file ends with a newline
+  const content = lines.join('\n')
+  fs.writeFileSync(ENV_FILE, content.endsWith('\n') ? content : content + '\n')
 }
 
 // Comment out specific keys in .env.local (for switching to same-workspace mode)
@@ -259,9 +261,14 @@ const STEP_ENV_KEYS = {
   functions: [],  // depends on schema + SQL files in func/proc dirs
   model:     ['AGENT_MODEL_ENDPOINT'],
   prompt:    [],  // file-based, not env-based
-  genie:     ['PROJECT_GENIE_CHECKIN'],
-  ka:        ['PROJECT_KA_PASSENGERS'],
+  genie:     [],  // multi-instance, handled by parseMultiInstanceKeys
+  ka:        [],  // multi-instance, handled by parseMultiInstanceKeys
   vs:        ['PROJECT_VS_INDEX'],
+  mcp:       [],  // multi-instance, handled separately
+  api:       [],  // multi-instance, handled separately
+  a2a:       [],  // multi-instance, handled separately
+  features:  [],  // multi-instance, handled separately
+  lakebase:  ['LAKEBASE_INSTANCE_NAME'],
   mlflow:    ['MLFLOW_EXPERIMENT_ID'],
   grants:    [],  // always re-runnable, no single env key
   deploy:    ['DBX_APP_NAME'],
@@ -337,6 +344,31 @@ app.get('/api/setup/status', (_req, res) => {
         steps[step] = { status: indexInstances.some(i => i.enabled) ? 'configured' : (indexInstances.length ? 'missing' : 'missing'), values, instances: indexInstances }
         continue
       }
+      if (step === 'mcp') {
+        const instances = parseMultiInstanceKeys('PROJECT_MCP_')
+        const serverInstances = instances.filter(i => !i.key.endsWith('_HEADER'))
+        steps[step] = { status: serverInstances.some(i => i.enabled) ? 'configured' : (serverInstances.length ? 'missing' : 'missing'), values: {}, instances: serverInstances }
+        continue
+      }
+      if (step === 'a2a') {
+        const instances = parseMultiInstanceKeys('PROJECT_A2A_')
+        const agentInstances = instances.filter(i => !i.key.endsWith('_HEADER'))
+        steps[step] = { status: agentInstances.some(i => i.enabled) ? 'configured' : (agentInstances.length ? 'missing' : 'missing'), values: {}, instances: agentInstances }
+        continue
+      }
+      if (step === 'api') {
+        // API slugs: filter to only _CONN or _URL entries (not _METHOD, _PATH, etc.)
+        const instances = parseMultiInstanceKeys('PROJECT_API_')
+        const apiInstances = instances.filter(i => i.key.endsWith('_CONN') || i.key.endsWith('_URL'))
+        // Derive label from slug: PROJECT_API_WEATHER_CONN -> "weather (uc)" or PROJECT_API_WEATHER_URL -> "weather (http)"
+        const labeled = apiInstances.map(i => ({
+          ...i,
+          label: i.key.replace('PROJECT_API_', '').replace(/_CONN$/, '').replace(/_URL$/, '').toLowerCase()
+            + (i.key.endsWith('_CONN') ? ' (uc)' : ' (http)')
+        }))
+        steps[step] = { status: labeled.some(i => i.enabled) ? 'configured' : (labeled.length ? 'missing' : 'missing'), values: {}, instances: labeled }
+        continue
+      }
 
       steps[step] = { status, values }
     }
@@ -352,11 +384,34 @@ app.put('/api/setup/toggle', (req, res) => {
   const { key } = req.body
   if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key required' })
   // Only allow toggling PROJECT_GENIE_* and PROJECT_KA_* keys
-  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_')) {
-    return res.status(400).json({ error: 'can only toggle genie/ka/vs keys' })
+  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_') && !key.startsWith('PROJECT_MCP_') && !key.startsWith('PROJECT_API_') && !key.startsWith('PROJECT_A2A_')) {
+    return res.status(400).json({ error: 'can only toggle genie/ka/vs/mcp/a2a keys' })
   }
   const ok = toggleEnvKey(key)
   res.json({ ok })
+})
+
+// DELETE /api/setup/instance — remove an env key (and associated _HEADER) from .env.local
+app.delete('/api/setup/instance', (req, res) => {
+  const { key } = req.body
+  if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key required' })
+  const allowed = ['PROJECT_GENIE_', 'PROJECT_KA_', 'PROJECT_VS_', 'PROJECT_MCP_', 'PROJECT_API_', 'PROJECT_A2A_']
+  if (!allowed.some(p => key.startsWith(p))) {
+    return res.status(400).json({ error: 'can only delete genie/ka/vs/mcp/a2a keys' })
+  }
+  let raw = ''
+  try { raw = fs.readFileSync(ENV_FILE, 'utf8') } catch { return res.json({ ok: false }) }
+  const keysToRemove = new Set([key, `${key}_HEADER`])
+  const out = raw.split('\n').filter(line => {
+    const trimmed = line.trim()
+    const content = trimmed.startsWith('#') ? trimmed.replace(/^#\s*/, '') : trimmed
+    const eq = content.indexOf('=')
+    if (eq < 0) return true
+    const lineKey = content.slice(0, eq).trim()
+    return !keysToRemove.has(lineKey)
+  })
+  fs.writeFileSync(ENV_FILE, out.join('\n'))
+  res.json({ ok: true })
 })
 
 // GET /api/setup/profiles — list databricks CLI profiles
@@ -410,6 +465,19 @@ except:
   spaces = []
 out = [{'id': str(getattr(s,'space_id',None) or getattr(s,'id','')), 'name': getattr(s,'title','?')} for s in spaces]
 print(json.dumps(out))
+`.trim(),
+    lakebase: `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import subprocess, json
+try:
+  r = subprocess.run(['databricks', 'database', 'list-database-instances', '--output', 'json'], capture_output=True, text=True, timeout=15)
+  if r.returncode != 0: print('[]'); exit(0)
+  data = json.loads(r.stdout)
+  instances = data if isinstance(data, list) else data.get('database_instances', [])
+  out = [{'id': i.get('name',''), 'name': i.get('name',''), 'state': i.get('state','UNKNOWN')} for i in instances]
+  print(json.dumps(out))
+except Exception as e:
+  print('[]')
 `.trim(),
   }
 
@@ -506,16 +574,18 @@ print('[+] PROJECT_UNITY_CATALOG_SCHEMA =', spec)
 const SAVE_GENIE_SCRIPT = (id, name) => `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import re; from pathlib import Path
+slug = re.sub(r'[^a-z0-9]+', '_', '${name}'.lower()).strip('_').upper() or 'DEFAULT'
+env_key = f'PROJECT_GENIE_{slug}'
 f = Path('.env.local')
 lines = f.read_text().splitlines() if f.exists() else []
 new = []; found = False
 for line in lines:
     m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
-    if m and m.group(1) == 'PROJECT_GENIE_CHECKIN': new.append('PROJECT_GENIE_CHECKIN=${id}'); found = True
+    if m and m.group(1) == env_key: new.append(f'{env_key}=${id}'); found = True
     else: new.append(line)
-if not found: new.append('PROJECT_GENIE_CHECKIN=${id}')
+if not found: new.append(f'{env_key}=${id}')
 f.write_text('\\n'.join(new) + '\\n')
-print('[+] PROJECT_GENIE_CHECKIN = ${id}  (${name})')
+print(f'[+] {env_key} = ${id}  (${name})')
 `.trim().replace(/\$\{id\}/g, id).replace(/\$\{name\}/g, name)
 
 app.post('/api/setup/exec', (req, res) => {
@@ -648,6 +718,31 @@ print('[+] All functions and procedures created')
       break
     }
 
+    case 'save-lakebase': {
+      const lbName = params.name
+      if (!lbName) { done(false); break }
+      runCommand('uv', ['run', 'python', '-c', `
+from pathlib import Path; import re
+f = Path('.env.local')
+key = 'LAKEBASE_INSTANCE_NAME'
+val = '${lbName.replace(/'/g, "\\'")}'
+lines = f.read_text().splitlines() if f.exists() else []
+new = []; found = False
+for line in lines:
+    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
+    if m and m.group(1) == key: new.append(key + '=' + val); found = True
+    else: new.append(line)
+if not found: new.append(key + '=' + val)
+f.write_text('\\n'.join(new) + '\\n')
+print('[+] LAKEBASE_INSTANCE_NAME = ' + val)
+`.trim()])
+      break
+    }
+
+    case 'exec-lakebase':
+      runCommand('uv', ['run', 'python', 'data/init/create_lakebase.py'])
+      break
+
     case 'exec-mlflow':
       runCommand('uv', ['run', 'python', 'data/init/create_mlflow_experiment.py'])
       break
@@ -657,7 +752,7 @@ print('[+] All functions and procedures created')
       break
 
     case 'exec-genie': {
-      const genieName = params.name || 'Checkin Metrics'
+      const genieName = params.name || 'Project Data'
       runCommand('uv', ['run', 'python', 'data/init/create_genie_space.py'], { GENIE_ROOM_NAME: genieName })
       break
     }
@@ -837,6 +932,33 @@ print('[+] DBX_APP_NAME = ${appName.replace(/'/g, "\\'")}')
       break
     }
 
+    case 'save-api': {
+      const { slug, type, conn, url, method, path: apiPath, desc, apiParams, header } = params
+      if (!slug) { write('line', { text: '[x] no API name provided\n', stream: 'err' }); done(false); break }
+      const prefix = `PROJECT_API_${slug}`
+      const lines = []
+      if (type === 'uc' && conn) lines.push(`${prefix}_CONN=${conn}`)
+      if (type === 'direct' && url) lines.push(`${prefix}_URL=${url}`)
+      if (method && method !== 'GET') lines.push(`${prefix}_METHOD=${method}`)
+      if (apiPath && apiPath !== '/') lines.push(`${prefix}_PATH=${apiPath}`)
+      if (desc) lines.push(`${prefix}_DESC=${desc}`)
+      if (apiParams) lines.push(`${prefix}_PARAMS=${apiParams}`)
+      if (header && type === 'direct') lines.push(`${prefix}_HEADER=${header}`)
+      if (lines.length === 0) { write('line', { text: '[x] no connection or URL provided\n', stream: 'err' }); done(false); break }
+      // Append all lines to .env.local
+      const script = `
+from pathlib import Path
+f = Path('.env.local')
+text = f.read_text() if f.exists() else ''
+additions = ${JSON.stringify(lines)}
+text = text.rstrip('\\n') + '\\n' + '\\n'.join(additions) + '\\n'
+f.write_text(text)
+for line in additions: print('[+] ' + line)
+`.trim()
+      runCommand('uv', ['run', 'python', '-c', script])
+      break
+    }
+
     case 'exec-deploy': {
       runCommand('bash', ['deploy/deploy.sh'])
       break
@@ -844,6 +966,19 @@ print('[+] DBX_APP_NAME = ${appName.replace(/'/g, "\\'")}')
 
     case 'exec-deploy-dry': {
       runCommand('bash', ['deploy/deploy.sh', '--dry-run'])
+      break
+    }
+
+    case 'save-multi-instance': {
+      const { prefix, slug, url, header } = params
+      if (!prefix || !slug || !url) { write('line', { text: '[x] prefix, slug, and url required\n', stream: 'err' }); done(false); break }
+      const key = `${prefix}${slug}`
+      const updates = { [key]: url }
+      if (header) updates[`${key}_HEADER`] = header
+      writeEnvValues(updates)
+      const lines = [`[+] ${key} = ${url}`]
+      if (header) lines.push(`[+] ${key}_HEADER = ${header.split(':')[0]}:***`)
+      synthetic(lines)
       break
     }
 
@@ -999,6 +1134,7 @@ except Exception as e:
 
   genie: null, // dynamic — uses per-instance test below
   ka: null,    // dynamic — uses per-instance test below
+  api: null,   // dynamic — uses per-instance test below
 
   mlflow: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
@@ -1009,6 +1145,22 @@ w = WorkspaceClient()
 try:
     exp = w.experiments.get_experiment(experiment_id=eid)
     print('[+] found — ' + getattr(exp, 'name', eid))
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim(),
+
+  lakebase: `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, subprocess, json
+name = os.environ.get('LAKEBASE_INSTANCE_NAME','').strip()
+if not name: print('[x] LAKEBASE_INSTANCE_NAME not set'); exit(1)
+try:
+    r = subprocess.run(['databricks', 'database', 'get-database-instance', name, '--output', 'json'], capture_output=True, text=True, timeout=15)
+    if r.returncode != 0: print('[x] instance not found — ' + name); exit(1)
+    d = json.loads(r.stdout)
+    state = d.get('state', 'UNKNOWN').upper()
+    if state == 'AVAILABLE': print('[+] available — ' + name)
+    else: print('[x] ' + name + ' — ' + state); exit(1)
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim(),
@@ -1052,7 +1204,9 @@ app.get('/api/setup/test', (req, res) => {
   // Dynamic test scripts for genie/ka per-instance testing
   let script = TEST_SCRIPTS[step]
   if (step === 'genie') {
-    const key = envKey || 'PROJECT_GENIE_CHECKIN'
+    const instances = parseMultiInstanceKeys('PROJECT_GENIE_')
+    const firstActive = instances.find(i => i.enabled)
+    const key = envKey || (firstActive ? firstActive.key : 'PROJECT_GENIE_DEFAULT')
     script = `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from databricks.sdk import WorkspaceClient; import os
@@ -1066,7 +1220,9 @@ except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim()
   } else if (step === 'ka') {
-    const key = envKey || 'PROJECT_KA_PASSENGERS'
+    const kaInstances = parseMultiInstanceKeys('PROJECT_KA_')
+    const firstActiveKa = kaInstances.find(i => i.enabled)
+    const key = envKey || (firstActiveKa ? firstActiveKa.key : 'PROJECT_KA_DEFAULT')
     script = `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from databricks.sdk import WorkspaceClient; import os
@@ -1096,6 +1252,114 @@ try:
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim()
+  } else if (step === 'mcp') {
+    const key = envKey || ''
+    if (!key) return res.json({ ok: false, message: 'no MCP key specified' })
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error, json
+url = os.environ.get('${key}','').strip()
+if not url: print('[x] ${key} not set'); exit(1)
+# Send MCP initialize request (POST with JSON-RPC)
+body = json.dumps({"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"brickforge-test","version":"0.1"}}}).encode()
+try:
+    req = urllib.request.Request(url, data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Accept', 'application/json, text/event-stream')
+    header_key = '${key}_HEADER'
+    header_val = os.environ.get(header_key, '').strip()
+    if header_val and ':' in header_val:
+        hname, hval = header_val.split(':', 1)
+        req.add_header(hname.strip(), hval.strip())
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] connected — ' + url)
+except urllib.error.HTTPError as e:
+    if e.code in (406, 415):
+        print('[+] reachable — ' + url + ' (server responded ' + str(e.code) + ')')
+    else:
+        print('[x] HTTP ' + str(e.code) + ' — ' + url)
+        exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  } else if (step === 'a2a') {
+    const key = envKey || ''
+    if (!key) return res.json({ ok: false, message: 'no A2A key specified' })
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error
+url = os.environ.get('${key}','').strip()
+if not url: print('[x] ${key} not set'); exit(1)
+try:
+    req = urllib.request.Request(url, method='GET')
+    header_key = '${key}_HEADER'
+    header_val = os.environ.get(header_key, '').strip()
+    if header_val and ':' in header_val:
+        hname, hval = header_val.split(':', 1)
+        req.add_header(hname.strip(), hval.strip())
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] reachable — ' + url + ' (' + str(resp.status) + ')')
+except urllib.error.HTTPError as e:
+    if e.code in (405, 404, 400):
+        print('[+] reachable — ' + url + ' (' + str(e.code) + ')')
+    else:
+        print('[x] HTTP ' + str(e.code) + ' — ' + url)
+        exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  } else if (step === 'api') {
+    const key = envKey || ''
+    if (!key) return res.json({ ok: false, message: 'no API key specified' })
+    // Determine if UC connection or direct URL
+    const isUc = key.endsWith('_CONN')
+    if (isUc) {
+      script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os
+conn = os.environ.get('${key}','').strip()
+if not conn: print('[x] ${key} not set'); exit(1)
+os.environ.pop('DATABRICKS_CONFIG_PROFILE', None)
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import ExternalFunctionRequestHttpMethod
+w = WorkspaceClient()
+slug = '${key}'.replace('PROJECT_API_','').replace('_CONN','')
+path = os.environ.get(f'PROJECT_API_{slug}_PATH', '/').strip()
+method = os.environ.get(f'PROJECT_API_{slug}_METHOD', 'GET').strip()
+try:
+    resp = w.serving_endpoints.http_request(conn=conn, method=ExternalFunctionRequestHttpMethod(method), path=path)
+    print('[+] ' + str(resp.status_code) + ' — ' + conn + ' ' + method + ' ' + path)
+except Exception as e:
+    print('[x] ' + str(e)[:120]); exit(1)
+`.trim()
+    } else {
+      script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error
+url = os.environ.get('${key}','').strip()
+if not url: print('[x] ${key} not set'); exit(1)
+slug = '${key}'.replace('PROJECT_API_','').replace('_URL','')
+path = os.environ.get(f'PROJECT_API_{slug}_PATH', '/').strip()
+method = os.environ.get(f'PROJECT_API_{slug}_METHOD', 'GET').strip()
+full = url.rstrip('/') + '/' + path.lstrip('/')
+try:
+    req = urllib.request.Request(full, method=method)
+    header_val = os.environ.get(f'PROJECT_API_{slug}_HEADER', '').strip()
+    if header_val and ':' in header_val:
+        hname, hval = header_val.split(':', 1)
+        req.add_header(hname.strip(), hval.strip())
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] ' + str(resp.status) + ' — ' + method + ' ' + full)
+except urllib.error.HTTPError as e:
+    if e.code in (405, 404, 400):
+        print('[+] reachable — ' + full + ' (' + str(e.code) + ')')
+    else:
+        print('[x] HTTP ' + str(e.code) + ' — ' + full)
+        exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+    }
   }
 
   if (!script) return res.json({ ok: false, message: 'no test for step: ' + step })
@@ -1108,6 +1372,77 @@ except Exception as e:
     const ok = !err && raw.startsWith('[+]')
     const message = raw.replace(/^\[.\] /, '')
     res.json({ ok, message: message || (err ? String(err) : 'no output') })
+  })
+})
+
+// GET /api/setup/mcp-tools?key=<envKey> — list tools exposed by an MCP server
+app.get('/api/setup/mcp-tools', (req, res) => {
+  const key = req.query.key
+  if (!key) return res.status(400).json({ error: 'key query param required' })
+
+  const script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error, json, sys
+
+url = os.environ.get('${key}','').strip()
+if not url: print(json.dumps({"error":"${key} not set"})); exit(0)
+
+headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}
+header_key = '${key}_HEADER'
+header_val = os.environ.get(header_key, '').strip()
+if header_val and ':' in header_val:
+    hname, hval = header_val.split(':', 1)
+    headers[hname.strip()] = hval.strip()
+
+def rpc(method, mid, params=None):
+    body = {"jsonrpc":"2.0","method":method,"id":mid}
+    if params: body["params"] = params
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method='POST')
+    for k, v in headers.items(): req.add_header(k, v)
+    resp = urllib.request.urlopen(req, timeout=15)
+    raw = resp.read().decode()
+    # Handle SSE or plain JSON
+    for line in raw.split('\\n'):
+        line = line.strip()
+        if line.startswith('data:'):
+            line = line[5:].strip()
+        if not line: continue
+        try:
+            d = json.loads(line)
+            if d.get('id') == mid: return d
+        except: pass
+    return json.loads(raw)
+
+try:
+    # Initialize
+    init = rpc('initialize', 1, {"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"brickforge","version":"0.1"}})
+    # Send initialized notification (no id)
+    body = json.dumps({"jsonrpc":"2.0","method":"notifications/initialized"}).encode()
+    req2 = urllib.request.Request(url, data=body, method='POST')
+    for k, v in headers.items(): req2.add_header(k, v)
+    try: urllib.request.urlopen(req2, timeout=5)
+    except: pass
+    # List tools
+    tools_resp = rpc('tools/list', 2)
+    tools = tools_resp.get('result', {}).get('tools', [])
+    out = [{"name": t.get("name",""), "description": t.get("description","")} for t in tools]
+    print(json.dumps({"tools": out}))
+except Exception as e:
+    print(json.dumps({"error": str(e)[:200]}))
+`.trim()
+
+  execFile('uv', ['run', 'python', '-c', script], {
+    cwd: PROJECT_ROOT,
+    timeout: 30000,
+    env: { ...process.env, ...(() => { try { const e = {}; for (const {key:k, value:v} of parseEnvFile()) e[k]=v; return e } catch { return {} } })() },
+  }, (err, stdout) => {
+    try {
+      const data = JSON.parse((stdout || '').trim())
+      res.json(data)
+    } catch {
+      res.json({ error: err ? String(err) : 'no response' })
+    }
   })
 })
 
@@ -1242,6 +1577,42 @@ app.get('/api/gen/tables', (_req, res) => {
     }
 
     res.json({ tables })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/gen/routines — dynamic routine discovery (functions + procedures) from default + gen
+app.get('/api/gen/routines', (_req, res) => {
+  try {
+    const env = {}
+    for (const { key, value } of parseEnvFile()) env[key] = value
+
+    const useDefault = (env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
+    const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
+
+    const sources = []
+    if (['true', '1', 'yes'].includes(useDefault)) {
+      sources.push({ base: path.join(PROJECT_ROOT, 'data', 'default'), source: 'default' })
+    }
+    if (['true', '1', 'yes'].includes(useGen)) {
+      sources.push({ base: path.join(PROJECT_ROOT, 'data', 'gen'), source: 'generated' })
+    }
+
+    const routines = []
+    for (const { base, source } of sources) {
+      for (const [kind, subdir] of [['function', 'func'], ['procedure', 'proc']]) {
+        const dir = path.join(base, subdir)
+        let files = []
+        try { files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort() } catch {}
+        for (const f of files) {
+          const name = f.replace('.sql', '')
+          routines.push({ name, kind, source })
+        }
+      }
+    }
+
+    res.json({ routines })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -1708,9 +2079,9 @@ exp_id = os.environ.get('MLFLOW_EXPERIMENT_ID', '').strip()
 if exp_id and exists_experiment(exp_id):
     resources.append({'id': 'mlflow', 'category': 'MLflow Experiment', 'name': exp_id})
 
-genie_id = os.environ.get('PROJECT_GENIE_CHECKIN', '').strip()
-if genie_id and exists_genie(genie_id):
-    resources.append({'id': 'genie', 'category': 'Genie Space', 'name': genie_id})
+for gk, gv in sorted(os.environ.items()):
+    if gk.startswith('PROJECT_GENIE_') and gv.strip() and exists_genie(gv.strip()):
+        resources.append({'id': f'genie:{gk}', 'category': 'Genie Space', 'name': f'{gk}={gv.strip()}'})
 
 if catalog and schema:
     vol_full = f'{catalog}.{schema}.doc'
@@ -1729,7 +2100,8 @@ bundle = ROOT / '.databricks' / 'bundle'
 if bundle.exists():
     resources.append({'id': 'bundle', 'category': 'DAB Bundle State', 'name': '.databricks/bundle/'})
 
-for key in ('PROJECT_GENIE_CHECKIN', 'MLFLOW_EXPERIMENT_ID'):
+cleanup_keys = [k for k in sorted(os.environ) if k.startswith('PROJECT_GENIE_') and os.environ[k].strip()] + ['MLFLOW_EXPERIMENT_ID']
+for key in cleanup_keys:
     if os.environ.get(key, '').strip():
         resources.append({'id': f'env:{key}', 'category': '.env.local cleanup', 'name': f'comment out {key}'})
 
@@ -1803,11 +2175,13 @@ for rid in ids:
             mlflow.set_tracking_uri('databricks')
             mlflow.delete_experiment(eid)
             out(f'[+] deleted experiment: {eid}')
-        elif rid == 'genie':
-            gid = os.environ.get('PROJECT_GENIE_CHECKIN', '').strip()
-            out(f'[~] deleting Genie space {gid}...')
-            w.genie.trash_space(space_id=gid)
-            out(f'[+] deleted Genie space: {gid}')
+        elif rid.startswith('genie:'):
+            gk = rid.split(':', 1)[1]
+            gid = os.environ.get(gk, '').strip()
+            if gid:
+                out(f'[~] deleting Genie space {gk}={gid}...')
+                w.genie.trash_space(space_id=gid)
+                out(f'[+] deleted Genie space: {gid}')
         elif rid == 'volume':
             vol = f'{catalog}.{schema}.doc'
             out(f'[~] deleting volume {vol}...')

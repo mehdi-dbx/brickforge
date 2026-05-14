@@ -23,8 +23,8 @@ resources:
             permission: 'CAN_USE'
         - name: 'genie_space'
           genie_space:
-            name: 'agent-forge-checkin'
-            space_id: '01f1403bb46b12ef87cefe518c686a0f'
+            name: 'PLACEHOLDER_GENIE_NAME'
+            space_id: 'PLACEHOLDER_GENIE_ID'
             permission: 'CAN_RUN'
 
         - name: 'serving_endpoint'
@@ -44,4 +44,4 @@ targets:
     resources:
       apps:
         agent_app:
-          name: 'agent-airops-voca-lab-user'
+          name: 'PLACEHOLDER_APP_NAME'

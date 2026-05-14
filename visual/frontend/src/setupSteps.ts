@@ -28,7 +28,7 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'warehouse',
     label: 'sql warehouse',
     title: 'Databricks warehouse id',
-    help: 'The SQL warehouse used by the agent to execute queries against Unity Catalog tables -- flight data, check-in metrics, and stored procedures all run here. Pick a running warehouse; serverless or pro warehouses both work.',
+    help: 'The SQL warehouse used by the agent to execute queries against Unity Catalog tables and stored procedures. Pick a running warehouse; serverless or pro warehouses both work.',
     choices: [
       { title: 'keep current',        desc: 'use warehouse already set in .env.local', action: 'done' },
       { title: 'pick from workspace', desc: 'list running warehouses and save selection', action: 'cfg-warehouse' },
@@ -93,8 +93,8 @@ export const SETUP_STEPS: SetupStep[] = [
   {
     id: 'genie',
     label: 'genie space',
-    title: 'Project genie checkin',
-    help: 'A Databricks Genie space that the agent uses for natural-language-to-SQL queries via MCP. The Genie space is bound to specific tables and lets the agent answer ad-hoc data questions without hardcoded SQL. Create a new room or pick an existing one.',
+    title: 'Genie space',
+    help: 'A Databricks Genie space that the agent uses for natural-language-to-SQL queries via MCP. The Genie space is bound to your project tables and lets the agent answer ad-hoc data questions. Create a new room or pick an existing one.',
     choices: [
       { title: 'pick existing space', desc: 'list genie spaces and save selection',              action: 'cfg-genie' },
       { title: 'create new room',     desc: 'provision a new genie room with a name',            action: 'exec-genie' },
@@ -105,8 +105,8 @@ export const SETUP_STEPS: SetupStep[] = [
   {
     id: 'ka',
     label: 'knowledge assistant',
-    title: 'Project ka passengers',
-    help: 'The Knowledge Assistant endpoint for EU passenger rights (EC 261/2004). It ingests regulatory PDFs from data/pdf/ into a vector index and exposes a retrieval-augmented endpoint the agent calls to answer passenger rights questions with cited sources.',
+    title: 'Knowledge assistant',
+    help: 'A Knowledge Assistant endpoint backed by your documents. It ingests PDFs into a vector index and exposes a retrieval-augmented endpoint the agent calls to answer questions with cited sources.',
     choices: [
       { title: 'provision from pdfs', desc: 'upload PDFs to volume, then create KA endpoint',     action: 'cfg-ka' },
       { title: 'keep current',        desc: 'use KA already set in .env.local',                  action: 'done' },
@@ -121,6 +121,58 @@ export const SETUP_STEPS: SetupStep[] = [
     choices: [
       { title: 'keep current',      desc: 'use index already set in .env.local',   action: 'done' },
       { title: 'enter index path',  desc: 'paste a vector search index path',      action: 'manual' },
+    ],
+  },
+  {
+    id: 'mcp',
+    label: 'MCP (external)',
+    title: 'External MCP servers',
+    help: 'Connect external MCP servers to give the agent additional tools (weather APIs, Slack, custom services, etc.). Each server is identified by its streamable HTTP URL. Optional auth headers can be configured per server.',
+    choices: [
+      { title: 'add MCP server',    desc: 'enter a server URL and optional auth header',   action: 'manual' },
+      { title: 'keep current',      desc: 'use servers already set in .env.local',         action: 'done' },
+    ],
+  },
+  {
+    id: 'api',
+    label: 'API (external)',
+    title: 'External API connections',
+    help: 'Add external REST APIs as agent tools. Two modes: UC Connection (governed, credentials in Databricks) or Direct HTTP (API key in env var). Each API becomes a callable tool the agent can invoke. Configure URL, method, path, params, and auth.',
+    choices: [
+      { title: 'add UC connection API',  desc: 'create a UC HTTP connection and register as tool',   action: 'cfg-api-uc' },
+      { title: 'add direct HTTP API',    desc: 'enter a URL and optional API key header',             action: 'cfg-api-direct' },
+      { title: 'keep current',           desc: 'use APIs already configured in .env.local',           action: 'done' },
+    ],
+  },
+  {
+    id: 'a2a',
+    label: 'A2A (agents)',
+    title: 'Agent-to-Agent connections',
+    help: 'Connect to remote agents via Google\'s A2A (Agent-to-Agent) protocol. Enables your agent to delegate tasks to or collaborate with other agents over HTTP. Each A2A connection is identified by the remote agent\'s URL. The agent discovers capabilities via the Agent Card.',
+    choices: [
+      { title: 'add A2A agent',     desc: 'enter a remote agent URL and optional auth header',   action: 'manual' },
+      { title: 'keep current',      desc: 'use agents already set in .env.local',                action: 'done' },
+    ],
+  },
+  {
+    id: 'features',
+    label: 'features',
+    title: 'Agent features',
+    help: 'Toggle optional agent capabilities on or off. Each feature adds a tool or behavior to the agent. Disabled features are not loaded at startup.',
+    choices: [
+      { title: 'keep current', desc: 'leave feature toggles as-is', action: 'done' },
+    ],
+  },
+  {
+    id: 'lakebase',
+    label: 'lakebase',
+    title: 'Lakebase instance',
+    help: 'A managed Postgres (Lakebase) instance used by the agent for stateful conversation checkpointing and long-term memory. The instance is created with CU_1 capacity and takes a few minutes to become available.',
+    choices: [
+      { title: 'pick existing',       desc: 'list Lakebase instances and save selection',         action: 'cfg-lakebase' },
+      { title: 'create instance',     desc: 'provision a new Lakebase instance (CU_1, ~5 min)',   action: 'exec-lakebase' },
+      { title: 'keep current',        desc: 'use instance already set in .env.local',             action: 'done' },
+      { title: 'enter name manually', desc: 'paste an existing Lakebase instance name',           action: 'manual' },
     ],
   },
   {

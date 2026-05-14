@@ -12,7 +12,7 @@ Steps:
 Usage:
   uv run python scripts/py/vs/create_vs_from_pdfs.py
   uv run python scripts/py/vs/create_vs_from_pdfs.py --dry-run
-  uv run python scripts/py/vs/create_vs_from_pdfs.py --config conf/vector-search/vs_passengers.yml
+  uv run python scripts/py/vs/create_vs_from_pdfs.py --config conf/vector-search/vs_config.yml
 """
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def _load_config(config_path: Path | None) -> dict:
         with open(config_path) as f:
             return yaml.safe_load(f) or {}
     # Try default
-    default = ROOT / "conf" / "vector-search" / "vs_passengers.yml"
+    default = next((ROOT / "conf" / "vector-search").glob("vs_*.yml"), None)
     if default.exists():
         with open(default) as f:
             return yaml.safe_load(f) or {}

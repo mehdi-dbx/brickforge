@@ -15,7 +15,7 @@ import {
 import { Bell, MessageCircle, PlusIcon, HistoryIcon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
-const DEFAULT_TITLE = 'Generate check-in performance reports for airlines';
+const DEFAULT_TITLE = 'BrickForge AI Assistant';
 
 export function ChatHeader({
   pageTitle,

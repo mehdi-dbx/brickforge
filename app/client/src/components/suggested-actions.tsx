@@ -16,10 +16,9 @@ interface SuggestedActionsProps {
 function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
   const { chatHistoryEnabled } = useAppConfig();
   const suggestedActions = [
-    'Which flights are at risk of delay in zone B in the next 2 hours?',
-    'What are my passenger rights if my flight is cancelled under EU261?',
-    'Show me the check-in metrics for flight BA312',
-    'How many agents are currently active at zone B counters?',
+    'What data do you have access to?',
+    'Show me a summary of the current state.',
+    'What tools are available to you?',
   ];
 
   return (

@@ -5,18 +5,19 @@ export type TableData = {
   rows: unknown[][];
 } | null;
 
-const KEY_COLUMN_BY_TABLE: Record<string, string> = {
-  checkin_agents: 'agent_id',
-  flights: 'flight_number',
-  checkin_metrics: 'zone',
-  border_officers: 'officer_id',
-  border_terminals: 'terminal_id',
-};
+/** Heuristic: find a key column for row identity. Looks for _id or _number columns. */
+const KEY_COLUMN_BY_TABLE: Record<string, string> = {};
 
 export function getRowKey(row: unknown[], columns: string[], tableName: string): string {
+  // Check explicit config first
   const keyCol = KEY_COLUMN_BY_TABLE[tableName];
-  const idx = columns.findIndex((c) => c.toLowerCase() === keyCol?.toLowerCase());
-  if (idx >= 0 && row[idx] != null) return String(row[idx]);
+  if (keyCol) {
+    const idx = columns.findIndex((c) => c.toLowerCase() === keyCol.toLowerCase());
+    if (idx >= 0 && row[idx] != null) return String(row[idx]);
+  }
+  // Heuristic: look for *_id or *_number column
+  const idIdx = columns.findIndex((c) => c.toLowerCase().endsWith('_id') || c.toLowerCase().endsWith('_number'));
+  if (idIdx >= 0 && row[idIdx] != null) return String(row[idIdx]);
   return JSON.stringify(row);
 }
 

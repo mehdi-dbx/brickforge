@@ -39,10 +39,26 @@ abort() {
 }
 
 # Animated progress bar — run_step "label" cmd [args...]
+# Non-interactive mode (no TTY): stream output directly so SSE consumers see it.
 run_step() {
   local label="$1"; shift
+  local rc=0
+
+  if [[ ! -t 1 ]]; then
+    # Non-interactive: stream output directly (for SSE / visual app)
+    info "$label..."
+    "$@" 2>&1 || rc=$?
+    if [[ $rc -ne 0 ]]; then
+      fail "$label ${DIM}(exit ${rc})${W}"
+      return $rc
+    fi
+    ok "$label"
+    return 0
+  fi
+
+  # Interactive: animated progress bar
   local log_file; log_file=$(mktemp)
-  local width=20 i=0 pos bar j rc=0
+  local width=20 i=0 pos bar j
   "$@" >"$log_file" 2>&1 &
   local pid=$!
   while kill -0 "$pid" 2>/dev/null; do
@@ -88,7 +104,6 @@ REQUIRED=(
   PROJECT_UNITY_CATALOG_SCHEMA
   DATABRICKS_HOST
   DATABRICKS_WAREHOUSE_ID
-  PROJECT_GENIE_CHECKIN
 )
 missing=()
 for var in "${REQUIRED[@]}"; do
@@ -118,6 +133,16 @@ if [[ -n "${AGENT_MODEL_ENDPOINT:-}" ]]; then
 else
   info "${C}AGENT_MODEL_ENDPOINT${W} ${DIM}not set — same-workspace mode (derived from DATABRICKS_HOST at runtime)${W}"
 fi
+
+# Dynamic resource detection (genie spaces, KA endpoints)
+_genie_count=0
+_ka_count=0
+while IFS='=' read -r key val; do
+  [[ "$key" == PROJECT_GENIE_* && -n "$val" ]] && { info "${C}${key}${W} = ${DIM}${val:0:50}${W}"; ((_genie_count++)) || true; }
+  [[ "$key" == PROJECT_KA_* && -n "$val" ]] && { info "${C}${key}${W} = ${DIM}${val:0:50}${W}"; ((_ka_count++)) || true; }
+done < <(grep -E '^PROJECT_(GENIE|KA)_' "$ROOT/.env.local" 2>/dev/null | grep -v '^#')
+[[ $_genie_count -eq 0 ]] && info "No Genie spaces configured (optional)"
+[[ $_ka_count -eq 0 ]] && info "No Knowledge Assistants configured (optional)"
 
 # Soft warnings (don't abort)
 [[ -z "${AGENT_MODEL_TOKEN:-}" && -n "${AGENT_MODEL_ENDPOINT:-}" ]] && warn "AGENT_MODEL_TOKEN not set — cross-workspace model token may be missing from secrets"
@@ -195,7 +220,7 @@ _username=$(timeout 10 databricks current-user me --output json 2>/dev/null \
 if [[ -z "$_username" ]]; then
   warn "Could not resolve current user — skipping experiment bind (will be created on deploy)"
 else
-  _exp_name="/Users/${_username}/agent-forge-default"
+  _exp_name="/Users/${_username}/${DBX_APP_NAME}-experiment"
   _exp_id=$(timeout 10 databricks experiments get-by-name "$_exp_name" --output json 2>/dev/null \
     | python3 -c "import sys,json; print(json.load(sys.stdin).get('experiment',{}).get('experiment_id',''))" 2>/dev/null || true)
   if [[ -n "$_exp_id" ]]; then
@@ -289,7 +314,7 @@ fi
 
 # Pre-deploy secret scope grant (secret resolved at app start time)
 if [[ -n "$_sp_client_id" ]]; then
-  databricks secrets put-acl agent-forge "$_sp_client_id" READ 2>/dev/null || true
+  databricks secrets put-acl "${DBX_APP_NAME}" "$_sp_client_id" READ 2>/dev/null || true
 fi
 
 if ! run_step "Starting app ${DBX_APP_NAME}" databricks bundle run agent_app; then
@@ -338,8 +363,8 @@ fi
 # 6e. Secret scope access (cross-workspace token)
 info "Secret scope access..."
 if [[ -n "$_sp_client_id" ]]; then
-  if databricks secrets put-acl agent-forge "$_sp_client_id" READ 2>/tmp/acl_err; then
-    ok "Secret scope ${C}agent-forge${W} -> READ granted to app SP"
+  if databricks secrets put-acl "${DBX_APP_NAME}" "$_sp_client_id" READ 2>/tmp/acl_err; then
+    ok "Secret scope ${C}${DBX_APP_NAME}${W} -> READ granted to app SP"
   else
     warn "Failed to grant secret scope ACL: $(cat /tmp/acl_err 2>/dev/null)"
   fi

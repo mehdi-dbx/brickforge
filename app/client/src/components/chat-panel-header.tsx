@@ -48,10 +48,7 @@ export function ChatPanelHeader({
   useEffect(() => {
     const fn = sendMessageRef.current;
     if (!fn) return;
-    const personaMessage =
-      role === 'Agent'
-        ? 'Your current persona is now Check-in Agent A14'
-        : 'Your current persona is now Check-in Manager M01';
+    const personaMessage = `Your current persona is now ${role}`;
     fn({
       role: 'user',
       parts: [{ type: 'text', text: personaMessage }],
@@ -65,11 +62,8 @@ export function ChatPanelHeader({
       const res = await fetch('/api/reset-state', { method: 'POST', credentials: 'include' });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        refresh('checkin_metrics');
-        refresh('flights');
-        refresh('checkin_agents');
-        refresh('border_officers');
-        refresh('border_terminals');
+        // Refresh all dashboard tables (domain-agnostic)
+        refresh('*');
       }
     } catch {
       // Reset failed - no UI feedback
@@ -82,7 +76,7 @@ export function ChatPanelHeader({
     <header className="flex shrink-0 items-center justify-between gap-2 border-b bg-background px-3 py-2 min-h-[44px]">
       <div className="flex min-w-0 items-center gap-3">
         <span className="truncate font-semibold tracking-tight text-purple-600 text-sm">
-          Agent Forge
+          BrickForge
         </span>
         <div className="flex items-center gap-2">
           <select

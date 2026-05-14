@@ -4,13 +4,13 @@
 Deletes:
   - Databricks App (DBX_APP_NAME)
   - MLflow experiment (MLFLOW_EXPERIMENT_ID)
-  - Genie space (PROJECT_GENIE_CHECKIN)
+  - Genie spaces (all PROJECT_GENIE_* env vars)
   - UC Volume (derived from PROJECT_UNITY_CATALOG_SCHEMA)
   - UC tables from data/default/init/ + data/gen/init/
   - UC functions from data/default/func/*.sql
   - UC procedures from data/default/proc/*.sql
   - DAB bundle state (.databricks/bundle/)
-  - Clears PROJECT_GENIE_CHECKIN + MLFLOW_EXPERIMENT_ID from .env.local
+  - Clears PROJECT_GENIE_* + MLFLOW_EXPERIMENT_ID from .env.local
 
 Keeps:
   - Unity Catalog
@@ -124,7 +124,9 @@ def main() -> int:
     # ── Collect resource IDs from env ──────────────────────────────────────────
     app_name    = os.environ.get("DBX_APP_NAME", "").strip()
     exp_id      = os.environ.get("MLFLOW_EXPERIMENT_ID", "").strip()
-    genie_id    = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
+    # Collect all genie space IDs
+    genie_ids   = {k: os.environ[k].strip() for k in sorted(os.environ) if k.startswith("PROJECT_GENIE_") and os.environ[k].strip()}
+    genie_id    = next(iter(genie_ids.values()), "")
     schema_spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
     catalog, schema = schema_spec.split(".", 1) if "." in schema_spec else ("", "")
     volume_name = "doc"  # convention from create_volume.py
@@ -195,17 +197,18 @@ def main() -> int:
 
     # ── Genie Space ────────────────────────────────────────────────────────────
     section("Genie Space")
-    if genie_id:
-        if _confirm(f"Genie space {C}{genie_id}{W}"):
-            try:
-                w.genie.trash_space(space_id=genie_id)
-                print(f"  {OK} Deleted Genie space: {C}{genie_id}{W}")
-            except Exception as e:
-                print(f"  {FAIL} Genie space delete failed: {e}")
-        else:
-            print(f"  {SKIP} Skipped")
+    if genie_ids:
+        for gk, gid in genie_ids.items():
+            if _confirm(f"Genie space {C}{gk}={gid}{W}"):
+                try:
+                    w.genie.trash_space(space_id=gid)
+                    print(f"  {OK} Deleted Genie space: {C}{gid}{W}")
+                except Exception as e:
+                    print(f"  {FAIL} Genie space delete failed: {e}")
+            else:
+                print(f"  {SKIP} Skipped {gk}")
     else:
-        print(f"  {SKIP} PROJECT_GENIE_CHECKIN not set — skipped")
+        print(f"  {SKIP} No PROJECT_GENIE_* env vars set — skipped")
 
     # ── UC Volume ──────────────────────────────────────────────────────────────
     section("UC Volume")
@@ -308,7 +311,8 @@ def main() -> int:
     # ── Clear .env.local ───────────────────────────────────────────────────────
     section(".env.local cleanup")
     env_path = ROOT / ".env.local"
-    for key in ("PROJECT_GENIE_CHECKIN", "MLFLOW_EXPERIMENT_ID"):
+    cleanup_keys = list(genie_ids.keys()) + ["MLFLOW_EXPERIMENT_ID"]
+    for key in cleanup_keys:
         val = os.environ.get(key, "").strip()
         if val:
             if _confirm(f"comment out {C}{key}{W} in .env.local"):

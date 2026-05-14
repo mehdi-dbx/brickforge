@@ -185,8 +185,12 @@ def verify_assets() -> bool:
                 _log_plain(f"FAIL verify table {full_name}: {e}")
                 ok = False
 
-        # Genie space (if env set)
-        space_id = os.environ.get("PROJECT_GENIE_CHECKIN", "").strip()
+        # Genie spaces (all PROJECT_GENIE_* env vars)
+        space_id = ""
+        for _gk in sorted(os.environ):
+            if _gk.startswith("PROJECT_GENIE_") and os.environ[_gk].strip():
+                space_id = os.environ[_gk].strip()
+                break
         if space_id:
             try:
                 space = w.genie.get_space(space_id=space_id)

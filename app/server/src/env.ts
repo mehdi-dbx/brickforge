@@ -11,7 +11,7 @@ const TEST_MODE = process.env.TEST_MODE;
 
 if (!TEST_MODE) {
   dotenv.config({ path: path.resolve(__dirname, '../..', '.env') });
-  // .env.local may be in app or project root (amadeus-checkin)
+  // .env.local may be in app/ or project root
   dotenv.config({ path: path.resolve(__dirname, '../..', '.env.local') });
   dotenv.config({ path: path.resolve(__dirname, '../../..', '.env.local') });
 }

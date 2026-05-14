@@ -52,33 +52,11 @@ export function ChatSendMessageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const showStaffingDutyOnly = useCallback(async (agentId: string) => {
+  const showStaffingDutyOnly = useCallback(async (_agentId: string) => {
+    // Domain-specific task notification -- no-op when no domain is loaded.
+    // Domain plugins can override via registerShowStaffingDutyOnly.
     const show = showStaffingDutyOnlyRef.current;
     if (!show) return;
-    try {
-      const res = await fetch('/api/tables/checkin_agents', { credentials: 'include' });
-      if (!res.ok) return;
-      const body = await res.json();
-      const { columns, rows } = body as { columns: string[]; rows: unknown[][] };
-      const agentIdx = columns.findIndex((c) => c.toLowerCase() === 'agent_id');
-      const zoneIdx = columns.findIndex((c) => c.toLowerCase() === 'zone');
-      const counterIdx = columns.findIndex((c) => c.toLowerCase() === 'counter');
-      const statusIdx = columns.findIndex((c) => c.toLowerCase() === 'staffing_status');
-      const assignedByIdx = columns.findIndex((c) => c.toLowerCase() === 'assigned_by_id');
-      if (agentIdx < 0 || zoneIdx < 0 || counterIdx < 0 || statusIdx < 0) return;
-      const row = rows.find(
-        (r) =>
-          String(r[agentIdx]) === agentId &&
-          String(r[statusIdx] ?? '').toUpperCase() === 'NEW',
-      );
-      if (!row) return;
-      const zone = String(row[zoneIdx] ?? '');
-      const counter = String(row[counterIdx] ?? '');
-      const assignedById = assignedByIdx >= 0 ? String(row[assignedByIdx] ?? '') : '';
-      show(zone, counter, assignedById);
-    } catch {
-      /* ignore */
-    }
   }, []);
 
   const value: ChatSendMessageContextValue = {

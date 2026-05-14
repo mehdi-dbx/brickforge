@@ -17,6 +17,7 @@ export function SetupView() {
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null)
   const [execLines, setExecLines]           = useState<ExecLine[]>([])
   const [testCache, setTestCache]           = useState<Partial<Record<StepId, TestResult>>>({})
+  const [selectedInstanceKey, setSelectedInstanceKey] = useState<string | null>(null)
 
   const refreshStatus = useCallback(() => {
     fetch('/api/setup/status')
@@ -53,6 +54,15 @@ export function SetupView() {
     setPhase('choose')
     setSelectedChoice(null)
     setExecLines([])
+    setSelectedInstanceKey(null)
+  }, [])
+
+  const handleClickInstance = useCallback((stepId: StepId, key: string) => {
+    setActiveStep(stepId)
+    setSelectedInstanceKey(key)
+    setPhase('choose')
+    setSelectedChoice(null)
+    setExecLines([])
   }, [])
 
   const handleContinue = useCallback(() => {
@@ -69,8 +79,8 @@ export function SetupView() {
       return
     }
 
-    const NEEDS_CONFIGURE = ['cfg-profile', 'cfg-warehouse', 'cfg-catalog', 'cfg-genie',
-      'cfg-grants', 'cfg-new', 'cfg-ka', 'cfg-deploy-name', 'cfg-prompt', 'cfg-prompt-gen', 'manual', 'exec-genie']
+    const NEEDS_CONFIGURE = ['cfg-profile', 'cfg-warehouse', 'cfg-catalog', 'cfg-genie', 'cfg-lakebase',
+      'cfg-grants', 'cfg-new', 'cfg-ka', 'cfg-deploy-name', 'cfg-prompt', 'cfg-prompt-gen', 'cfg-api-uc', 'cfg-api-direct', 'manual', 'exec-genie']
     if (NEEDS_CONFIGURE.includes(action)) { setPhase('configure'); return }
 
     setExecLines([])
@@ -154,6 +164,18 @@ export function SetupView() {
     refreshStatus()
   }, [stepStates, refreshStatus])
 
+  const handleDeleteInstance = useCallback(async (key: string) => {
+    try {
+      await fetch('/api/setup/instance', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      })
+      setSelectedInstanceKey(null)
+      refreshStatus()
+    } catch {}
+  }, [refreshStatus])
+
   return (
     <div className="flex h-full bg-dbx-gray-50 dark:bg-dbx-gray-950">
       {/* Left: DAG fills remaining space */}
@@ -164,6 +186,8 @@ export function SetupView() {
           onActivate={handleActivate}
           onToggleInstance={handleToggleInstance}
           onToggleAllInstances={handleToggleAllInstances}
+          onClickInstance={handleClickInstance}
+          onDeleteInstance={handleDeleteInstance}
           readyCount={readyCount}
           totalCount={ALL_STEP_IDS.length}
         />
@@ -186,6 +210,8 @@ export function SetupView() {
           onNext={ALL_STEP_IDS.indexOf(activeStep) < ALL_STEP_IDS.length - 1 ? handleNext : undefined}
           onExecDone={handleExecDone}
           onRefresh={refreshStatus}
+          selectedInstanceKey={selectedInstanceKey}
+          instances={stepStates[activeStep]?.instances}
         />
       </div>
     </div>

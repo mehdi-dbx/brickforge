@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-Create a Genie space named "PROJECT CHECKIN" with all tables from PROJECT_UNITY_CATALOG_SCHEMA.
+Create a Genie space with all tables from PROJECT_UNITY_CATALOG_SCHEMA.
 
-Prints space_id to stdout. Updates .env.local with PROJECT_GENIE_CHECKIN.
+Prints space_id to stdout. Updates .env.local with PROJECT_GENIE_<SLUG>.
+GENIE_ROOM_NAME env var sets the space title (default: "PROJECT").
+GENIE_ENV_KEY env var overrides the env key name.
 
 Requires: PROJECT_UNITY_CATALOG_SCHEMA, DATABRICKS_WAREHOUSE_ID (or a warehouse in the workspace).
 """
@@ -60,11 +62,8 @@ def main():
         return uuid.uuid4().hex[:24] + "0" * 8
 
     title = os.environ.get("GENIE_ROOM_NAME", "").strip() or "PROJECT"
-    description = "Natural language exploration of check-in and flight performance data in Unity Catalog."
-    sample_questions = [
-        {"id": gen_id(), "question": ["What are total check-ins by airline?"]},
-        {"id": gen_id(), "question": ["Show load factor and SLA by airline"]},
-    ]
+    description = os.environ.get("GENIE_DESCRIPTION", "").strip() or "Natural language exploration of project data in Unity Catalog."
+    sample_questions = []
     # Derive env var name from GENIE_ENV_KEY (if set) or room name slug
     env_var = os.environ.get("GENIE_ENV_KEY", "").strip()
     if not env_var:

@@ -174,7 +174,7 @@ app.post('/api/events/task-created', (req, res) => {
     type: 'task_created',
     assigned_to_id: assignedToId,
     agent_name: body.agent_name ?? assignedToId,
-    manager_name: body.manager_name ?? 'Check-in Manager',
+    manager_name: body.manager_name ?? 'Manager',
   });
   let sent = 0;
   for (const { res: clientRes, assignedTo } of taskEventClients) {

@@ -37,22 +37,7 @@ _ENDPOINT_TOKEN = (
 if not _ENDPOINT_TOKEN:
     raise EnvironmentError("No auth token found — set AGENT_MODEL_TOKEN or DATABRICKS_TOKEN")
 
-_JUDGE_PROMPT = """\
-You are evaluating a response from an aviation passenger-rights knowledge assistant.
-
-Question asked: {question}
-
-Assistant response:
-{response}
-
-Evaluate whether the response cites regulation PRECISELY by checking for at least ONE of:
-- A specific article number from EC 261/2004 (e.g. "Article 7", "Article 9(1)(a)")
-- An exact compensation amount in euros (e.g. "€600", "€400", "€250")
-- A named legal standard or case (e.g. "Sturgeon judgment", "Montreal Convention")
-
-Reply with EXACTLY one line: PASS or FAIL
-Then on a new line give a one-sentence justification."""
-
+\
 
 def _call_judge(prompt: str) -> tuple[float, str]:
     """Call external FE endpoint as LLM judge. Returns (score, justification)."""

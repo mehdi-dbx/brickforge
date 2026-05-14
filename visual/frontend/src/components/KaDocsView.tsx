@@ -110,7 +110,7 @@ export function KaDocsView() {
     fetch('/api/env')
       .then(r => r.json())
       .then((entries: { key: string; value: string }[]) => {
-        const ka = entries.find(e => e.key === 'PROJECT_KA_PASSENGERS')
+        const ka = entries.find(e => e.key.startsWith('PROJECT_KA_'))
         if (ka?.value) setKaEndpoint(ka.value)
       })
       .catch(() => {})

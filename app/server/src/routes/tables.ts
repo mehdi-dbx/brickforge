@@ -1,25 +1,19 @@
 import { Router, type Request, type Response } from 'express';
 import { authMiddleware, requireAuth } from '../middleware/auth';
 
-const ALLOWED_TABLES = ['checkin_metrics', 'flights', 'checkin_agents', 'border_officers', 'border_terminals'] as const;
-const EMPTY_TABLES = new Set<string>();
-
 export const tablesRouter = Router();
 tablesRouter.use(authMiddleware);
 
 /**
  * GET /api/tables/:tableName - Proxy to backend /tables/:tableName
  * Backend has Databricks auth; avoids DATABRICKS_* env in Node (not available when deployed).
+ * Backend validates table access against UC schema. No hardcoded allowlist here.
  * Returns { columns: string[], rows: any[][] }
  */
 tablesRouter.get('/:tableName', requireAuth, async (req: Request, res: Response) => {
   const tableName = req.params.tableName;
-  if (!ALLOWED_TABLES.includes(tableName as (typeof ALLOWED_TABLES)[number])) {
-    return res.status(400).json({ error: 'Table not allowed', allowed: [...ALLOWED_TABLES] });
-  }
-
-  if (EMPTY_TABLES.has(tableName)) {
-    return res.json({ columns: [], rows: [] });
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) {
+    return res.status(400).json({ error: 'Invalid table name' });
   }
 
   const apiProxy = process.env.API_PROXY || '';

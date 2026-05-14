@@ -4,8 +4,8 @@
 Volume path is derived at runtime from PROJECT_UNITY_CATALOG_SCHEMA in .env.local.
 The {volume_path} placeholder in YAML configs is substituted before parsing.
 
-After a KA reaches ACTIVE, its endpoint name is written to PROJECT_KA_PASSENGERS
-(or PROJECT_KA_<DISPLAY_NAME_UPPER>) in .env.local for use by other scripts.
+After a KA reaches ACTIVE, its endpoint name is written to PROJECT_KA_<SLUG>
+in .env.local for use by other scripts (slug derived from display name).
 
 Usage:
   uv run python scripts/py/ka/create_kas_from_yml.py
@@ -103,9 +103,7 @@ def _write_env_entry(key: str, value: str) -> None:
 
 
 def _env_key_for_display_name(display_name: str) -> str:
-    """Map KA display name to env key. Passengers KA → PROJECT_KA_PASSENGERS."""
-    if "passenger" in display_name.lower():
-        return "PROJECT_KA_PASSENGERS"
+    """Map KA display name to env key. e.g. 'My KA Name' → PROJECT_KA_MY_KA_NAME."""
     slug = re.sub(r"[^a-z0-9]+", "_", display_name.lower()).strip("_").upper()
     return f"PROJECT_KA_{slug}"
 
@@ -307,7 +305,7 @@ def main() -> int:
         epilog="""
 Examples:
   uv run python scripts/py/ka/create_kas_from_yml.py
-  uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_passengers.yml --no-wait
+  uv run python scripts/py/ka/create_kas_from_yml.py conf/ka/ka_config.yml --no-wait
   uv run python scripts/py/ka/create_kas_from_yml.py --dry-run
   uv run python scripts/py/ka/create_kas_from_yml.py --skip-existing
         """,
