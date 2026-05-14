@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrickForge — Software Blueprint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="ico-bolt"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="ico-puzzle"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></symbol>
+    <symbol id="ico-home"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+    <symbol id="ico-cpu"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></symbol>
+    <symbol id="ico-tool"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></symbol>
+    <symbol id="ico-message"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></symbol>
+    <symbol id="ico-book"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></symbol>
+    <symbol id="ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+    <symbol id="ico-monitor"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+    <symbol id="ico-user"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="ico-server"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></symbol>
+    <symbol id="ico-router"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v3a3 3 0 003 3h6"/><line x1="18" y1="9" x2="18" y2="15"/></symbol>
+    <symbol id="ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+    <symbol id="ico-key"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></symbol>
+    <symbol id="ico-check"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+    <symbol id="ico-package"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></symbol>
+    <symbol id="ico-chart"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></symbol>
+    <symbol id="ico-cloud"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></symbol>
+    <symbol id="ico-layers"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+    <symbol id="ico-arrow"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
+    <symbol id="ico-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></symbol>
+    <symbol id="ico-table"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></symbol>
+    <symbol id="ico-folder"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></symbol>
+    <symbol id="ico-file"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></symbol>
+    <symbol id="ico-settings"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></symbol>
+    <symbol id="ico-shield"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="ico-globe"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></symbol>
+    <symbol id="ico-terminal"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+    <symbol id="ico-truck"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></symbol>
+    <symbol id="ico-grid"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></symbol>
+    <symbol id="ico-flag"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></symbol>
+    <symbol id="ico-help"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="ico-map"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></symbol>
+  </svg>
+
+  <style>
+    :root {
+      --bg:        #f5f6f7;
+      --surface:   #ffffff;
+      --surface2:  #f0f1f2;
+      --surface3:  #e8eaec;
+      --border:    #d6d9dc;
+      --border2:   #bec3c8;
+      --red:       #eb1600;
+      --red-dim:   rgba(235,22,0,0.07);
+      --blue:      #1b73e8;
+      --blue-dim:  rgba(27,115,232,0.08);
+      --green:     #1a9e67;
+      --green-dim: rgba(26,158,103,0.08);
+      --amber:     #b87200;
+      --amber-dim: rgba(184,114,0,0.08);
+      --purple:    #6d28d9;
+      --purple-dim:rgba(109,40,217,0.08);
+      --text:      #111314;
+      --text2:     #434b54;
+      --text3:     #7e8a95;
+      --nav-h:     52px;
+      --r:         12px;
+      --r-lg:      18px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-snap-type: y mandatory; overflow-y: scroll; }
+
+    body {
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* == NAV == */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--nav-h);
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2.5rem;
+    }
+    .nav-left { display: flex; align-items: center; gap: 0.75rem; }
+    .dbx-mark { width: 24px; height: 24px; }
+    .nav-title { font-weight: 700; font-size: 1.8rem; letter-spacing: -0.3px; }
+    .nav-title em { color: var(--red); font-style: normal; }
+    .nav-sep { width: 1px; height: 16px; background: var(--border); }
+    .nav-sub { font-size: 1.2rem; color: var(--text3); font-weight: 500; }
+    .nav-dots { display: flex; align-items: center; gap: 6px; }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border2); cursor: pointer;
+      transition: background .2s, transform .2s;
+    }
+    .dot.on { background: var(--red); transform: scale(1.45); }
+
+    /* == SLIDES == */
+    .slide {
+      height: 100vh;
+      scroll-snap-align: start;
+      display: grid;
+      padding-top: var(--nav-h);
+      overflow: hidden;
+    }
+
+    .ch-label {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 2.5px;
+      text-transform: uppercase; color: var(--red);
+      margin-bottom: 0.4rem;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 3.4vw, 3.2rem);
+      font-weight: 900; letter-spacing: -2px; line-height: 1.05;
+      margin-bottom: 1rem;
+    }
+    .lead {
+      font-size: 1.1rem; color: var(--text2); line-height: 1.7;
+      max-width: 42ch;
+    }
+
+    /* == TAGS == */
+    .tag {
+      display: inline-block; font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase;
+      padding: 0.25rem 0.7rem; border-radius: 5px; margin-bottom: 0.5rem;
+    }
+    .t-red    { background: var(--red-dim);    color: var(--red);    }
+    .t-blue   { background: var(--blue-dim);   color: var(--blue);   }
+    .t-green  { background: var(--green-dim);  color: var(--green);  }
+    .t-amber  { background: var(--amber-dim);  color: var(--amber);  }
+    .t-purple { background: var(--purple-dim); color: var(--purple); }
+
+    /* == CARDS == */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 0.75rem 1.1rem;
+      transition: box-shadow .2s;
+    }
+    .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.07); }
+    .card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; letter-spacing: -0.3px; line-height: 1.15; }
+    .card p  { font-size: 0.88rem; color: var(--text2); line-height: 1.45; }
+    .card.card-sm h3 { font-size: 0.95rem; }
+    .card.card-sm p  { font-size: 0.82rem; }
+
+    .c-red    { border-left: 3px solid var(--red);    }
+    .c-blue   { border-left: 3px solid var(--blue);   }
+    .c-green  { border-left: 3px solid var(--green);  }
+    .c-amber  { border-left: 3px solid var(--amber);  }
+    .c-purple { border-left: 3px solid var(--purple); }
+
+    .card-hero {
+      background: var(--surface2);
+      border-color: var(--red); border-left: 3px solid var(--red);
+    }
+
+    /* == ICONS == */
+    .ico    { display: block; width: 28px; height: 28px; margin-bottom: 0.3rem; }
+    .ico-sm { width: 20px; height: 20px; }
+    .ico-md { width: 32px; height: 32px; }
+    .ico-xs { width: 16px; height: 16px; }
+
+    .cr { color: var(--red);    }
+    .cb { color: var(--blue);   }
+    .cg { color: var(--green);  }
+    .ca { color: var(--amber);  }
+    .cp { color: var(--purple); }
+    .cm { color: var(--text3);  }
+
+    /* == FLOW BOXES == */
+    .fbox {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 0.8rem 1rem;
+      font-size: 0.88rem; font-weight: 600;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 0.25rem; min-width: 100px; text-align: center;
+    }
+    .fbox small { color: var(--text3); font-size: 0.72rem; font-weight: 400; }
+    .fbox.fa { border-color: var(--red);    background: var(--red-dim);    }
+    .fbox.fb { border-color: var(--blue);   background: var(--blue-dim);   }
+    .fbox.fg { border-color: var(--green);  background: var(--green-dim);  }
+    .fbox.fam { border-color: var(--amber); background: var(--amber-dim);  }
+    .fbox.fp { border-color: var(--purple); background: var(--purple-dim); }
+    .farrow { color: var(--border2); display: flex; align-items: center; }
+
+    /* == CODE == */
+    code {
+      display: inline-block;
+      background: var(--surface3); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.2rem 0.6rem;
+      font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--red);
+    }
+    .ic {
+      background: var(--surface3); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.1rem 0.4rem;
+      font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--text2);
+    }
+
+    /* == STEPS == */
+    .step {
+      display: flex; gap: 0.8rem; align-items: flex-start;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 0.7rem 1rem;
+    }
+    .step-n {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--red); color: #fff;
+      font-weight: 800; font-size: 0.8rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.15rem; letter-spacing: -0.3px; }
+    .step p  { font-size: 0.82rem; color: var(--text2); line-height: 1.4; }
+
+    /* == UTILITY COLORS == */
+    .red   { color: var(--red);   }
+    .blue  { color: var(--blue);  }
+    .green { color: var(--green); }
+    .amber { color: var(--amber); }
+
+    /* == BULLET LIST == */
+    .clist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+    .clist li {
+      display: flex; gap: 0.5rem; align-items: flex-start;
+      font-size: 0.85rem; color: var(--text2); line-height: 1.4;
+    }
+    .clist li::before {
+      content: ''; flex-shrink: 0; margin-top: 0.42rem;
+      width: 5px; height: 5px; border-radius: 50%;
+      background: currentColor; opacity: 0.35;
+    }
+
+    /* == DATA TABLE == */
+    .dtable {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    .dtable th {
+      text-align: left; padding: 0.4rem 0.6rem;
+      background: var(--surface2); border-bottom: 2px solid var(--border);
+      font-weight: 700; font-size: 0.72rem; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--text3);
+    }
+    .dtable td {
+      padding: 0.35rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text2); vertical-align: top;
+    }
+    .dtable tr:last-child td { border-bottom: none; }
+    .dtable .mono { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--text); }
+
+    /* == PROGRESS BAR == */
+    .pbar-track {
+      height: 24px; background: var(--surface3); border-radius: 12px;
+      overflow: hidden; display: flex; border: 1px solid var(--border);
+    }
+    .pbar-seg {
+      height: 100%; display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 700; color: #fff; letter-spacing: 0.5px;
+    }
+
+    /* == TREE == */
+    .tree {
+      font-family: 'DM Mono', monospace; font-size: 0.78rem;
+      line-height: 1.65; color: var(--text2);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 0.8rem 1.2rem;
+    }
+    .tree .dir { color: var(--blue); font-weight: 600; }
+    .tree .file { color: var(--text3); }
+    .tree .hl { color: var(--red); font-weight: 600; }
+
+    /* == YAML BLOCK == */
+    .yaml-block {
+      font-family: 'DM Mono', monospace; font-size: 0.72rem;
+      line-height: 1.6; color: var(--text2);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 0.7rem 1rem;
+      overflow-y: auto;
+    }
+    .yaml-block .yk { color: var(--blue); font-weight: 600; }
+    .yaml-block .yv { color: var(--green); }
+    .yaml-block .yc { color: var(--text3); font-style: italic; }
+
+    /* == CONTRAST ROWS == */
+    .contrast-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 0.4rem 0.7rem;
+    }
+    .contrast-before {
+      flex: 1; font-size: 0.78rem; color: var(--text3);
+      text-decoration: line-through; font-family: 'DM Mono', monospace;
+    }
+    .contrast-arrow { color: var(--border2); font-size: 0.85rem; flex-shrink: 0; }
+    .contrast-after {
+      flex: 1; font-size: 0.78rem; color: var(--green); font-weight: 600;
+      font-family: 'DM Mono', monospace;
+    }
+
+    hr { border: none; border-top: 1px solid var(--border); }
+
+    /* ==============================
+       SLIDE LAYOUTS
+    ============================== */
+
+    /* S1 - Vision: left/right split */
+    #s1 {
+      grid-template-columns: 1fr 1fr;
+      background: radial-gradient(ellipse at 10% 50%, rgba(235,22,0,0.05) 0%, var(--bg) 60%);
+    }
+    #s1 .left {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 3rem 2rem 4rem; gap: 1rem;
+    }
+    #s1 .right {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 3rem 2rem 2rem; gap: 0.6rem;
+      border-left: 1px solid var(--border);
+    }
+
+    /* S2 - Architecture: top header + body */
+    #s2 {
+      grid-template-rows: auto 1fr;
+      background: radial-gradient(ellipse at 80% 10%, rgba(27,115,232,0.05) 0%, var(--bg) 60%);
+    }
+    #s2 .top { padding: 1.8rem 4rem 1rem; border-bottom: 1px solid var(--border); }
+    #s2 .body { display: flex; flex-direction: column; justify-content: center; padding: 1rem 4rem; gap: 1.2rem; }
+
+    /* S3 - .forge: left/right */
+    #s3 {
+      grid-template-columns: 1fr 1fr;
+      background: radial-gradient(ellipse at 85% 40%, rgba(26,158,103,0.05) 0%, var(--bg) 65%);
+    }
+    #s3 .left {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 2rem 2rem 4rem; gap: 1rem;
+    }
+    #s3 .right {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 3rem 2rem 2rem; gap: 0.6rem;
+      border-left: 1px solid var(--border);
+    }
+
+    /* S4 - Stash: left/right */
+    #s4 {
+      grid-template-columns: 1fr 1fr;
+      background: radial-gradient(ellipse at 20% 80%, rgba(184,114,0,0.05) 0%, var(--bg) 65%);
+    }
+    #s4 .left {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 2rem 2rem 4rem; gap: 1rem;
+    }
+    #s4 .right {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 3rem 2rem 2rem; gap: 0.6rem;
+      border-left: 1px solid var(--border);
+    }
+
+    /* S5 - Challenges: top + grid */
+    #s5 {
+      grid-template-rows: auto 1fr;
+      background: radial-gradient(ellipse at 50% 90%, rgba(235,22,0,0.04) 0%, var(--bg) 60%);
+    }
+    #s5 .top { padding: 1.8rem 4rem 1rem; border-bottom: 1px solid var(--border); }
+    #s5 .grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr);
+      gap: 0.6rem; padding: 1rem 4rem; align-content: center;
+    }
+    #s5 .grid .card:last-child { grid-column: 2 / 4; }
+
+    /* S6 - ConfigProvider: left/right */
+    #s6 {
+      grid-template-columns: 1fr 1fr;
+      background: radial-gradient(ellipse at 10% 50%, rgba(27,115,232,0.05) 0%, var(--bg) 60%);
+    }
+    #s6 .left {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 2rem 2rem 4rem; gap: 0.8rem;
+    }
+    #s6 .right {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 3rem 2rem 2rem; gap: 0.6rem;
+      border-left: 1px solid var(--border);
+    }
+
+    /* S7 - Runtime Deps: top + body */
+    #s7 {
+      grid-template-rows: auto 1fr;
+      background: radial-gradient(ellipse at 80% 80%, rgba(184,114,0,0.05) 0%, var(--bg) 60%);
+    }
+    #s7 .top { padding: 1.8rem 4rem 1rem; border-bottom: 1px solid var(--border); }
+    #s7 .body {
+      display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.5rem;
+      padding: 1rem 4rem; align-content: center;
+    }
+
+    /* S8 - Packaging: top + grid */
+    #s8 {
+      grid-template-rows: auto 1fr;
+      background: radial-gradient(ellipse at 50% 10%, rgba(109,40,217,0.05) 0%, var(--bg) 60%);
+    }
+    #s8 .top { padding: 1.8rem 4rem 1rem; border-bottom: 1px solid var(--border); }
+    #s8 .body {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+      padding: 1rem 4rem; align-content: center;
+    }
+
+    /* S9 - Setup Blocks: top + grid */
+    #s9 {
+      grid-template-rows: auto 1fr;
+      background: radial-gradient(ellipse at 20% 30%, rgba(26,158,103,0.05) 0%, var(--bg) 60%);
+    }
+    #s9 .top { padding: 1.8rem 4rem 1rem; border-bottom: 1px solid var(--border); }
+    #s9 .grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, auto);
+      gap: 0.45rem; padding: 0.8rem 4rem; align-content: center;
+    }
+
+    /* S10 - Open Questions: left/right */
+    #s10 {
+      grid-template-columns: 1fr 1fr;
+      background: radial-gradient(ellipse at 85% 60%, rgba(27,115,232,0.05) 0%, var(--bg) 60%);
+    }
+    #s10 .left {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 2rem 2rem 4rem; gap: 1rem;
+    }
+    #s10 .right {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2rem 3rem 2rem 2rem; gap: 0.5rem;
+      border-left: 1px solid var(--border);
+    }
+
+    /* S11 - Roadmap: top + body */
+    #s11 {
+      grid-template-rows: auto 1fr;
+      background: radial-gradient(ellipse at 50% 90%, rgba(235,22,0,0.04) 0%, var(--bg) 60%);
+    }
+    #s11 .top { padding: 1.8rem 4rem 1rem; border-bottom: 1px solid var(--border); }
+    #s11 .body {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 1rem 4rem; gap: 0.5rem;
+    }
+
+    /* == BADGE == */
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+    }
+    .b-green  { background: var(--green-dim);  color: var(--green);  }
+    .b-amber  { background: var(--amber-dim);  color: var(--amber);  }
+    .b-red    { background: var(--red-dim);    color: var(--red);    }
+    .b-blue   { background: var(--blue-dim);   color: var(--blue);   }
+    .b-purple { background: var(--purple-dim); color: var(--purple); }
+
+    /* == FLOW ROW == */
+    .flow-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      flex-wrap: wrap; justify-content: center;
+    }
+
+    /* == BLOCK CARD (compact) == */
+    .bcard {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.35rem 0.55rem;
+      text-align: center;
+    }
+    .bcard .bcard-title {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: -0.2px;
+      margin-bottom: 0.1rem;
+    }
+    .bcard .bcard-id {
+      font-family: 'DM Mono', monospace; font-size: 0.62rem;
+      color: var(--text3);
+    }
+    .bcard.bc-infra   { border-left: 3px solid var(--blue);  }
+    .bcard.bc-project { border-left: 3px solid var(--green); }
+    .bcard.bc-hybrid  { border-left: 3px solid var(--amber); }
+
+    /* == INCH STEP == */
+    .inch {
+      display: flex; gap: 0.8rem; align-items: flex-start;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 0.55rem 0.9rem;
+    }
+    .inch-n {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
+      background: var(--red); color: #fff;
+      font-weight: 800; font-size: 0.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .inch h4 { font-size: 0.88rem; font-weight: 700; letter-spacing: -0.2px; }
+    .inch p  { font-size: 0.76rem; color: var(--text2); line-height: 1.35; }
+    .inch .dep { font-size: 0.65rem; color: var(--text3); font-style: italic; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-left">
+    <svg class="dbx-mark" viewBox="0 0 32 32" fill="none">
+      <path d="M16 3L29 10.5V21.5L16 29L3 21.5V10.5L16 3Z" fill="#eb1600" opacity="0.12"/>
+      <path d="M16 3L29 10.5V21.5L16 29L3 21.5V10.5L16 3Z" stroke="#eb1600" stroke-width="1.5"/>
+      <path d="M16 8L24 12.5V19.5L16 24L8 19.5V12.5L16 8Z" fill="#eb1600" opacity="0.35"/>
+      <path d="M16 12L21 14.75V19.25L16 22L11 19.25V14.75L16 12Z" fill="#eb1600"/>
+    </svg>
+    <span class="nav-title">Brick<em>Forge</em></span>
+    <div class="nav-sep"></div>
+    <span class="nav-sub">Software Blueprint</span>
+  </div>
+  <div class="nav-dots" id="navDots"></div>
+</nav>
+
+
+<!-- =========================================================
+     SLIDE 1 -- Vision
+========================================================= -->
+<section class="slide" id="s1">
+
+  <div class="left">
+    <div class="ch-label">Slide 1 -- Vision</div>
+    <h1>From Clone<br>to <span class="red">Cloud-Native</span></h1>
+    <p class="lead">
+      Transform BrickForge from a locally-cloned project into a SaaS product.
+      The user never clones a repo, never runs a terminal, never installs anything.
+      They open a browser, create an agent, deploy it. Done.
+    </p>
+
+    <div style="margin-top:0.5rem">
+      <p style="font-size:0.78rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.5rem">Before vs After</p>
+      <div class="flow-row" style="justify-content:flex-start; gap:0.4rem; margin-bottom:0.6rem">
+        <div class="fbox" style="min-width:80px; padding:0.5rem 0.7rem; opacity:0.6">
+          <svg class="ico-xs cm"><use href="#ico-terminal"/></svg>
+          git clone
+        </div>
+        <div class="farrow"><svg class="ico-xs cm"><use href="#ico-arrow"/></svg></div>
+        <div class="fbox" style="min-width:80px; padding:0.5rem 0.7rem; opacity:0.6">
+          <svg class="ico-xs cm"><use href="#ico-file"/></svg>
+          local scripts
+        </div>
+        <div class="farrow"><svg class="ico-xs cm"><use href="#ico-arrow"/></svg></div>
+        <div class="fbox" style="min-width:80px; padding:0.5rem 0.7rem; opacity:0.6">
+          <svg class="ico-xs cm"><use href="#ico-cloud"/></svg>
+          deploy
+        </div>
+      </div>
+      <div style="text-align:center; padding:0.15rem 0">
+        <svg style="width:18px; height:18px; color:var(--red); transform:rotate(90deg)"><use href="#ico-arrow"/></svg>
+      </div>
+      <div class="flow-row" style="justify-content:flex-start; gap:0.4rem; margin-top:0.3rem">
+        <div class="fbox fg" style="min-width:80px; padding:0.5rem 0.7rem">
+          <svg class="ico-xs cg"><use href="#ico-globe"/></svg>
+          browser
+        </div>
+        <div class="farrow"><svg class="ico-xs cm"><use href="#ico-arrow"/></svg></div>
+        <div class="fbox fa" style="min-width:80px; padding:0.5rem 0.7rem">
+          <svg class="ico-xs cr"><use href="#ico-settings"/></svg>
+          Setup App
+        </div>
+        <div class="farrow"><svg class="ico-xs cm"><use href="#ico-arrow"/></svg></div>
+        <div class="fbox fg" style="min-width:80px; padding:0.5rem 0.7rem">
+          <svg class="ico-xs cg"><use href="#ico-cpu"/></svg>
+          live agent
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <p style="font-size:0.78rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.3rem">3 Runtime Modes</p>
+
+    <div class="card c-blue">
+      <span class="tag t-blue">Mode A</span>
+      <svg class="ico cb"><use href="#ico-cloud"/></svg>
+      <h3>Hosted</h3>
+      <p>Maintainer deploys Setup App once. Users open a URL. Auth via Databricks SSO to user's workspace.</p>
+    </div>
+
+    <div class="card c-green">
+      <span class="tag t-green">Mode B</span>
+      <svg class="ico cg"><use href="#ico-server"/></svg>
+      <h3>User's DBX App</h3>
+      <p>User deploys Setup App to their own workspace. Production use. DBX App SP with user's permissions.</p>
+    </div>
+
+    <div class="card c-amber">
+      <span class="tag t-amber">Mode C</span>
+      <svg class="ico ca"><use href="#ico-terminal"/></svg>
+      <h3>Local</h3>
+      <p><code>node visual/backend/index.js</code> -- dev and offline mode. Uses <span class="ic">.env.local</span> / CLI profile.</p>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 2 -- Architecture
+========================================================= -->
+<section class="slide" id="s2">
+
+  <div class="top">
+    <div class="ch-label">Slide 2 -- Architecture</div>
+    <h1>What Lives <span class="blue">Where</span></h1>
+    <p class="lead" style="max-width:65ch">The Setup App carries the framework. On deploy, it generates domain files from <span class="ic">.forge</span>, uploads to workspace files, and calls the Apps API.</p>
+  </div>
+
+  <div class="body">
+    <!-- Architecture Flow -->
+    <div class="flow-row" style="gap:0.5rem">
+      <div class="fbox fa" style="padding:0.7rem 1.2rem">
+        <svg class="ico-md cr"><use href="#ico-settings"/></svg>
+        Setup App
+        <small>visual/ -- Node.js</small>
+      </div>
+      <div class="farrow"><svg class="ico-sm cm"><use href="#ico-arrow"/></svg></div>
+      <div class="fbox fp" style="padding:0.7rem 1.2rem">
+        <svg class="ico-md cp"><use href="#ico-file"/></svg>
+        .forge
+        <small>YAML manifest</small>
+      </div>
+      <div class="farrow"><svg class="ico-sm cm"><use href="#ico-arrow"/></svg></div>
+      <div class="fbox fb" style="padding:0.7rem 1.2rem">
+        <svg class="ico-md cb"><use href="#ico-database"/></svg>
+        UC Volume
+        <small>project files + config</small>
+      </div>
+      <div class="farrow"><svg class="ico-sm cm"><use href="#ico-arrow"/></svg></div>
+      <div class="fbox fg" style="padding:0.7rem 1.2rem">
+        <svg class="ico-md cg"><use href="#ico-cpu"/></svg>
+        Agent App
+        <small>deployed DBX App</small>
+      </div>
+      <div class="farrow"><svg class="ico-sm cm"><use href="#ico-arrow"/></svg></div>
+      <div class="fbox fg" style="padding:0.7rem 1.2rem">
+        <svg class="ico-md cg"><use href="#ico-globe"/></svg>
+        User URL
+        <small>live agent</small>
+      </div>
+    </div>
+
+    <!-- Asset Table -->
+    <div class="card" style="padding:0">
+      <table class="dtable">
+        <thead>
+          <tr>
+            <th style="width:35%">Asset</th>
+            <th>Location</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">Framework code</td><td>Static artifact bundled inside Setup App</td></tr>
+          <tr><td class="mono">.forge YAML per project</td><td>UC Volume in user's workspace</td></tr>
+          <tr><td class="mono">Provisioned data</td><td>User's UC catalog/schema (tables, functions, procedures)</td></tr>
+          <tr><td class="mono">Deployed Agent App</td><td>User's Databricks Apps</td></tr>
+          <tr><td class="mono">Generated project source</td><td>Workspace files (downloadable for CI/CD)</td></tr>
+          <tr><td class="mono">User's machine</td><td><strong style="color:var(--green)">Nothing</strong> (unless running local mode C)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 3 -- .forge File
+========================================================= -->
+<section class="slide" id="s3">
+
+  <div class="left">
+    <div class="ch-label">Slide 3 -- The .forge File</div>
+    <h1>One File.<br><span class="green">All Config.</span></h1>
+    <p class="lead">
+      Internal serialization format -- machine-generated, machine-consumed.
+      One <span class="ic">.forge</span> file per project. User NEVER writes YAML by hand. The Setup App wizard generates it.
+    </p>
+    <p class="lead" style="font-size:0.85rem; margin-top:0.5rem">
+      Contains BOTH domain content (tables, SQL, prompts) AND infrastructure config. Replaces <span class="ic">.env.local</span> entirely in SaaS mode.
+    </p>
+
+    <div style="margin-top:0.6rem">
+      <div class="card c-blue card-sm" style="margin-bottom:0.4rem">
+        <h3>Storage</h3>
+        <p><code>/Volumes/{catalog}/{schema}/brickforge/projects/{name}/</code></p>
+        <p style="margin-top:0.2rem">Sidecar files (CSV, SQL, PDFs) live alongside with relative paths.</p>
+      </div>
+      <div class="card c-green card-sm">
+        <h3>First Example</h3>
+        <p><code>stash/airops/airops.forge</code> -- extracted from the original airops domain.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.3rem">YAML Structure</p>
+    <div class="yaml-block" style="max-height: calc(100vh - 120px); overflow-y:auto; font-size:0.68rem; line-height:1.55">
+<span class="yk">config:</span>
+  <span class="yk">schema:</span> <span class="yv">"catalog.schema"</span>
+  <span class="yk">app_name:</span> <span class="yv">"my-agent-app"</span>
+  <span class="yk">warehouse_id:</span> <span class="yv">"44d9f9e1e0624dfc"</span>
+  <span class="yk">model:</span>
+    <span class="yk">endpoint:</span> <span class="yv">"databricks-claude-sonnet-4-6"</span>
+    <span class="yk">token:</span> <span class="yv">null</span>
+  <span class="yk">genie:</span>
+    - <span class="yk">slug:</span> <span class="yv">"checkin"</span>
+      <span class="yk">space_id:</span> <span class="yv">"01f142..."</span>
+      <span class="yk">enabled:</span> <span class="yv">true</span>
+  <span class="yk">ka:</span>
+    - <span class="yk">slug:</span> <span class="yv">"passengers"</span>
+      <span class="yk">endpoint:</span> <span class="yv">"ka-endpoint"</span>
+  <span class="yk">vs:</span>
+    - <span class="yk">slug:</span> <span class="yv">"index"</span>
+      <span class="yk">path:</span> <span class="yv">"catalog.schema.index"</span>
+  <span class="yk">mcp:</span>
+    - <span class="yk">slug:</span> <span class="yv">"weather"</span>
+      <span class="yk">url:</span> <span class="yv">"https://..."</span>
+  <span class="yk">api:</span>
+    - <span class="yk">slug:</span> <span class="yv">"inventory"</span>
+      <span class="yk">connection:</span> <span class="yv">"uc-connection"</span>
+  <span class="yk">a2a:</span>
+    - <span class="yk">slug:</span> <span class="yv">"billing"</span>
+      <span class="yk">url:</span> <span class="yv">"https://..."</span>
+  <span class="yk">features:</span>
+    <span class="yk">chart:</span> <span class="yv">true</span>
+  <span class="yk">lakebase:</span>
+    <span class="yk">instance_name:</span> <span class="yv">"my-lakebase"</span>
+  <span class="yk">mlflow:</span>
+    <span class="yk">experiment_id:</span> <span class="yv">"12345"</span>
+  <span class="yk">data_flags:</span>
+    <span class="yk">use_default:</span> <span class="yv">true</span>
+    <span class="yk">use_gen:</span> <span class="yv">false</span>
+
+<span class="yc"># --- Domain Content ---</span>
+<span class="yk">domain:</span> <span class="yv">"Airport Operations"</span>
+<span class="yk">data:</span>
+  <span class="yk">tables:</span> <span class="yc"># DDL + seed data refs</span>
+  <span class="yk">functions:</span> <span class="yc"># UC function SQL</span>
+  <span class="yk">procedures:</span> <span class="yc"># stored procedure SQL</span>
+<span class="yk">tools:</span> <span class="yc"># declarative: 3 patterns</span>
+<span class="yk">prompt:</span>
+  <span class="yk">system:</span> <span class="yc"># inline or sidecar</span>
+  <span class="yk">knowledge_base:</span> <span class="yc"># context docs</span>
+  <span class="yk">starters:</span> <span class="yc"># sample prompts</span>
+<span class="yk">eval:</span> <span class="yc"># dataset + scorer</span>
+<span class="yk">ui:</span> <span class="yc"># dashboard config</span>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 4 -- Stash System
+========================================================= -->
+<section class="slide" id="s4">
+
+  <div class="left">
+    <div class="ch-label">Slide 4 -- Stash System</div>
+    <h1>Domain<br><span class="amber">Packages</span></h1>
+    <p class="lead">
+      A stash is a self-contained domain package. Everything the agent needs to run a specific domain -- data, tools, prompts, eval -- lives in one directory.
+    </p>
+
+    <div style="margin-top:0.8rem">
+      <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.4rem">Two Creation Paths</p>
+      <div class="step" style="margin-bottom:0.4rem">
+        <div class="step-n">1</div>
+        <div>
+          <h4>Extraction</h4>
+          <p>Airops was extracted from the original codebase. This defined the <span class="ic">.forge</span> schema by example.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div>
+          <h4>Wizard</h4>
+          <p>The Setup App's LLM-assisted wizard generates new stashes from scratch via guided conversation.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.3rem">Directory Tree</p>
+    <div class="tree">
+<span class="dir">stash/airops/</span>
+  <span class="hl">airops.forge</span>          <span class="file"># manifest + config</span>
+  <span class="dir">tools/</span>                <span class="file"># domain tool Python files</span>
+  <span class="dir">data/</span>
+    <span class="dir">csv/</span>              <span class="file"># seed CSVs</span>
+    <span class="dir">init/</span>             <span class="file"># DDL SQL</span>
+    <span class="dir">func/</span>             <span class="file"># UC function SQL</span>
+    <span class="dir">proc/</span>             <span class="file"># stored procedure SQL</span>
+  <span class="dir">conf/</span>
+    <span class="dir">prompt/</span>           <span class="file"># system prompt, KB, starters</span>
+    <span class="dir">ka/</span>               <span class="file"># KA configs + PDFs</span>
+  <span class="dir">eval/</span>                 <span class="file"># eval dataset</span>
+  <span class="dir">app/components/</span>       <span class="file"># domain React cards</span>
+    </div>
+
+    <div class="card c-amber card-sm" style="margin-top:0.5rem">
+      <svg class="ico ca"><use href="#ico-package"/></svg>
+      <h3>Portable & Self-Contained</h3>
+      <p>Each stash maps 1:1 to a <span class="ic">.forge</span> file. The stash IS the domain -- move it, copy it, version it independently.</p>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 5 -- The 7 Challenges
+========================================================= -->
+<section class="slide" id="s5">
+
+  <div class="top">
+    <div class="ch-label">Slide 5 -- Engineering Challenges</div>
+    <h1>The 7 <span class="red">Walls</span></h1>
+    <p class="lead" style="max-width:65ch">Each challenge is a concrete engineering problem that must be solved for the SaaS transition. Color-coded by current status.</p>
+  </div>
+
+  <div class="grid">
+
+    <div class="card c-amber card-sm">
+      <span class="badge b-amber">In Progress</span>
+      <svg class="ico ca"><use href="#ico-folder"/></svg>
+      <h3>1. Where Does the Code Live?</h3>
+      <p>Setup App carries agent bundle. On deploy, generates domain files from <span class="ic">.forge</span>, uploads to workspace files.</p>
+    </div>
+
+    <div class="card c-amber card-sm">
+      <span class="badge b-amber">In Progress</span>
+      <svg class="ico ca"><use href="#ico-server"/></svg>
+      <h3>2. Backend Shift</h3>
+      <p>50+ subprocess calls to <code>uv run python</code>. Keep Python in Mode B. Migrate SDK calls to REST API incrementally.</p>
+    </div>
+
+    <div class="card c-green card-sm">
+      <span class="badge b-green">Designed</span>
+      <svg class="ico cg"><use href="#ico-key"/></svg>
+      <h3>3. .env.local Eradication</h3>
+      <p>ConfigProvider pattern. 36 Node.js call sites. Zero Python changes. <span class="ic">.forge</span> replaces <span class="ic">.env.local</span>.</p>
+    </div>
+
+    <div class="card c-green card-sm">
+      <span class="badge b-green">Designed</span>
+      <svg class="ico cg"><use href="#ico-tool"/></svg>
+      <h3>4. Tool Generation at Runtime</h3>
+      <p>Declarative specs in <span class="ic">.forge</span>. <code>tool_factory.py</code> generates <code>@tool</code> functions at startup. Same pattern as <code>ka_factory.py</code>.</p>
+    </div>
+
+    <div class="card c-amber card-sm">
+      <span class="badge b-amber">In Progress</span>
+      <svg class="ico ca"><use href="#ico-database"/></svg>
+      <h3>5. Data Provisioning</h3>
+      <p>Reads SQL from <span class="ic">.forge</span> sidecar files in UC Volume. Setup App copies to workspace files at deploy time.</p>
+    </div>
+
+    <div class="card c-red card-sm">
+      <span class="badge b-red">Blocking</span>
+      <svg class="ico cr"><use href="#ico-cloud"/></svg>
+      <h3>6. DAB-less Deploy</h3>
+      <p>DAB CLI (Go binary) is not pip-installable. Must use REST API: upload files, generate <code>app.yaml</code>, call Apps API.</p>
+    </div>
+
+    <div class="card c-green card-sm">
+      <span class="badge b-green">Designed</span>
+      <svg class="ico cg"><use href="#ico-book"/></svg>
+      <h3>7. Prompts & Knowledge Base</h3>
+      <p>System prompt in <span class="ic">.forge</span>. On deploy, written to agent's <code>conf/prompt/</code> in workspace files. Agent reads relative paths.</p>
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 6 -- ConfigProvider Pattern
+========================================================= -->
+<section class="slide" id="s6">
+
+  <div class="left">
+    <div class="ch-label">Slide 6 -- ConfigProvider</div>
+    <h1>One Interface.<br><span class="blue">Two Backends.</span></h1>
+    <p class="lead">
+      The ConfigProvider abstraction lets the entire codebase work identically in local mode and SaaS mode. The Python side needs ZERO changes.
+    </p>
+
+    <div style="margin-top:0.8rem">
+      <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.4rem">Interface Methods</p>
+      <div style="display:flex; flex-wrap:wrap; gap:0.3rem">
+        <code>get(key)</code>
+        <code>set(key, value)</code>
+        <code>list()</code>
+        <code>toggle(key)</code>
+        <code>to_env_dict()</code>
+      </div>
+    </div>
+
+    <div style="margin-top:0.8rem">
+      <div class="card c-green card-sm">
+        <h3>Migration Strategy</h3>
+        <p>Pure refactor first: LocalConfigProvider wraps existing functions. Then add ForgeConfigProvider. No behavior change until the switch.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <!-- Flow diagram -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; margin-bottom:0.8rem">
+      <div class="fbox fb" style="padding:0.6rem 1.5rem; width:80%">
+        <svg class="ico-sm cb"><use href="#ico-layers"/></svg>
+        ConfigProvider
+        <small>abstract interface</small>
+      </div>
+      <div style="display:flex; gap:2rem; width:100%; justify-content:center">
+        <div style="text-align:center">
+          <div style="width:1px; height:20px; background:var(--border); margin:0 auto"></div>
+          <div class="fbox fam" style="padding:0.5rem 0.8rem">
+            <svg class="ico-xs ca"><use href="#ico-terminal"/></svg>
+            LocalConfigProvider
+            <small>reads .env.local</small>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div style="width:1px; height:20px; background:var(--border); margin:0 auto"></div>
+          <div class="fbox fg" style="padding:0.5rem 0.8rem">
+            <svg class="ico-xs cg"><use href="#ico-cloud"/></svg>
+            ForgeConfigProvider
+            <small>reads .forge YAML</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr style="margin:0.5rem 0">
+
+    <div class="card c-blue card-sm" style="margin-bottom:0.4rem">
+      <h3>Scale of Change</h3>
+      <table class="dtable" style="margin-top:0.3rem">
+        <tr><td class="mono">Node.js backend</td><td><strong>36 call sites</strong> to refactor</td></tr>
+        <tr><td class="mono">Python side</td><td><strong style="color:var(--green)">0 changes</strong> -- subprocess env injection already works</td></tr>
+        <tr><td class="mono">.env.local refs (Node)</td><td>98 references</td></tr>
+        <tr><td class="mono">.env.local refs (Python)</td><td>272 refs across 32 files</td></tr>
+      </table>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 7 -- Runtime Dependencies
+========================================================= -->
+<section class="slide" id="s7">
+
+  <div class="top">
+    <div class="ch-label">Slide 7 -- Runtime Dependencies</div>
+    <h1>The Hidden <span class="amber">Inch</span></h1>
+    <p class="lead" style="max-width:65ch">Every runtime dependency must be available inside the DBX App container. No user machine, no local installs.</p>
+  </div>
+
+  <div class="body">
+    <div>
+      <!-- Tool availability table -->
+      <div class="card" style="padding:0; margin-bottom:0.8rem">
+        <table class="dtable">
+          <thead>
+            <tr><th>Tool</th><th>Setup App</th><th>Agent App</th><th>Available?</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">Python 3.x</td><td>YES (subprocess)</td><td>YES (main)</td><td><span class="badge b-green">YES</span></td><td>Standard in DBX runtime</td></tr>
+            <tr><td class="mono">uv</td><td>YES (41 calls)</td><td>YES (startup)</td><td><span class="badge b-red">NO</span></td><td><code>pip install uv</code> at startup</td></tr>
+            <tr><td class="mono">Node.js</td><td>YES (main)</td><td>YES (subprocess)</td><td><span class="badge b-amber">MAYBE</span></td><td>Needs testing -- should be available</td></tr>
+            <tr><td class="mono">npm</td><td>NO (pre-built)</td><td>YES (build:client)</td><td><span class="badge b-amber">MAYBE</span></td><td>Available with Node.js</td></tr>
+            <tr><td class="mono">databricks CLI</td><td>YES (5 calls)</td><td>NO</td><td><span class="badge b-red">NO</span></td><td><strong class="red">Replace with REST API</strong></td></tr>
+            <tr><td class="mono">bash</td><td>YES (2 calls)</td><td>NO</td><td><span class="badge b-green">YES</span></td><td>Standard Linux container</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- pythonCmd abstraction -->
+      <div class="card c-amber card-sm">
+        <h3>The pythonCmd() Abstraction</h3>
+        <p>Detect mode, use appropriate command. Returns <code>['uv', 'run', 'python']</code> locally or <code>['python']</code> in DBX App mode. Same pattern as ConfigProvider.</p>
+      </div>
+    </div>
+
+    <div>
+      <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.4rem">5 CLI Calls to Replace</p>
+
+      <div class="contrast-row" style="margin-bottom:0.3rem">
+        <span class="contrast-before">databricks auth profiles</span>
+        <span class="contrast-arrow">&rarr;</span>
+        <span class="contrast-after">REMOVE (no CLI profiles in DBX App)</span>
+      </div>
+      <div class="contrast-row" style="margin-bottom:0.3rem">
+        <span class="contrast-before">databricks auth login</span>
+        <span class="contrast-arrow">&rarr;</span>
+        <span class="contrast-after">REMOVE (SP auth in DBX App)</span>
+      </div>
+      <div class="contrast-row" style="margin-bottom:0.3rem">
+        <span class="contrast-before">databricks database list-*</span>
+        <span class="contrast-arrow">&rarr;</span>
+        <span class="contrast-after">GET /api/2.0/database/instances</span>
+      </div>
+      <div class="contrast-row" style="margin-bottom:0.3rem">
+        <span class="contrast-before">databricks database get-*</span>
+        <span class="contrast-arrow">&rarr;</span>
+        <span class="contrast-after">GET /api/2.0/database/instances/{n}</span>
+      </div>
+      <div class="contrast-row">
+        <span class="contrast-before">databricks apps get</span>
+        <span class="contrast-arrow">&rarr;</span>
+        <span class="contrast-after">GET /api/2.0/apps/{name}</span>
+      </div>
+
+      <div class="card c-green card-sm" style="margin-top:0.6rem">
+        <h3>Startup Command</h3>
+        <code style="font-size:0.68rem">pip install uv && uv sync && node visual/backend/index.js</code>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 8 -- Packaging & Distribution
+========================================================= -->
+<section class="slide" id="s8">
+
+  <div class="top">
+    <div class="ch-label">Slide 8 -- Packaging</div>
+    <h1>4 Delivery <span class="cp" style="color:var(--purple)">Paths</span></h1>
+    <p class="lead" style="max-width:65ch">From GitHub Release to Docker. Clean repo is 25MB, compressed ~12MB. The two-runtime problem (Node + Python) means no single package manager.</p>
+  </div>
+
+  <div class="body">
+    <div style="display:flex; flex-direction:column; gap:0.6rem">
+
+      <div class="card card-hero" style="border-color:var(--green); border-left:3px solid var(--green)">
+        <span class="badge b-green">Priority 1</span>
+        <svg class="ico cg"><use href="#ico-package"/></svg>
+        <h3>GitHub Release</h3>
+        <p>tar.gz/zip archive. Prereqs: Node.js + Python. <code>build-release.sh</code> script excludes bloat, includes pre-built frontend and committed node_modules.</p>
+        <p style="margin-top:0.2rem; font-size:0.78rem"><strong>User flow:</strong> <code style="font-size:0.68rem">curl -L .../brickforge.tar.gz | tar xz && cd brickforge-* && ./start.sh</code></p>
+      </div>
+
+      <div class="card c-blue card-sm">
+        <span class="badge b-blue">Priority 2</span>
+        <svg class="ico cb"><use href="#ico-cloud"/></svg>
+        <h3>deploy-setup</h3>
+        <p>One-command DBX App deploy. <code>python deploy-setup.py</code> authenticates, uploads source, creates app, prints URL. Prereqs: Python + Databricks auth.</p>
+      </div>
+
+      <div class="card c-amber card-sm">
+        <span class="badge b-amber">Priority 3</span>
+        <svg class="ico ca"><use href="#ico-server"/></svg>
+        <h3>Docker</h3>
+        <p>Zero prereqs (just Docker). FROM node:20-slim + Python. ~500MB image. Overkill for dev but reproducible.</p>
+      </div>
+
+      <div class="card card-sm" style="border-left:3px solid var(--text3)">
+        <span class="badge" style="background:var(--surface2); color:var(--text3)">Stretch</span>
+        <svg class="ico cm"><use href="#ico-terminal"/></svg>
+        <h3>pip install brickforge</h3>
+        <p>Marginal over GitHub Release. pip can't install Node.js. User still needs Node separately. Build if demand exists.</p>
+      </div>
+    </div>
+
+    <div>
+      <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.4rem">What Goes in the Archive</p>
+      <div class="tree" style="font-size:0.65rem; line-height:1.5">
+<span class="dir">brickforge-v1.0.0/</span>
+  <span class="dir">visual/</span>
+    <span class="dir">backend/</span>
+      <span class="file">index.js, lib/, package.json</span>
+      <span class="hl">node_modules/</span>     <span class="file"># 8MB, required</span>
+    <span class="dir">frontend/</span>
+      <span class="hl">dist/</span>             <span class="file"># 580KB, pre-built</span>
+  <span class="dir">agent/</span>              <span class="file"># 5 Python files, ~30KB</span>
+  <span class="dir">app/</span>
+    <span class="dir">client/src/</span>       <span class="file"># 528KB React</span>
+    <span class="dir">server/src/</span>       <span class="file"># 60KB Express</span>
+    <span class="dir">packages/</span>         <span class="file"># 38MB shared</span>
+  <span class="dir">tools/</span>              <span class="file"># framework, ~20KB</span>
+  <span class="dir">data/</span>               <span class="file"># init, gen, py</span>
+  <span class="dir">conf/</span>               <span class="file"># skeleton prompts</span>
+  <span class="dir">deploy/</span>             <span class="file"># deploy pipeline</span>
+  <span class="dir">stash/</span>              <span class="file"># airops example</span>
+  <span class="file">pyproject.toml, requirements.txt</span>
+  <span class="hl">start.sh</span> / <span class="hl">start.bat</span>
+  <span class="hl">setup-app.yaml</span>
+      </div>
+
+      <div style="display:flex; gap:0.4rem; margin-top:0.5rem">
+        <div class="card card-sm" style="flex:1; text-align:center; padding:0.5rem">
+          <h3 style="font-size:1.3rem; color:var(--green)">25 MB</h3>
+          <p style="font-size:0.72rem">clean repo</p>
+        </div>
+        <div class="card card-sm" style="flex:1; text-align:center; padding:0.5rem">
+          <h3 style="font-size:1.3rem; color:var(--blue)">~12 MB</h3>
+          <p style="font-size:0.72rem">compressed</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 9 -- Setup Blocks Stashability
+========================================================= -->
+<section class="slide" id="s9">
+
+  <div class="top">
+    <div class="ch-label">Slide 9 -- Setup Blocks</div>
+    <h1>19 Blocks. <span class="green">Classified.</span></h1>
+    <p class="lead" style="max-width:65ch">Every setup block classified as INFRA (runtime context), PROJECT (in .forge), or HYBRID (both). Color-coded by type.</p>
+    <div style="display:flex; gap:0.8rem; margin-top:0.4rem">
+      <span class="badge b-blue">INFRA -- runtime context</span>
+      <span class="badge b-green">PROJECT -- in .forge</span>
+      <span class="badge b-amber">HYBRID -- both</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Row 1 -->
+    <div class="bcard bc-infra">
+      <div class="bcard-title" style="color:var(--blue)">Databricks Host</div>
+      <div class="bcard-id">host</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">From DBX App auth</div>
+    </div>
+    <div class="bcard bc-infra">
+      <div class="bcard-title" style="color:var(--blue)">Authentication</div>
+      <div class="bcard-id">auth</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">From DBX App SP</div>
+    </div>
+    <div class="bcard bc-hybrid">
+      <div class="bcard-title" style="color:var(--amber)">SQL Warehouse</div>
+      <div class="bcard-id">warehouse</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.warehouse_id</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Unity Catalog</div>
+      <div class="bcard-id">schema</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.schema</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Data Tables</div>
+      <div class="bcard-id">tables</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">data.tables[]</div>
+    </div>
+
+    <!-- Row 2 -->
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Functions</div>
+      <div class="bcard-id">functions</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">data.functions[]</div>
+    </div>
+    <div class="bcard bc-hybrid">
+      <div class="bcard-title" style="color:var(--amber)">Model Endpoint</div>
+      <div class="bcard-id">model</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.model.endpoint</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Agent Prompt</div>
+      <div class="bcard-id">prompt</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">prompt.system</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Genie Space</div>
+      <div class="bcard-id">genie</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.genie[]</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Knowledge Asst</div>
+      <div class="bcard-id">ka</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.ka[]</div>
+    </div>
+
+    <!-- Row 3 -->
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Vector Search</div>
+      <div class="bcard-id">vs</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.vs[]</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">External MCP</div>
+      <div class="bcard-id">mcp</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.mcp[]</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">External API</div>
+      <div class="bcard-id">api</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.api[]</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">A2A Agents</div>
+      <div class="bcard-id">a2a</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.a2a[]</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Features</div>
+      <div class="bcard-id">features</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.features</div>
+    </div>
+
+    <!-- Row 4 -->
+    <div class="bcard bc-hybrid">
+      <div class="bcard-title" style="color:var(--amber)">Lakebase</div>
+      <div class="bcard-id">lakebase</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.lakebase</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">MLflow</div>
+      <div class="bcard-id">mlflow</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.mlflow</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Grants</div>
+      <div class="bcard-id">grants</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">action, not config</div>
+    </div>
+    <div class="bcard bc-project">
+      <div class="bcard-title" style="color:var(--green)">Deploy</div>
+      <div class="bcard-id">deploy</div>
+      <div style="font-size:0.58rem; color:var(--text3); margin-top:0.1rem">config.app_name</div>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:center">
+      <div style="text-align:center; font-size:0.75rem; color:var(--text3)">
+        <strong style="font-size:1.1rem; color:var(--text)">19</strong><br>total blocks
+      </div>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 10 -- Open Questions Status
+========================================================= -->
+<section class="slide" id="s10">
+
+  <div class="left">
+    <div class="ch-label">Slide 10 -- Open Questions</div>
+    <h1>31 Questions.<br><span class="blue">25 Decided.</span></h1>
+    <p class="lead">
+      Every design decision documented, debated, and resolved.
+      The remaining items are runtime verification -- things that can only be confirmed on first deploy.
+    </p>
+
+    <!-- Progress bar -->
+    <div style="margin-top:1rem">
+      <div class="pbar-track">
+        <div class="pbar-seg" style="width:78%; background:var(--green)">25 DECIDED</div>
+        <div class="pbar-seg" style="width:12.5%; background:var(--amber)">4 TEST</div>
+        <div class="pbar-seg" style="width:6.25%; background:var(--blue)">2 VERIFY</div>
+        <div class="pbar-seg" style="width:3.25%; background:var(--red)">1 BUILD</div>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:0.3rem; font-size:0.65rem; color:var(--text3)">
+        <span>25 decided</span>
+        <span>4 needs testing</span>
+        <span>2 needs verification</span>
+        <span>1 to build</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <p style="font-size:0.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:0.3rem">Key Decisions</p>
+
+    <div class="card c-green card-sm" style="margin-bottom:0.35rem">
+      <h3>Hosted Mode Auth</h3>
+      <p>Databricks SSO -- user authenticates to their own workspace</p>
+    </div>
+    <div class="card c-green card-sm" style="margin-bottom:0.35rem">
+      <h3>.forge Storage</h3>
+      <p>UC Volume per project. Persists across app restarts.</p>
+    </div>
+    <div class="card c-green card-sm" style="margin-bottom:0.35rem">
+      <h3>User Writes YAML?</h3>
+      <p><strong class="red">NEVER.</strong> Wizard generates it. User only sees UI.</p>
+    </div>
+    <div class="card c-green card-sm" style="margin-bottom:0.35rem">
+      <h3>DAB CLI Dependency</h3>
+      <p>Confirmed not pip-installable. REST API is the path.</p>
+    </div>
+    <div class="card c-amber card-sm" style="margin-bottom:0.35rem">
+      <h3>Needs Testing (First Deploy)</h3>
+      <p>uv availability, Node.js version, npm availability, PORT env var behavior</p>
+    </div>
+    <div class="card c-red card-sm">
+      <h3>To Build</h3>
+      <p><code>tool_factory.py</code> for SQL read + action patterns. Only <code>ka_factory.py</code> exists today.</p>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SLIDE 11 -- Execution Roadmap
+========================================================= -->
+<section class="slide" id="s11">
+
+  <div class="top">
+    <div class="ch-label">Slide 11 -- Execution Roadmap</div>
+    <h1>Inch by <span class="red">Inch</span></h1>
+    <p class="lead" style="max-width:65ch">Start from where we are. Take one step. Hit the wall. Solve the wall. Next step. 8 inches from current state to multi-project SaaS.</p>
+  </div>
+
+  <div class="body">
+
+    <div class="inch">
+      <div class="inch-n">1</div>
+      <div style="flex:1">
+        <h4>Setup App as DBX App (Mode B)</h4>
+        <p>Create <code>app.yaml</code> for Setup App. Upload entire repo. <code>pip install uv && uv sync && node visual/backend/index.js</code></p>
+        <span class="dep">No dependencies -- starting point</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">2</div>
+      <div style="flex:1">
+        <h4>Port + Auth</h4>
+        <p><code>process.env.PORT || 9000</code> -- one line. Mode B auth via app's SP with user permissions.</p>
+        <span class="dep">Depends on: Inch 1</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">3</div>
+      <div style="flex:1">
+        <h4>First Deploy Test</h4>
+        <p>Deploy, open URL, walk through setup steps. Fix what breaks -- uv, Node version, CORS, etc.</p>
+        <span class="dep">Depends on: Inch 2</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">4</div>
+      <div style="flex:1">
+        <h4>Config Persistence</h4>
+        <p><span class="ic">.env.local</span> is ephemeral in DBX App mode. Short-term: reconfigure on restart. Long-term: ConfigProvider reads <span class="ic">.forge</span> from UC Volume.</p>
+        <span class="dep">Depends on: Inch 3 (working deploy)</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">5</div>
+      <div style="flex:1">
+        <h4>DAB-less Agent Deploy</h4>
+        <p>Replace <code>deploy.sh</code> (DAB CLI) with <code>deploy_via_api.py</code> (REST API). Upload source to workspace files, generate app.yaml, call Apps API.</p>
+        <span class="dep">Depends on: Inch 3 (verified REST API endpoints)</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">6</div>
+      <div style="flex:1">
+        <h4>Agent App File Manifest</h4>
+        <p>Define exactly which files are Agent App vs Setup App. Agent gets: <code>agent/</code>, <code>app/</code>, <code>tools/</code>, <code>data/</code>, <code>conf/</code>, <code>eval/</code>.</p>
+        <span class="dep">Depends on: Inch 5</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">7</div>
+      <div style="flex:1">
+        <h4>.forge Config Injection</h4>
+        <p>Setup App generates Agent App <code>app.yaml</code> with all env vars from <span class="ic">.forge</span>. Domain files written to workspace before deploy.</p>
+        <span class="dep">Depends on: Inch 4 + Inch 6</span>
+      </div>
+    </div>
+
+    <div class="inch">
+      <div class="inch-n">8</div>
+      <div style="flex:1">
+        <h4>Multi-Project</h4>
+        <p>Save/load/switch <span class="ic">.forge</span> projects on UC Volume. Per-project schema isolation. Separate Agent App instances, shared Setup App.</p>
+        <span class="dep">Depends on: Inch 7 (full pipeline working)</span>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- ══ NAV DOTS SCRIPT ══ -->
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const navDots = document.getElementById('navDots');
+
+  slides.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.addEventListener('click', () => s.scrollIntoView({ behavior: 'smooth' }));
+    navDots.appendChild(d);
+  });
+
+  const dots = navDots.querySelectorAll('.dot');
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const idx = [...slides].indexOf(e.target);
+        dots.forEach((d, i) => d.classList.toggle('on', i === idx));
+      }
+    });
+  }, { threshold: 0.55 });
+
+  slides.forEach(s => obs.observe(s));
+  if (dots[0]) dots[0].classList.add('on');
+</script>
+
+</body>
+</html>
