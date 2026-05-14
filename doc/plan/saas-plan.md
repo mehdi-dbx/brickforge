@@ -314,83 +314,83 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 ---
 
-## PART 8: Open Questions
+## PART 8: Open Questions -- All Answered
 
 ### A. Setup App Deployment
 
-| # | Question | Status |
-|---|----------|--------|
-| A1 | Where does Setup App's `app.yaml` live? Root or `visual/`? | OPEN |
-| A2 | Upload entire repo or subset as Setup App source? | OPEN |
-| A3 | Is `uv` available in DBX App runtime? | NEEDS TESTING |
-| A4 | Node.js version in DBX App runtime? | NEEDS TESTING |
-| A5 | Is `npm` available for Agent App `npm run build:client`? | NEEDS TESTING |
-| A6 | Exact `PORT` env var behavior in DBX Apps? | NEEDS TESTING |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| A1 | Where does Setup App's `app.yaml` live? | Root. Current `app.yaml` (Agent App) gets renamed to `agent-app.yaml`. Setup App `app.yaml` goes at root. | DECIDED |
+| A2 | Upload entire repo or subset? | Entire repo. Relative paths preserved, subprocess calls work. Exclude `.git/`, `stash/` via `.databricksignore`. | DECIDED |
+| A3 | Is `uv` available in DBX App runtime? | Assume no. Startup command: `pip install uv && uv sync && node visual/backend/index.js` | NEEDS TESTING |
+| A4 | Node.js version in DBX App runtime? | NEEDS TESTING on first deploy. | NEEDS TESTING |
+| A5 | Is `npm` available for Agent App `npm run build:client`? | NEEDS TESTING on first deploy. | NEEDS TESTING |
+| A6 | Exact `PORT` env var behavior? | NEEDS TESTING. Fix is trivial: `process.env.PORT \|\| 9000`. | NEEDS TESTING |
 
 ### B. Config Persistence
 
-| # | Question | Status |
-|---|----------|--------|
-| B1 | Config persistence strategy: workspace files, UC Volume, or Apps API env vars? | OPEN |
-| B2 | Can DBX App set its own env vars at runtime via Apps API? | NEEDS VERIFICATION |
-| B3 | How to restore config on app restart? | OPEN |
-| B4 | Mode A (hosted): how does user provide their workspace credentials? | DECIDED -- Databricks SSO |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| B1 | Config persistence strategy? | `.forge` on UC Volume IS the persistence. No `.env.local` in SaaS. ConfigProvider reads `.forge`, hydrates env vars. | DECIDED |
+| B2 | Can DBX App set its own env vars at runtime? | Irrelevant -- `.forge` on UC Volume is the persistence, not app env vars. | N/A |
+| B3 | How to restore on restart? | Startup reads `.forge` from UC Volume, hydrates process.env via ForgeConfigProvider. | DECIDED |
+| B4 | Mode A (hosted): user workspace credentials? | Databricks SSO. | DECIDED |
 
 ### C. Agent App Deployment
 
-| # | Question | Status |
-|---|----------|--------|
-| C1 | Exact REST API for workspace file upload? | NEEDS VERIFICATION |
-| C2 | Does `POST /api/2.0/apps/{name}/deployments` accept workspace file path? | NEEDS VERIFICATION |
-| C3 | Parallel file upload rate limits? | NEEDS TESTING |
-| C4 | DAB CLI Go binary not pip-installable? | CONFIRMED -- must use REST API |
-| C5 | Can Setup App SP grant permissions to Agent App SP? | NEEDS VERIFICATION |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| C1 | Exact REST API for workspace file upload? | Workspace Files API or `PUT /api/2.0/workspace/import`. Verify exact endpoint on implementation. | NEEDS VERIFICATION |
+| C2 | Does Apps API accept workspace file path? | Verify on implementation. | NEEDS VERIFICATION |
+| C3 | Parallel file upload rate limits? | Test on implementation. 50-100 small files should be fine. | NEEDS TESTING |
+| C4 | DAB CLI Go binary pip-installable? | No. Confirmed: must use REST API (DAB-less deploy). | CONFIRMED |
+| C5 | Can Setup App SP grant to Agent App SP? | SP can grant UC permissions via SDK. Same pattern as existing grant scripts. Verify on implementation. | NEEDS VERIFICATION |
 
 ### D. Stash Format & Loading
 
-| # | Question | Status |
-|---|----------|--------|
-| D1 | Inline vs sidecar content in `.forge`? | DECIDED -- sidecar files |
-| D2 | UC Volume path convention? | OPEN |
-| D3 | What catalog/schema for stash Volume? | OPEN |
-| D4 | How does wizard write to UC Volume in SaaS mode? | OPEN |
-| D5 | Load stash: copy to workspace files or agent reads UC Volume directly? | OPEN |
-| D6 | Developer mode: user edits code, `.forge` abandoned? How redeploy? | OPEN |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| D1 | Inline vs sidecar? | Sidecar files, same structure as local stash. | DECIDED |
+| D2 | UC Volume path convention? | `/Volumes/{catalog}/{schema}/brickforge/{project_name}/` | DECIDED |
+| D3 | What catalog/schema for stash Volume? | The project's own catalog.schema. User picks it in Schema setup step. | DECIDED |
+| D4 | How does wizard write to UC Volume? | Python subprocess via `volume_ops.py` (already exists for KA doc upload). Same pattern for all Volume writes. | DECIDED |
+| D5 | Copy to workspace files or agent reads Volume directly? | Copy to workspace files at deploy time. Agent reads local relative paths at runtime -- same as today. | DECIDED |
+| D6 | Developer mode: `.forge` abandoned? | Yes. `.forge` is the seed. Once exported, code is source of truth. User deploys via own CI/CD. Setup App optional from that point. | DECIDED |
 
 ### E. Tool Generation
 
-| # | Question | Status |
-|---|----------|--------|
-| E1 | `tool_factory.py` for SQL read + action patterns: exists? | NO -- only ka_factory exists |
-| E2 | Can ALL tools be declarative? Custom logic tools? | OPEN |
-| E3 | `.forge`-aware tool discovery vs file-based discovery? | OPEN |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| E1 | `tool_factory.py` exists? | No. Only `ka_factory.py`. Need to build `tool_factory.py` for SQL read + action patterns. | TO BUILD |
+| E2 | Can ALL tools be declarative? | 95% yes (3 patterns). Custom logic tools: user writes Python, puts in `tools/`. Both coexist via `_discover_domain_tools()`. | DECIDED |
+| E3 | `.forge`-aware tool discovery? | Both paths coexist. File-based (`_discover_domain_tools()` scans `tools/`) + `.forge`-based (`_discover_forge_tools()` reads specs). Agent uses both. | DECIDED |
 
 ### F. Frontend
 
-| # | Question | Status |
-|---|----------|--------|
-| F1 | Frontend rebuild after domain card load? How in DBX App mode? | OPEN |
-| F2 | Pre-build all card types as generic renderers? | OPEN |
-| F3 | Dashboard config end-to-end tested? | NOT TESTED |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| F1 | Frontend rebuild after domain card load? | Not needed. Generic renderers driven by config. No domain TSX imports. Registry populated at startup from config. | DECIDED |
+| F2 | Pre-build all card types as generic renderers? | Yes. `GenericTableCard`, `GenericMetricCard`, `GenericStatusCard` driven by `.forge` `ui:` config. Airops-specific cards in stash become legacy. | DECIDED |
+| F3 | Dashboard config end-to-end tested? | Not yet. Test when implementing. | NOT TESTED |
 
 ### G. User Code Access & CI/CD
 
-| # | Question | Status |
-|---|----------|--------|
-| G1 | How does user download generated project? | OPEN |
-| G2 | Does Setup App know when user edits code externally? | OPEN |
-| G3 | GitHub repo creation from Setup App? | STRETCH GOAL |
-| G4 | CI/CD story: user's own pipeline or BrickForge provides? | OPEN |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| G1 | How does user download generated project? | Workspace files accessible via `databricks workspace export-dir`. Or Setup App provides "Download project" button (zip + serve). | DECIDED |
+| G2 | Does Setup App know when user edits externally? | No, and doesn't need to. Once exported, user owns it. Setup App manages `.forge`; exported code is independent. | DECIDED |
+| G3 | GitHub repo creation from Setup App? | Stretch goal. Requires GitHub token/OAuth. Not now. | STRETCH |
+| G4 | CI/CD story? | User's own pipeline. Generated project is a standard DBX App -- deploy with any CI/CD tool. BrickForge doesn't provide CI/CD. | DECIDED |
 
 ### H. Multi-Project
 
-| # | Question | Status |
-|---|----------|--------|
-| H1 | Multi-project coexistence: separate schemas + apps? | OPEN |
-| H2 | Project list: scan UC Volume for `.forge` files? | OPEN |
-| H3 | Project deletion: what gets cleaned up? | OPEN |
+| # | Question | Answer | Status |
+|---|----------|--------|--------|
+| H1 | Multi-project coexistence? | Separate UC schema per project, separate Agent App instance, shared Setup App. `.forge` files in separate directories on UC Volume. | DECIDED |
+| H2 | Project list? | Scan UC Volume `/Volumes/{catalog}/{schema}/brickforge/` for subdirectories containing `.forge` files. | DECIDED |
+| H3 | Project deletion? | Delete Agent App (Apps API), drop UC tables (or schema), delete `.forge` directory from UC Volume, remove MLflow experiment. Existing cleanup tab handles most of this. | DECIDED |
 
-**Total: 31 open questions.**
+**Total: 31 questions. 25 DECIDED. 4 NEEDS TESTING (first deploy). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.**
 
 ---
 
