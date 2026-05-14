@@ -801,6 +801,15 @@ So the pip package saves them `git clone` but they still need to install Node.js
 
 **Is it worth it?** Marginal improvement over GitHub Release. The release archive is simpler and doesn't pretend to be a Python package.
 
+**mm D2.3: Publishing to PyPI**
+
+1. Check name availability: `pip index versions brickforge` or visit https://pypi.org/project/brickforge/ (404 = available)
+2. Create account at pypi.org, get API token
+3. Build: `python -m build` (creates `dist/brickforge-1.0.0.tar.gz`)
+4. Upload: `twine upload dist/*`
+5. No approval process -- upload and it's live immediately
+6. Then anyone can: `pip install brickforge && brickforge`
+
 **Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later.
 
 ### Distribution Path 3: DBX App Deploy

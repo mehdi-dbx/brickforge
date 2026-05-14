@@ -1479,6 +1479,15 @@ cd brickforge-*
 
 <h4>mm D2.2: The problem with pip</h4>
 <p>pip packages are designed for Python libraries, not multi-runtime applications. Including 8MB of Node.js files as package data works but is unusual. The user STILL needs Node.js installed separately. pip can't install Node.js.</p>
+<h4>mm D2.3: Publishing to PyPI</h4>
+<ol>
+  <li>Check name availability: <code>pip index versions brickforge</code> or visit <a href="https://pypi.org/project/brickforge/">pypi.org/project/brickforge/</a> (404 = available)</li>
+  <li>Create account at pypi.org, get API token</li>
+  <li>Build: <code>python -m build</code> (creates <code>dist/brickforge-1.0.0.tar.gz</code>)</li>
+  <li>Upload: <code>twine upload dist/*</code></li>
+  <li>No approval process -- upload and it's live immediately</li>
+  <li>Then anyone can: <code>pip install brickforge && brickforge</code></li>
+</ol>
 <p><strong>Decision:</strong> pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later.</p>
 
 <h3>Distribution Path 3: DBX App Deploy</h3>
