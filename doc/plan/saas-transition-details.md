@@ -289,36 +289,196 @@ Same for `knowledge.base` and `user.prompt`.
 
 ---
 
-## Execution Priority
+## Execution: Inch by Inch
 
-### Phase 1: Config Abstraction Layer
-- Abstract `.env.local` reads behind a config provider
-- Config provider reads from `.env.local` (local mode) or `.forge` (project mode)
-- All backend code uses the abstraction, not direct file reads
-- This is the FOUNDATION -- everything else depends on it
+### Approach
+DO NOT try to architect the whole system upfront.
+Start from where we are. Take one step. Hit the wall. Solve the wall. Take the next step.
+Every inch reveals the next inch.
 
-### Phase 2: Tool Factory
-- `tool_factory.py` generates SQL read + action tools from `.forge` specs
-- Extends the existing `ka_factory.py` pattern
-- Agent loads tools from `.forge` instead of scanning `tools/` directory
-- Both paths work: file-based (legacy) and `.forge`-based (new)
+---
 
-### Phase 3: Setup App as DBX App
-- Create `app.yaml` for the Setup App
-- Handle auth (DBX App auth context)
-- Replace `uv run python` subprocess calls with REST API calls (incremental)
-- Deploy and test
+### Inch 1: Make Setup App a deployable DBX App (Mode B)
 
-### Phase 4: Remote Agent Deploy
-- Build the bundle upload mechanism
-- Generate `app.yaml` for Agent App from `.forge`
-- Call Apps API to create/deploy
-- Test end-to-end: Setup App -> Agent App
+**Starting point:** `node visual/backend/index.js` runs locally.
 
-### Phase 5: Project Management
-- UC Volume storage for `.forge` files
-- Project list/load/save/switch UI
-- Per-project schema isolation
+**What I need:**
+- A `visual/app.yaml` for the Setup App
+- Startup command: install Python deps (the backend spawns `uv run python`), then start Node
+- Something like: `pip install -r requirements.txt && node backend/index.js`
+
+**First wall:** The backend uses `PROJECT_ROOT = path.resolve(__dirname, '../..')` to find agent code, data dirs, scripts. When deployed as a DBX App, the ENTIRE REPO is uploaded. So the paths still work -- the relative structure is preserved.
+
+**Key insight:** For Mode B, if I upload the ENTIRE repo as the Setup App source, all subprocess calls still work. Python scripts are there. SQL files are there. The `.env.local` path is relative and still resolves. The only thing that changes is WHERE the process runs (Databricks instead of laptop).
+
+**Deliverable:**
+1. Create `visual/app.yaml` (or root-level `setup-app.yaml`)
+2. Startup command installs Python deps + starts Node
+3. Test: deploy to a workspace, open in browser, verify Setup tab works
+
+**What can break:**
+- `uv` might not be available in DBX App runtime -> use `pip` instead
+- Node.js version compatibility
+- `.env.local` won't exist on first deploy -> Setup App must handle missing `.env.local` gracefully (it already does for most steps)
+- Port: DBX Apps expect the app to listen on a specific port (usually 8080 or from env var `PORT`)
+
+**Verification:** Deploy, open URL, click through Setup steps, verify tests pass.
+
+---
+
+### Inch 2: Handle the port and auth in DBX App mode
+
+**Wall from Inch 1:** DBX Apps inject `PORT` env var. The Setup App currently hardcodes port 9000.
+
+**Fix:** `const PORT = process.env.PORT || process.env.VISUAL_PORT || 9000`
+Already partially there. Just ensure `PORT` env var is respected.
+
+**Auth wall:** When running as a DBX App, the user is authenticated via Databricks SSO. The app gets user identity headers. The Databricks SDK uses the app's service principal for API calls, but the USER is the one who deployed the app and has permissions.
+
+For Mode B (user's own workspace), the app's SP inherits permissions from the user who deployed it. The Setup App's API calls (create schema, create tables, etc.) run with the SP's permissions. The user needs to grant the SP access to their catalog/warehouse.
+
+**This is the same pattern as the Agent App deployment.** The grant scripts already handle this.
+
+**Deliverable:** Setup App respects `PORT` env var, auth works via DBX App SP.
+
+---
+
+### Inch 3: First real deployment test
+
+**What I do:**
+1. `databricks apps create brickforge-setup`
+2. Upload the repo (minus stash, dbc, .git, etc.) as source
+3. App starts, installs Python, starts Node
+4. Open in browser
+5. Walk through Setup steps
+
+**What will probably break:**
+- Missing `uv` -> switch to `pip install -r requirements.txt`
+- Node.js binary location might differ -> ensure `app.yaml` uses correct path
+- `.env.local` doesn't exist -> the Setup App needs to create it on first run or handle its absence
+- The visual app frontend (pre-built dist) needs to be accessible
+- CORS or proxy issues with the Databricks App URL
+
+**Each break is a wall. Fix it. Move to next inch.**
+
+---
+
+### Inch 4: .env.local bootstrap in DBX App mode
+
+**Wall:** On first deploy, there's no `.env.local`. The Setup App can't read config.
+
+**But wait:** In Mode B, the Setup App IS in the user's workspace. The user walks through the Setup wizard which CREATES the `.env.local`. This is the SAME flow as today -- the wizard populates config step by step.
+
+The only difference: the user opens a DBX App URL instead of `localhost:9000`.
+
+**Fix needed:** The Setup App backend must handle missing `.env.local` gracefully at startup (not crash). It already mostly does this -- the Setup tab shows "not configured" for missing values.
+
+But some startup code might fail if `.env.local` is missing. Need to audit:
+- `require('dotenv').config({ path: ... })` -- this is fine, dotenv silently ignores missing files
+- `parseEnvFile()` -- returns empty array if file missing (already handled)
+- Subprocess calls that do `load_dotenv('.env.local')` -- dotenv handles missing files
+
+**Likely OK.** But need to test.
+
+---
+
+### Inch 5: The Deploy button -- Setup App deploys Agent App
+
+**Starting point:** Deploy button calls `bash deploy/deploy.sh`. The script uses `databricks bundle deploy` (DAB CLI).
+
+**Wall:** In DBX App mode, `databricks` CLI might not be installed. And DAB requires a local `databricks.yml`.
+
+**Two options:**
+A. Ensure `databricks` CLI is available in the DBX App runtime (install via pip: `pip install databricks-cli`)
+B. Replace DAB with direct REST API calls
+
+**Option A is simpler for now.** The `databricks` CLI is a Python package. `pip install databricks-cli` makes it available. Then `deploy.sh` works as-is.
+
+**But wait:** `deploy.sh` uses `databricks bundle deploy` which is part of the Databricks CLI v2 (the Go binary), NOT the Python `databricks-cli` package. The Go binary would need to be downloaded separately.
+
+**Hmm.** So Option A might not work easily. The Go binary isn't pip-installable.
+
+**Option B then:** Replace `deploy.sh` with a Python script that calls REST API:
+1. Upload source to workspace files (`/api/2.0/workspace/import`)
+2. Create app (`POST /api/2.0/apps`)
+3. Create deployment (`POST /api/2.0/apps/{name}/deployments`)
+4. Run grants (SDK calls, already in Python)
+
+This is the DAB-less deployment. Actually simpler.
+
+**Deliverable:** New `deploy/deploy_via_api.py` that does the same as `deploy.sh` but via REST API.
+
+---
+
+### Inch 6: What gets uploaded for the Agent App?
+
+**Wall:** When the Setup App deploys the Agent App, what files go up?
+
+**The Agent App needs:**
+- `agent/` -- Python agent runtime (agent.py, start_server.py, genie_capture.py, utils.py)
+- `app/` -- React frontend + Express server (the chat UI)
+- `tools/` -- framework tools (sql_executor.py, ka_factory.py, get_current_time.py) + any domain tools loaded from .forge
+- `data/` -- only the domain data files (populated from .forge)
+- `conf/` -- prompts, KA configs (populated from .forge)
+- `eval/` -- framework eval scripts (optional)
+- `pyproject.toml` + `requirements.txt` -- Python deps
+- `app.yaml` -- generated for this specific project (schema, warehouse, env vars)
+
+**What does NOT go up:**
+- `visual/` -- that's the Setup App, not the Agent App
+- `stash/` -- domain packs stay on the Setup App side
+- `deploy/` -- deploy scripts are Setup App side
+- `scripts/` -- setup scripts are Setup App side
+- `.env.local` -- config is baked into app.yaml env vars
+- `doc/`, `edu/`, `.claude/` -- irrelevant
+
+**Key insight:** The Setup App needs to know which files are "Agent App files" vs "Setup App files". This is a manifest or a well-defined split.
+
+---
+
+### Inch 7: The .forge config injection
+
+**Wall:** The Agent App needs domain-specific config at runtime. Currently it reads `.env.local`. In DBX App mode, config comes from `app.yaml` env vars.
+
+**The Setup App generates `app.yaml` for the Agent App with:**
+```yaml
+command:
+  - "pip install -r requirements.txt && npm install && npm run build:client && npm run start"
+env:
+  - name: PROJECT_UNITY_CATALOG_SCHEMA
+    value: "{from .forge}"
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: "{from .forge}"
+  - name: AGENT_MODEL_ENDPOINT
+    value: "{from .forge}"
+  - name: PROJECT_GENIE_{slug}
+    value: "{from .forge}"
+  - name: PROJECT_KA_{slug}
+    value: "{from .forge}"
+```
+
+**The domain files (prompts, SQL, tools) are written to disk** in the uploaded workspace files before deployment. The agent reads them at startup from relative paths -- same as today.
+
+---
+
+### Inch 8: Multi-project (later)
+
+**NOT NOW.** First get single-project working end-to-end:
+Setup App (DBX App) -> wizard -> .forge -> provision data -> deploy Agent App -> live URL.
+
+Multi-project (save/load/switch) builds on top of a working single-project flow.
+
+---
+
+### Summary: Order of Work
+
+1. **Inch 1-2:** `visual/app.yaml`, port handling -> Setup App deploys as DBX App
+2. **Inch 3:** Test deployment, fix what breaks
+3. **Inch 4:** Handle missing `.env.local` gracefully
+4. **Inch 5:** `deploy_via_api.py` -- DAB-less Agent App deployment
+5. **Inch 6:** Define Agent App file manifest (what gets uploaded)
+6. **Inch 7:** Generate `app.yaml` for Agent App from `.forge` config
+7. **Inch 8:** Multi-project (later)
 
 ---
 
