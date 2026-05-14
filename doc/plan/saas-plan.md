@@ -394,6 +394,176 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 ---
 
+## PART 8b: Local Runtime Dependencies -- The Hidden Inch
+
+### The Problem
+
+Before: user had npm, uv, Python 3.11+, Databricks CLI all installed locally.
+After: none of that exists on the user's machine. It ALL must be available inside the DBX App runtime.
+
+This is not trivial. Let me trace every dependency.
+
+### What the Setup App Backend Spawns
+
+**41 calls to `uv run python`** in `visual/backend/index.js`. Every single one needs:
+1. `uv` binary available
+2. Python 3.11+ available
+3. All packages from `pyproject.toml` installed in a venv
+4. `databricks-sdk`, `mlflow`, `langchain`, `pyyaml`, `python-dotenv`, etc.
+
+**5 calls to `databricks` CLI** (the Go binary, NOT the Python package):
+- `databricks auth profiles` -- list CLI profiles
+- `databricks auth login` -- interactive OAuth login
+- `databricks database list-database-instances` -- list Lakebase instances
+- `databricks database get-database-instance` -- get Lakebase instance
+- `databricks apps get` -- check app status
+
+**2 calls to `bash`:**
+- `bash deploy/run_all_grants.sh` -- runs grant scripts
+- `bash deploy/deploy.sh` -- full deploy pipeline (which itself calls `databricks bundle deploy`)
+
+**Agent App startup (app.yaml) calls:**
+- `uv run python -c "from agent.start_server import main; main()"` -- needs uv + Python
+- Startup hook runs `npm install && npm run build:client` -- needs npm + Node.js
+- Then spawns `node app/server/dist/index.mjs` -- needs Node.js
+
+### What's Available in a Databricks App Runtime?
+
+DBX Apps run in a container. What's in it?
+
+| Tool | Available? | Notes |
+|------|-----------|-------|
+| Python 3.x | YES | Standard in DBX runtime |
+| pip | YES | Standard |
+| uv | NO | Must be installed: `pip install uv` |
+| Node.js | MAYBE | DBX Apps support Node.js apps, so Node must be available. But which version? |
+| npm | MAYBE | If Node.js is available, npm usually is too |
+| bash | YES | Standard Linux container |
+| databricks CLI (Go) | MAYBE | May be pre-installed in the workspace runtime. If not, must download binary. |
+| git | MAYBE | May be available but not guaranteed |
+
+### Millimeter-by-Millimeter: What Breaks
+
+**mm R.1: uv not available**
+- 41 subprocess calls use `uv run python`
+- Fix options:
+  - A: Install uv at startup: `pip install uv && uv sync` in app.yaml command
+  - B: Replace ALL `uv run python` with just `python` (after pip-installing deps)
+  - C: Create a wrapper script that tries `uv run python`, falls back to `python`
+- Option A is cleanest. `uv` is pip-installable. `uv sync` creates the venv from `pyproject.toml`.
+- **BUT:** `uv sync` needs network access to download packages. DBX Apps have internet access? Usually yes.
+- **BUT:** `uv sync` takes time (30-60s). This happens on EVERY app restart. Not just first deploy.
+- Alternative: run `uv sync` once at deploy time, commit the `.venv/` to workspace files. Then `uv run` just uses the existing venv -- fast.
+
+**mm R.2: Python packages not installed**
+- Even if `uv` is installed, the venv needs to be created and populated
+- `pyproject.toml` has 20+ dependencies including large ones (mlflow, langchain, pandas, pyarrow)
+- Full install takes 2-3 minutes
+- If this happens on every restart, startup is painfully slow
+- **Solution:** Install once at deploy time, persist venv in workspace files. Or: use `pip install -r requirements.txt` in the app.yaml command with a requirements.txt that has exact versions (fast pip resolve).
+
+**mm R.3: Databricks CLI (Go binary) not available**
+- 5 direct calls to `databricks` CLI
+- `databricks auth profiles` -- used for listing CLI profiles in the Setup wizard
+- `databricks auth login` -- used for interactive OAuth
+- `databricks database *` -- Lakebase management
+- `databricks apps get` -- deploy status check
+- The Go binary is NOT pip-installable. It's a standalone binary.
+- **In DBX App mode, do we even need the CLI?**
+  - `auth profiles` -- NO. In DBX App mode, auth comes from the SP. No CLI profiles.
+  - `auth login` -- NO. In DBX App mode, no interactive login needed.
+  - `database *` -- YES. But can be replaced with REST API calls.
+  - `apps get` -- YES. But can be replaced with REST API calls.
+- **Decision:** Replace all `databricks` CLI calls with REST API equivalents. This removes the Go binary dependency entirely.
+- Impact: 5 call sites in the backend. Each is a simple SDK/REST call.
+
+**mm R.4: Node.js / npm for Agent App build**
+- Agent App startup: `npm install && npm run build:client && npm run start`
+- This requires Node.js + npm in the Agent App's DBX App runtime
+- The Agent App is a SEPARATE DBX App from the Setup App
+- DBX Apps can be configured for Node.js OR Python. The Agent App needs BOTH.
+- Current `app.yaml` starts with `uv run python` which then spawns Node as a subprocess
+- **This already works today** -- the Agent App is already deployed as a DBX App this way
+- So Node.js IS available in the DBX App runtime (at least for the Agent App)
+- **Question:** Is it available for the Setup App too?
+- The Setup App is Node.js native. Its `app.yaml` would say `node visual/backend/index.js`. So the runtime must have Node.js. YES.
+
+**mm R.5: npm for Setup App**
+- Setup App backend is Node.js with pre-built frontend and committed node_modules
+- No `npm install` needed at runtime for the Setup App itself
+- But if the Setup App needs to build the Agent App's frontend... that happens in the AGENT App's runtime, not the Setup App's.
+- **No npm needed in Setup App runtime.** Just Node.js to run the server.
+
+**mm R.6: The Agent App's startup chain in DBX App mode**
+- `app.yaml`: `uv run python -c "from agent.start_server import main; main()"`
+- This needs: uv + Python + all Python deps + Node.js + npm (for build:client)
+- Today this ALREADY WORKS -- the current Agent App deploys this way
+- The only new thing: the Setup App is what triggers the deploy, instead of `databricks bundle deploy` from a terminal
+- **No change needed for the Agent App's runtime.** It already works.
+
+### Summary: What Must Change
+
+| Dependency | Setup App | Agent App | Action |
+|------------|-----------|-----------|--------|
+| Python 3.x | YES (subprocess) | YES (main) | Available in DBX runtime |
+| uv | YES (41 calls) | YES (startup) | `pip install uv` in startup command |
+| Python packages | YES (via uv sync) | YES (via uv sync) | Install once at deploy/startup |
+| Node.js | YES (main process) | YES (subprocess) | Available in DBX runtime |
+| npm | NO (pre-built) | YES (build:client) | Available with Node.js |
+| databricks CLI (Go) | YES (5 calls) | NO | **REPLACE with REST API** -- removes dependency |
+| bash | YES (2 calls) | NO | Available in Linux container |
+| git | NO | NO | Not needed |
+
+### The 5 Databricks CLI Calls to Replace
+
+| Current Call | Where | REST API Replacement |
+|-------------|-------|---------------------|
+| `databricks auth profiles` | Backend: list profiles for host/model setup | **REMOVE** -- not needed in DBX App mode (no CLI profiles) |
+| `databricks auth login` | Backend: interactive OAuth | **REMOVE** -- not needed in DBX App mode (SP auth) |
+| `databricks database list-database-instances` | Backend: list Lakebase instances | `GET /api/2.0/database/instances` via SDK |
+| `databricks database get-database-instance` | Backend: test Lakebase | `GET /api/2.0/database/instances/{name}` via SDK |
+| `databricks apps get` | Backend: test deploy status | `GET /api/2.0/apps/{name}` via SDK |
+
+These 5 calls become Python SDK calls (WorkspaceClient). The backend already spawns Python for everything else -- same pattern.
+
+**For local mode (C):** The CLI calls still work if the user has the CLI installed. The backend can try the REST API first, fall back to CLI. Or: just always use REST API in the backend, since it works in all modes.
+
+### Startup Command for Setup App
+
+```yaml
+# Setup App app.yaml
+command:
+  - "pip install uv && uv sync && node visual/backend/index.js"
+```
+
+This:
+1. Installs uv (fast, ~5s)
+2. Creates venv and installs Python deps (slow first time, ~2-3 min; fast if .venv persisted)
+3. Starts the Node.js Setup App server
+
+### Startup Optimization
+
+`uv sync` is slow on first run. Options to speed up:
+- **Option A:** Run `uv sync` at deploy time (before starting the app), persist `.venv/` in workspace files
+- **Option B:** Use `pip install -r requirements.txt` instead (no uv needed at all for Setup App -- only Python scripts need packages, not the Node server)
+- **Option C:** Pre-build a Docker layer with deps (if DBX Apps support custom images)
+
+Option B is simplest: `pip install -r requirements.txt && node visual/backend/index.js`
+This eliminates the uv dependency for the Setup App entirely. The Python scripts get packages from the system Python.
+
+But then the backend still calls `uv run python` for subprocess spawning...
+
+**Wait.** `uv run python` is just a way to run Python with the venv activated. If packages are installed system-wide via `pip install`, then just `python` works. The backend needs to call `python` instead of `uv run python`.
+
+**This is a decision point:**
+- **Keep uv:** Install it, use it. Consistent with local mode. Venv isolation.
+- **Drop uv for DBX App mode:** Use system `pip install` + bare `python`. Simpler startup but different behavior between local and DBX App modes.
+- **Abstract it:** Backend calls a helper function `pythonCmd()` that returns `['uv', 'run', 'python']` locally or `['python']` in DBX App mode.
+
+The abstraction is the right answer. Same pattern as ConfigProvider -- detect mode, use appropriate command.
+
+---
+
 ## PART 9: Current State
 
 - [x] Domain extraction complete (stash/airops/)
