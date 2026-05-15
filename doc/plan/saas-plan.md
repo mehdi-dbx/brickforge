@@ -1423,5 +1423,38 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Uploaded 787 files, ~175MB. Actual need: ~150 files, ~13MB.
 - **156MB trash:** `app/client/node_modules/` (100MB), `app/server/node_modules/` (18MB), `app/packages/` (38MB)
 - None of these are needed: pre-built `dist/` is included for both client and server.
-- Fix: exclude these 3 dirs + INCLUDE `visual/backend/node_modules/` (8MB, required).
-- Expected result: 10x smaller upload, 10x faster.
+
+### 2026-05-15 17:00 -- Upload script v3 (fixed exclusions)
+- Fixed to include `visual/backend/node_modules/` (8MB required)
+- Result: 1687 files uploaded. WORSE than before (787). node_modules alone = 1088 files.
+- The "10x reduction" was wrong. Removed 156MB of trash but added 1088 node_modules files.
+
+### 2026-05-15 17:10 -- Rethink: why upload file by file at all?
+- The upload script calls `w.workspace.import_()` per file. 594 files = 594 API calls. Slow.
+- `visual/backend/node_modules/` = 1088 files for 4 actual deps (dotenv, express, multer, js-yaml).
+- **Better: `npm ci` at startup** instead of uploading node_modules. 2 files (package.json + lock) instead of 1088.
+- **Even better: zip the whole app** (594 files -> 5.3MB zip, 1 upload, unzip at startup).
+
+### 2026-05-15 17:15 -- Reality check: USE THE CLI
+- `databricks apps deploy brickforge-setup --source-code-path .` does everything in one command.
+- CLI handles file upload, deployment creation, waiting. No custom upload script needed.
+- **I reinvented the wheel** with a 100-line upload script doing 594 individual API calls.
+- **Fix: use the CLI for Setup App deployment. It's installed, the profile works.**
+
+### Decision split:
+- **Setup App deploy (from terminal):** `databricks apps deploy` CLI. One command.
+- **Agent App deploy (from Setup App, Inch 5):** SDK + zip upload. One API call + unzip at startup. No CLI available inside DBX App.
+- **Startup command:** `npm ci` for backend deps instead of uploading node_modules.
+
+### 2026-05-15 17:50 -- Second deploy via CLI
+- CLI deploy succeeded. App status: RUNNING. Logs show `uv sync` + `node` started.
+- BUT: "App Not Available" in browser.
+- **Root cause:** `setup-app.yaml` hardcoded `DATABRICKS_APP_PORT=9000`, overriding platform-injected port.
+- **Fix:** removed hardcoded env var. Let platform inject `DATABRICKS_APP_PORT`. Backend reads it.
+- Redeploying with fix.
+
+### 2026-05-15 18:00 -- Strategy correction
+- Deploying early was wrong. Build and test locally first, deploy when ready.
+- Everything except 3 trivial DBX-runtime checks works locally.
+- Proceeding with local development: ForgeConfigProvider, agent deploy, .forge injection.
+- Will deploy once when all code is ready.

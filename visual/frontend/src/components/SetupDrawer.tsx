@@ -1021,6 +1021,8 @@ export function SetupDrawer({
   const [instanceTest, setInstanceTest] = useState<TestResult>({ status: 'idle', message: '' })
   const [instanceTools, setInstanceTools] = useState<{ name: string; description: string }[] | null>(null)
   const [toolsLoading, setToolsLoading] = useState(false)
+  const [featureKeyInput, setFeatureKeyInput] = useState('')
+  const [featureKeySaving, setFeatureKeySaving] = useState(false)
 
   // Test a specific instance by env key
   const handleInstanceTest = useCallback(async (key: string) => {
@@ -1551,6 +1553,46 @@ export function SetupDrawer({
                   <span className="text-dbx-gray-500">test connection</span>
                 )}
               </button>
+
+              {/* Voice feature: API key configuration */}
+              {activeStep === 'features' && selectedInstanceKey === 'PROJECT_TOOL_VOICE' && (
+                <div className="mt-4">
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">openai api key</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={featureKeyInput}
+                      onChange={(e) => setFeatureKeyInput(e.target.value)}
+                      placeholder="sk-..."
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                    />
+                    <button
+                      disabled={!featureKeyInput.trim() || featureKeySaving}
+                      onClick={async () => {
+                        setFeatureKeySaving(true)
+                        try {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ OPENAI_API_KEY: featureKeyInput.trim() }),
+                          })
+                          setFeatureKeyInput('')
+                          // Re-test after saving
+                          handleInstanceTest(selectedInstanceKey)
+                          onRefresh()
+                        } catch {}
+                        setFeatureKeySaving(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {featureKeySaving ? 'saving...' : 'save & test'}
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
+                    writes OPENAI_API_KEY to .env.local
+                  </div>
+                </div>
+              )}
 
               {/* Tools list for MCP/A2A */}
               {['mcp', 'a2a'].includes(activeStep) && (
