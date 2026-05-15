@@ -1348,3 +1348,67 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - [x] Nuclear scan: zero domain references in framework
 - [x] Git checkpoint: tag `pre-saas-transition` on branch `forge-saas-databricks`
 - [x] dbc/ courseware isolated to `forge-dbc` branch
+
+---
+
+## IMPLEMENTATION LOGBOOK (append-only, never rewrite)
+
+### 2026-05-15 16:20 -- Wave 1 Track A
+- Created `setup-app.yaml`: `command: ["bash", "-c", "uv sync && node visual/backend/index.js"]`
+- Fixed port in `visual/backend/index.js`: `DATABRICKS_APP_PORT || VISUAL_PORT || 9000`
+- Committed: `c867dfc`
+
+### 2026-05-15 16:22 -- Wave 1 Tracks B+C launched in parallel worktrees
+- Track B (worktree `agent-ab9e1e22`): ConfigProvider + 20 call site refactor in `index.js`
+- Track C (worktree `agent-ade58701`): `tools/tool_factory.py` + `doc/plan/agent-app-manifest.md`
+
+### 2026-05-15 16:25 -- Track C completed
+- `tools/tool_factory.py` created: `create_sql_read_tool()`, `create_action_tool()`, `discover_forge_tools()`
+- `doc/plan/agent-app-manifest.md` created: Agent App vs Setup App file split
+- Committed on worktree: `0f032a8`
+
+### 2026-05-15 16:28 -- Track B completed
+- `visual/backend/lib/config-provider.js` created: ConfigProvider interface + LocalConfigProvider
+- 20 call sites in `index.js` refactored to use `config.xxx()`
+- Committed on worktree: `b60c9b3`
+
+### 2026-05-15 16:30 -- Worktree merge
+- Cherry-picked `b60c9b3` (Track B) onto `forge-saas-databricks`: `e65cb27`
+- Cherry-picked `0f032a8` (Track C) onto `forge-saas-databricks`: `c739e4e`
+- Auto-merged `index.js` (Track A port fix + Track B ConfigProvider) -- no conflicts
+- Cleaned up worktrees and branches
+
+### 2026-05-15 16:32 -- Inch 3: First deploy attempt
+- Generated fresh PAT from CLI profile `fevm-agent-forge`: `dapie983a64c73c...`
+- Updated `.env.local` with new token
+- Created app: `POST /api/2.0/apps` -> `brickforge-setup` created
+- URL assigned: `https://brickforge-setup-7474654358736177.aws.databricksapps.com`
+
+### 2026-05-15 16:34 -- Upload source to workspace
+- Created upload script `/tmp/upload_setup_app_v2.py`
+- Created 79 directories via `w.workspace.mkdirs()`
+- Uploaded 787 files via `w.workspace.import_()`, 0 errors
+- Destination: `/Workspace/Users/mehdi.lamrani@databricks.com/brickforge-setup`
+
+### 2026-05-15 16:36 -- Deploy triggered
+- `POST /api/2.0/apps/brickforge-setup/deployments` -> `01f1506adbd314baa4b8fb45c22736fd`
+- Status: IN_PROGRESS -> Installing packages -> Starting app
+
+### 2026-05-15 16:39 -- Deploy SUCCEEDED then CRASHED
+- Deployment status: SUCCEEDED at 14:39:07
+- App status: CRASHED at 14:39:09 (2 seconds later)
+- Startup command executed: `bash -c uv sync && node visual/backend/index.js`
+- `uv sync` succeeded (packages installed)
+- Node.js started then crashed immediately
+
+### 2026-05-15 16:40 -- Crash diagnosis
+- Checked logs via `databricks apps logs brickforge-setup`
+- **Root cause: `Error: Cannot find module 'dotenv'`**
+- The upload script excluded ALL `node_modules/` directories
+- `visual/backend/node_modules/` (8MB, committed, required by the Setup App) was excluded
+- Node.js v22.16.0 confirmed available in DBX App runtime
+
+### 2026-05-15 16:41 -- Root cause identified
+- **Bug location:** Upload script `/tmp/upload_setup_app_v2.py` line: `EXCLUDE = {"node_modules", ...}`
+- **Fix needed:** Exclude `node_modules` EXCEPT `visual/backend/node_modules/` which must be uploaded
+- **Principle:** Fix the automated process, not the instance. Re-run after fix.
