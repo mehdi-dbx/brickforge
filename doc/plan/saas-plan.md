@@ -552,6 +552,8 @@ Domain files (prompts, SQL, tools) written to workspace files before deploy.
 
 Position: after deploy. User configures, deploys, tests, THEN pushes to git.
 
+**Key insight: NO PAT entry needed.** Databricks already has Git Credentials configured per user (Settings > Developer > Git integration). The Setup App uses those stored credentials. User only provides the repo URL.
+
 **UI -- Setup step choices:**
 ```
 source control
@@ -560,25 +562,38 @@ source control
   [3] skip
 ```
 
-**Configure phase -- user provides:**
-1. Repo URL: `https://github.com/user/my-agent.git` (user creates empty repo on GitHub first)
-2. PAT: personal access token with `repo` scope (password-masked input)
-3. Branch: default `main`
+**Configure phase -- user provides ONE field:**
+1. Repo URL: `https://github.com/user/my-agent.git`
+
+That's it. No PAT. No token. No OAuth. Databricks handles git auth via stored credentials.
+
+**Pre-check:** Setup App calls `w.git_credentials.list()`:
+- Credentials exist -> proceed (zero friction)
+- No credentials -> show: "Connect GitHub in Databricks Settings > Developer > Git integration" OR offer one-time PAT entry via `w.git_credentials.create(git_provider, git_username, personal_access_token)` -- stored by Databricks forever, never asked again.
 
 **Execute phase -- fully automated, SSE stream:**
-1. Generate project files from `.forge` + agent bundle (in memory)
-2. Push ALL files to GitHub in ONE commit via Git Data API:
-   - `POST /repos/{owner}/{repo}/git/blobs` -- create blob per file
-   - `POST /repos/{owner}/{repo}/git/trees` -- create tree with all blobs
-   - `POST /repos/{owner}/{repo}/git/commits` -- create commit
-   - `PATCH /repos/{owner}/{repo}/git/refs/heads/main` -- update branch
-3. Create Databricks Git Folder: `w.repos.create(url, provider="github")`
-4. Store PAT in Databricks Secrets (`scope="brickforge", key="github_pat"`)
-5. Store repo URL + branch in `.forge` config
+1. Create Databricks Git Folder linked to repo: `w.repos.create(url, provider="github")` -- uses stored git credentials
+2. Write ALL generated project files into the Git Folder: `w.workspace.import_(path="/Repos/user/repo/file.py", content, format)` per file
+3. Submit one-shot Databricks job to commit + push:
+   ```python
+   import subprocess
+   repo_path = "/Workspace/Repos/user/repo"
+   subprocess.run(["git", "add", "."], cwd=repo_path)
+   subprocess.run(["git", "commit", "-m", "BrickForge: initial project"], cwd=repo_path)
+   subprocess.run(["git", "push"], cwd=repo_path)
+   ```
+   Job runs on serverless compute, uses workspace git credentials. No tokens needed.
+4. Store repo URL in `.forge` config
 
-**Result:** Code is on GitHub AND browsable in Databricks. Zero manual git operations.
+**Result:** Code is on GitHub AND browsable in Databricks. Zero manual git operations. No PAT paste. No OAuth flow.
 
-**Subsequent pushes:** Repo URL in `.forge`, PAT in Secrets. User clicks "Push" again after changes -- new commit, same repo. No re-entry.
+**Why this works:**
+- `w.repos.create()` uses Databricks-stored git credentials (not app credentials)
+- `w.workspace.import_()` writes to `/Repos/` paths (Git Folders are workspace objects)
+- One-shot job runs `git commit && git push` using workspace-level git auth
+- User already has GitHub connected to Databricks (standard setup)
+
+**Subsequent pushes:** Repo URL in `.forge`. Files updated in Git Folder. Job re-submitted. New commit pushed. One click.
 
 **.forge config section:**
 ```yaml
@@ -587,17 +602,18 @@ config:
     provider: github
     repo_url: "https://github.com/user/my-agent.git"
     branch: main
-    # PAT in Databricks Secrets, NOT here
+    # No PAT here. Databricks handles git auth via stored credentials.
 ```
 
 **Implementation:**
 - New `StepId: 'git'` in `types.ts`
 - New step in `setupSteps.ts` with choices cfg-github / cfg-gitlab / done
-- New backend action `exec-github-push` in `index.js` (Python subprocess calling GitHub API)
+- Backend pre-check: `w.git_credentials.list()`
+- Backend actions: `exec-git-push` (create repo, write files, submit commit job)
 - `SetupDag` icon: `GitBranch` from lucide
-- `SetupDrawer` configure: 3 input fields
+- `SetupDrawer` configure: 1 input field (repo URL)
 
-**GitLab:** Same pattern, simpler API (`POST /api/v4/projects/{id}/repository/commits` supports multi-file in ONE call). GitHub first, GitLab later.
+**GitLab:** Same pattern, same flow. Databricks Git Credentials support GitLab too.
 
 ### Inch 9: Multi-Project (later)
 
@@ -670,7 +686,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 |---|----------|--------|--------|
 | G1 | How does user access generated project? | Automated push to GitHub/GitLab via Git Data API + auto-created Databricks Git Folder. Also: export via CLI or download button. | DECIDED |
 | G2 | Does Setup App know when user edits externally? | No, and doesn't need to. Once pushed, user owns it. | DECIDED |
-| G3 | Git integration? | AUTOMATED. Setup App pushes to user's GitHub/GitLab repo via Git Data API (4 API calls, one commit). Then creates DBX Git Folder linked to that repo. User provides repo URL + PAT. PAT stored in Databricks Secrets. | DECIDED |
+| G3 | Git integration? | AUTOMATED. No PAT entry. Uses Databricks-stored git credentials. Setup App creates Git Folder, writes files, submits job to commit+push. User provides repo URL only. | DECIDED |
 | G4 | CI/CD story? | User's own pipeline. Code is in git, push triggers CI/CD. Standard DAB bundle. | DECIDED |
 
 ### H. Multi-Project
