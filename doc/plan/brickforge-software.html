@@ -347,7 +347,7 @@
   <a href="#ch3"><span class="toc-num">7.</span> Challenge 3: .env.local Eradication</a>
   <a href="#ch4"><span class="toc-num">8.</span> Challenge 4: Tool Generation at Runtime</a>
   <a href="#ch5"><span class="toc-num">9.</span> Challenge 5: Data Provisioning Without Local Scripts</a>
-  <a href="#ch6"><span class="toc-num">10.</span> Challenge 6: Agent App Deployment Without DAB CLI</a>
+  <a href="#ch6"><span class="toc-num">10.</span> Challenge 6: Agent App Deployment -- DAB Preserved</a>
   <a href="#ch7"><span class="toc-num">11.</span> Challenge 7: Prompts / Knowledge Base</a>
   <a href="#configprovider"><span class="toc-num">12.</span> ConfigProvider Pattern</a>
   <a href="#runtime-deps"><span class="toc-num">13.</span> Runtime Dependencies (8b)</a>
@@ -882,52 +882,71 @@
 <!-- ============================================================ -->
 <!-- 12. CHALLENGE 6                                               -->
 <!-- ============================================================ -->
-<h2 id="ch6" class="red">10. Challenge 6: Agent App Deployment Without DAB CLI</h2>
+<h2 id="ch6" class="red">10. Challenge 6: Agent App Deployment -- DAB Preserved</h2>
+
+<p><strong>DAB and <code>app.yaml</code> are Databricks platform standards. They MUST be preserved.</strong> This project needs internal validation -- going against the platform is not an option.</p>
 
 <div class="before-after">
   <div class="ba-card before">
-    <h4>Current State</h4>
-    <p>DAB CLI (Go binary) used for deploy. Not pip-installable.</p>
+    <h4>Two Layers</h4>
+    <p><strong>Resource creation</strong> (tables, functions, genie, KA, experiments) via SDK during wizard. <strong>Deployment</strong> (packaging agent + deploying as App) via DAB.</p>
   </div>
   <div class="ba-card after">
     <h4>Target State</h4>
-    <p>DAB-less deploy via REST API only.</p>
+    <p>Setup App generates <code>databricks.yml</code> + <code>app.yaml</code> from <code>.forge</code> config. Deploys via DAB (Python SDK or CLI). Resource bindings, SP grants handled by DAB.</p>
   </div>
 </div>
 
-<h3>REST API Approach</h3>
+<h3>Deploy Flow (DAB-compatible)</h3>
 <table>
   <thead>
-    <tr><th>Step</th><th>Action</th><th>API</th></tr>
+    <tr><th>Step</th><th>Action</th><th>Mechanism</th></tr>
   </thead>
   <tbody>
     <tr>
       <td>1</td>
-      <td>Upload files to workspace files</td>
-      <td>Individual PUT calls, parallelized</td>
+      <td>Provision resources (tables, functions, genie, KA, experiment)</td>
+      <td>SDK calls during wizard -- already done before deploy</td>
     </tr>
     <tr>
       <td>2</td>
-      <td>Generate <code>app.yaml</code> with env vars from <code>.forge</code></td>
-      <td>File generation</td>
+      <td>Generate <code>databricks.yml</code> from <code>.forge</code></td>
+      <td>Template + config injection (resources, targets, app name, bindings)</td>
     </tr>
     <tr>
       <td>3</td>
-      <td>Create app</td>
-      <td><code>POST /api/2.0/apps</code></td>
+      <td>Generate <code>app.yaml</code> from <code>.forge</code></td>
+      <td>Template + config injection (startup command, env vars)</td>
     </tr>
     <tr>
       <td>4</td>
-      <td>Create deployment with source path</td>
-      <td><code>POST /api/2.0/apps/{name}/deployments</code></td>
+      <td>DAB deploy</td>
+      <td><code>databricks bundle deploy</code> (CLI) or Python SDK <code>w.apps.deploy()</code></td>
     </tr>
     <tr>
       <td>5</td>
-      <td>Run grants</td>
+      <td>Resource bindings applied</td>
+      <td>Automatic by DAB (experiment, warehouse, genie, endpoint bound to app SP)</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Post-deploy grants</td>
       <td>SDK grant calls</td>
     </tr>
   </tbody>
 </table>
+
+<h3>Why DAB for Deployment</h3>
+<ul>
+  <li>Databricks platform standard -- required for internal validation</li>
+  <li>Resource binding is declarative in <code>databricks.yml</code></li>
+  <li>SP permissions auto-applied via resource bindings</li>
+  <li>Workspace state tracking (<code>.databricks/bundle/</code>)</li>
+  <li>Reproducible: same <code>databricks.yml</code> = same deployment</li>
+</ul>
+
+<h3>Stash Includes Bundle Configs</h3>
+<p><code>app.yaml</code> and <code>databricks.yml</code> are project artifacts, part of the stash. Setup App generates project-specific versions by injecting <code>.forge</code> config values into templates at deploy time.</p>
 
 <!-- ============================================================ -->
 <!-- 13. CHALLENGE 7                                               -->
@@ -1936,7 +1955,7 @@ brickforge deploy-setup --workspace https://xxx.cloud.databricks.com</pre>
     <tr>
       <td>C4</td>
       <td>DAB CLI Go binary pip-installable?</td>
-      <td>No. Confirmed: must use REST API (DAB-less deploy).</td>
+      <td>No. But Python SDK has apps API (<code>w.apps.create/deploy</code>). DAB format preserved, Go binary not needed.</td>
       <td><span class="badge decided">Decided</span></td>
     </tr>
     <tr>
@@ -2138,7 +2157,7 @@ brickforge deploy-setup --workspace https://xxx.cloud.databricks.com</pre>
 <p><strong>Short-term:</strong> <code>.env.local</code> written at runtime, lost on restart. User must reconfigure.</p>
 <p><strong>Long-term:</strong> ConfigProvider reads/writes <code>.forge</code> on UC Volume. Persists across restarts.</p>
 
-<h3>Inch 5: DAB-less Agent Deploy</h3>
+<h3>Inch 5: Agent Deploy via Python SDK (DAB-compatible)</h3>
 <p>Replace <code>deploy.sh</code> (DAB CLI) with <code>deploy_via_api.py</code> (REST API).</p>
 <p>Upload source to workspace files &rarr; generate <code>app.yaml</code> &rarr; call Apps API &rarr; grants.</p>
 

@@ -65,6 +65,37 @@ The visual Setup App (currently `visual/`) IS the product. It:
 | Notebooks? | STRICTLY PROHIBITED -- code-first only |
 | `.env.local` in SaaS? | DOES NOT EXIST -- `.forge` is the config. ConfigProvider abstraction handles both modes. |
 | User owns code? | YES -- Setup App generates a project the user can download, edit, CI/CD |
+| DAB / Asset Bundles | PRESERVED -- `databricks.yml` + `app.yaml` are Databricks standards, part of every project stash |
+| Resource creation vs deployment | Resources (tables, functions, genie, KA) via SDK. Deployment via DAB. Two separate steps. |
+
+---
+
+## PART 2b: Databricks Platform Alignment
+
+This project needs to be validated by Databricks internal authorities. It must align with corporate guidelines and be as close to a Databricks product as possible.
+
+### Standards Followed
+
+| Databricks Standard | How BrickForge Uses It |
+|---------------------|----------------------|
+| **Databricks Asset Bundles (DAB)** | `databricks.yml` defines bundle config, resources, targets. Generated per project from `.forge`. Used for deployment. |
+| **app.yaml** | Databricks Apps runtime manifest. Defines startup command, env vars. Generated per project from `.forge`. |
+| **Unity Catalog** | All data assets (tables, functions, procedures, volumes) in UC. Schema per project. |
+| **Databricks Apps** | Both Setup App and Agent App deploy as Databricks Apps. Standard SP auth model. |
+| **Genie Spaces** | Agent uses Genie via MCP. Space IDs in `.forge` config, bound as DAB resources. |
+| **Knowledge Assistants** | KA endpoints provisioned via SDK. Endpoint names in `.forge` config. |
+| **Model Serving** | Foundation Model API endpoints. Bound as DAB serving_endpoint resources. |
+| **MLflow** | Experiment tracking for eval pipeline. Bound as DAB experiment resource. |
+| **Databricks SDK (Python)** | All API calls use official `databricks-sdk`. No raw REST calls where SDK exists. |
+| **UC Volumes** | Stash storage, KA document storage, CSV seed data. |
+| **Secrets** | Cross-workspace tokens stored in Databricks Secrets scope. |
+
+### What We Do NOT Do
+
+- No custom auth mechanisms -- use Databricks SSO / SP / CLI profiles
+- No custom deployment pipelines -- use DAB
+- No custom resource management -- use UC + SDK
+- No notebooks -- code-first, but all code follows Databricks SDK patterns
 
 ---
 
@@ -147,6 +178,8 @@ config:
 ```
 stash/airops/
   airops.forge          # manifest + config
+  app.yaml              # Agent App runtime manifest (template, populated from .forge config)
+  databricks.yml        # DAB bundle config (template, populated from .forge config)
   tools/                # domain tool Python files
   data/csv/             # seed CSVs
   data/init/            # DDL SQL
@@ -157,6 +190,8 @@ stash/airops/
   eval/                 # eval dataset
   app/components/       # domain React card components
 ```
+
+`app.yaml` and `databricks.yml` are part of the stash because they are Databricks platform deployment artifacts. The Setup App generates project-specific versions by injecting `.forge` config values into these templates at deploy time.
 
 ### How Stashes Are Created
 1. **By extraction** -- airops was extracted from the original codebase (already done)
@@ -273,16 +308,52 @@ In SaaS: reads SQL content from `.forge` sidecar files in UC Volume.
 Setup App copies from UC Volume to workspace files at deploy time.
 Python scripts get env vars via subprocess injection -- they work without `.env.local`.
 
-### Challenge 6: Agent App Deployment Without DAB CLI
+### Challenge 6: Agent App Deployment -- DAB Preserved
 
-DAB CLI (Go binary) is not pip-installable. Must go DAB-less.
+**DAB (Databricks Asset Bundles) and `app.yaml` are Databricks platform standards. They MUST be preserved.**
 
-REST API approach:
-1. Upload files to workspace files (individual PUT calls, parallelized)
-2. Generate `app.yaml` with env vars from `.forge`
-3. `POST /api/2.0/apps` to create
-4. `POST /api/2.0/apps/{name}/deployments` with source path
-5. Run grants via SDK
+This project needs to be validated by Databricks internal authorities and must align with corporate guidelines. Going "DAB-less" would be going against the platform -- wrong move.
+
+**What changes:** The Setup App generates `databricks.yml` + `app.yaml` per project from `.forge` config, then deploys via the Databricks Python SDK (which has bundle/apps API support -- no Go binary needed).
+
+**What stays:**
+- `app.yaml` -- runtime manifest (startup command, env vars). Generated per project from `.forge`.
+- `databricks.yml` -- bundle config (resources: experiments, warehouses, genie spaces, endpoints, apps). Generated per project from `.forge`.
+- DAB resource binding -- experiments, warehouses, genie spaces, serving endpoints bound to the app SP.
+
+**Two layers:**
+1. **Resource creation** (tables, functions, genie spaces, KA endpoints, experiments) -- done via REST API / SDK calls during the setup wizard. This is the provisioning step.
+2. **Deployment** (packaging the agent code + config and deploying it as a Databricks App) -- done via DAB (Databricks Asset Bundles). `databricks.yml` defines the bundle, `app.yaml` defines the runtime. DAB handles resource binding, SP grants, and code upload.
+
+**Deploy flow:**
+1. Setup App provisions resources via SDK (tables, functions, genie, KA, experiment) -- already done during wizard steps
+2. Setup App generates `databricks.yml` from `.forge` config (resources, targets, app name, bindings)
+3. Setup App generates `app.yaml` from `.forge` config (startup command, env vars)
+4. DAB deploys the bundle: `databricks bundle deploy` (or SDK equivalent)
+5. DAB handles: code upload, app creation, resource binding, SP setup
+6. Post-deploy grants via SDK
+
+**Why DAB for deployment:**
+- Databricks platform standard -- required for internal validation
+- Resource binding (experiment, warehouse, genie, endpoint) is declarative in `databricks.yml`
+- SP permissions auto-applied via resource bindings
+- Workspace state tracking (`.databricks/bundle/` state)
+- Reproducible: same `databricks.yml` = same deployment
+
+**Why SDK for resource creation:**
+- Interactive wizard flow -- user creates resources step by step
+- Resources exist BEFORE deployment (tables must exist for genie space to query them)
+- SDK provides immediate feedback (success/failure per resource)
+
+**The `.forge` stash includes:**
+- `app.yaml` template -- populated from `.forge` config at deploy time
+- `databricks.yml` template -- populated from `.forge` config at deploy time
+- Both are project artifacts, part of the stash, versioned with the project
+
+**DAB CLI Go binary vs Python SDK:**
+- For local mode (C): user can use `databricks bundle deploy` CLI directly
+- For DBX App modes (A/B): Setup App uses Python SDK `databricks.sdk.service.apps` API or shells out to `databricks` CLI if available in runtime
+- Both paths produce the same result -- DAB bundle deployed
 
 ### Challenge 7: Prompts / Knowledge Base
 
@@ -347,10 +418,9 @@ Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, C
 **Short-term:** `.env.local` written at runtime, lost on restart. User must reconfigure.
 **Long-term:** ConfigProvider reads/writes `.forge` on UC Volume. Persists across restarts.
 
-### Inch 5: DAB-less Agent Deploy
+### Inch 5: Agent Deploy via Python SDK (DAB-compatible)
 
-Replace `deploy.sh` (DAB CLI) with `deploy_via_api.py` (REST API).
-Upload source to workspace files -> generate `app.yaml` -> call Apps API -> grants.
+Setup App generates `databricks.yml` + `app.yaml` from `.forge` config, uploads source files, deploys via Databricks Python SDK (`w.apps.create()`, `w.apps.deploy()`). DAB resource bindings preserved. No Go binary needed -- SDK handles it.
 
 ### Inch 6: Agent App File Manifest
 
@@ -396,7 +466,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 | C1 | Exact REST API for workspace file upload? | Workspace Files API or `PUT /api/2.0/workspace/import`. Verify exact endpoint on implementation. | NEEDS VERIFICATION |
 | C2 | Does Apps API accept workspace file path? | Verify on implementation. | NEEDS VERIFICATION |
 | C3 | Parallel file upload rate limits? | Test on implementation. 50-100 small files should be fine. | NEEDS TESTING |
-| C4 | DAB CLI Go binary pip-installable? | No. Confirmed: must use REST API (DAB-less deploy). | CONFIRMED |
+| C4 | DAB CLI Go binary pip-installable? | No. But Databricks Python SDK has apps API (`w.apps.create/deploy`). DAB format preserved, Go binary not needed. | DECIDED |
 | C5 | Can Setup App SP grant to Agent App SP? | SP can grant UC permissions via SDK. Same pattern as existing grant scripts. Verify on implementation. | NEEDS VERIFICATION |
 
 ### D. Stash Format & Loading
