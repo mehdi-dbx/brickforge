@@ -9,9 +9,10 @@ import { SetupView } from './components/SetupView'
 import { DataView } from './components/DataView'
 import { CleanupView } from './components/CleanupView'
 import { KaDocsView } from './components/KaDocsView'
+import { StashHealthView } from './components/StashHealthView'
 import type { GraphResponse, ArchNode, ArchNodeData } from './types'
 
-type View = 'arch' | 'setup' | 'data' | 'ka' | 'cleanup'
+type View = 'arch' | 'setup' | 'data' | 'ka' | 'stash' | 'cleanup'
 
 export default function App() {
   const [view, setView]         = useState<View>('setup')
@@ -253,6 +254,7 @@ export default function App() {
               ['data', 'Data'],
               ['ka', 'Docs'],
               ['arch', 'Architecture'],
+              ['stash', 'Stash'],
               ['cleanup', 'Cleanup'],
             ] as [View, string][]).map(([v, label]) => (
               <button
@@ -335,6 +337,8 @@ export default function App() {
           <DataView />
         ) : view === 'ka' ? (
           <KaDocsView />
+        ) : view === 'stash' ? (
+          <StashHealthView />
         ) : (
           <CleanupView />
         )}

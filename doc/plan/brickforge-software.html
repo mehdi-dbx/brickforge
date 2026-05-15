@@ -747,9 +747,10 @@ WORKSPACE (live)
 <span class="str">[+]</span> Genie space               accessible
 <span class="comment">[!]</span> KA endpoint               PENDING (not yet ACTIVE)</pre>
 
-<p><strong>Implementation:</strong></p>
+<p><strong>Implementation (Implemented):</strong></p>
 <ul>
-  <li>Backend: <code>GET /api/stash/health?name=airops</code> -- runs 5-step verification, returns structured JSON</li>
+  <li>Backend: <code>GET /api/stash/health</code> -- scans stash directory, parses <code>.forge</code> manifests, verifies all referenced files exist. Returns structured JSON with per-file status (found/missing/empty), manifest validity, and file counts.</li>
+  <li>Response shape: <code>{ stash, manifest_valid, files: [{ path, status, detail }], summary: { ok, missing, warnings } }</code></li>
   <li>Frontend: <code>StashHealthView</code> component -- renders checklist with orbs and action buttons</li>
   <li>Each [x] item has a contextual action button (Generate, Provision, Create) triggering the relevant wizard step</li>
   <li>[Fix All] runs all missing provisions in sequence</li>
@@ -941,6 +942,23 @@ WORKSPACE (live)
   <div class="fbox red">UC tables/functions</div>
 </div>
 
+<h3>FORGE_STASH_DIR: Stash-Aware Data Provisioning (Implemented)</h3>
+<p>When the env var <code>FORGE_STASH_DIR</code> is set, the provisioning scripts resolve all data file paths relative to that directory instead of the default local paths. Implemented in:</p>
+<ul>
+  <li><code>data/create_all_assets.py</code> -- tables DDL + seed CSV</li>
+  <li><code>data/create_all_functions.py</code> -- UC function SQL files</li>
+  <li><code>data/create_all_procedures.py</code> -- stored procedure SQL files</li>
+</ul>
+<pre><span class="cmt"># Injected by backend when running from SaaS mode:</span>
+env[<span class="str">'FORGE_STASH_DIR'</span>] = <span class="str">'/path/to/stash/airops'</span>
+
+<span class="cmt"># Inside the scripts -- path resolution:</span>
+stash_dir = os.environ.get(<span class="str">'FORGE_STASH_DIR'</span>)
+<span class="kw">if</span> stash_dir:
+    sql_path = os.path.join(stash_dir, <span class="str">'data/func'</span>, filename)
+<span class="kw">else</span>:
+    sql_path = os.path.join(<span class="str">'data/func'</span>, filename)  <span class="cmt"># local default</span></pre>
+
 <!-- ============================================================ -->
 <!-- 12. CHALLENGE 6                                               -->
 <!-- ============================================================ -->
@@ -1010,6 +1028,48 @@ WORKSPACE (live)
 <h3>Stash Includes Bundle Configs</h3>
 <p><code>app.yaml</code> and <code>databricks.yml</code> are project artifacts, part of the stash. Setup App generates project-specific versions by injecting <code>.forge</code> config values into templates at deploy time.</p>
 
+<h3>Deployment Scripts (Implemented)</h3>
+<p>Three Python scripts under <code>deploy/</code> replace all bash deploy logic:</p>
+<table>
+  <thead>
+    <tr><th>Script</th><th>What it does</th><th>Mechanism</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>deploy/deploy_setup_app.py</code></td>
+      <td>Deploys the Setup App to Databricks</td>
+      <td>Calls Databricks CLI for app create/update. No bash wrapper needed.</td>
+    </tr>
+    <tr>
+      <td><code>deploy/deploy_agent_app.py</code></td>
+      <td>Deploys the Agent App to Databricks</td>
+      <td>Generates <code>app.yaml</code> + <code>databricks.yml</code> from <code>.forge</code> config, builds zip bundle of agent files, uploads to workspace files via SDK, calls Apps REST API (<code>w.apps.deploy()</code>).</td>
+    </tr>
+    <tr>
+      <td><code>deploy/git_push.py</code></td>
+      <td>Automated git push via Databricks Git Folders</td>
+      <td>Uses <code>w.repos</code> and workspace file write APIs. No PAT required -- uses Databricks-stored git credentials.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Grant Script (Implemented)</h3>
+<p><code>deploy/grant/run_all_grants.py</code> replaces the old <code>deploy/run_all_grants.sh</code> bash script. Cross-platform (no bash dependency). 7 grant steps executed in sequence:</p>
+<table>
+  <thead>
+    <tr><th>Step</th><th>Grant</th><th>Mechanism</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Tables</td><td>Python script via SDK</td></tr>
+    <tr><td>2</td><td>UC Functions</td><td>Python script via SDK</td></tr>
+    <tr><td>3</td><td>SQL Warehouse</td><td>Python script via SDK</td></tr>
+    <tr><td>4</td><td>Model Endpoints</td><td>Python script via SDK</td></tr>
+    <tr><td>5</td><td>Genie spaces</td><td>Python script via SDK</td></tr>
+    <tr><td>6</td><td>Lakebase</td><td>Python script via SDK</td></tr>
+    <tr><td>7</td><td>Secrets</td><td>Python SDK directly (NOT CLI -- eliminates Go binary dependency for this step)</td></tr>
+  </tbody>
+</table>
+
 <!-- ============================================================ -->
 <!-- 13. CHALLENGE 7                                               -->
 <!-- ============================================================ -->
@@ -1044,32 +1104,55 @@ WORKSPACE (live)
 <!-- ============================================================ -->
 <h2 id="configprovider" class="purple">12. ConfigProvider Pattern</h2>
 
-<h3>Interface</h3>
-<pre><span class="kw">class</span> ConfigProvider:
-    <span class="kw">def</span> get(key) &rarr; str | None
-    <span class="kw">def</span> set(key, value) &rarr; void
-    <span class="kw">def</span> list() &rarr; dict
-    <span class="kw">def</span> toggle(key) &rarr; void
-    <span class="kw">def</span> to_env_dict() &rarr; dict   <span class="cmt"># for subprocess injection</span></pre>
+<h3>Interface (Implemented)</h3>
+<p>Both providers implement the same interface. JavaScript side in <code>visual/backend/lib/config-provider.js</code>.</p>
+<pre><span class="cmt">// Full interface -- both providers implement all methods</span>
+<span class="kw">interface</span> ConfigProvider {
+  list()            <span class="cmt">// returns all key-value pairs as object</span>
+  get(key)          <span class="cmt">// returns string value or undefined</span>
+  set(key, value)   <span class="cmt">// write one key</span>
+  setMany(pairs)    <span class="cmt">// write multiple keys atomically</span>
+  toggle(key)       <span class="cmt">// flip true/false string</span>
+  listByPrefix(pfx) <span class="cmt">// returns entries whose key starts with pfx</span>
+  toEnvDict()       <span class="cmt">// returns flat object for subprocess env injection</span>
+  deleteKey(key)    <span class="cmt">// remove a key</span>
+}</pre>
 
 <h3>Implementations</h3>
 <table>
   <thead>
-    <tr><th>Implementation</th><th>Backing Store</th><th>Modes</th></tr>
+    <tr><th>Implementation</th><th>Backing Store</th><th>Modes</th><th>Notes</th></tr>
   </thead>
   <tbody>
     <tr>
       <td><code>LocalConfigProvider</code></td>
-      <td><code>.env.local</code> file</td>
+      <td><code>.env.local</code> file on disk</td>
       <td>Mode C (local dev)</td>
+      <td>Wraps existing dotenv read/write. Zero behavior change for local mode.</td>
     </tr>
     <tr>
       <td><code>ForgeConfigProvider</code></td>
-      <td><code>.forge</code> YAML on UC Volume</td>
+      <td><code>.forge</code> YAML held in-memory zip on UC Volume</td>
       <td>Modes A &amp; B (SaaS)</td>
+      <td>In-memory zip, event-driven flush to UC Volume on each meaningful write. <code>setMany()</code> used for multi-key saves to avoid multiple flushes.</td>
     </tr>
   </tbody>
 </table>
+
+<h3>ForgeConfigProvider: In-Memory Zip + Flush</h3>
+<p>On startup (SaaS mode), the backend downloads the <code>.forge.zip</code> from UC Volume once and holds it in process memory. All reads serve from memory -- zero network calls. Writes update the in-memory zip then flush to UC Volume (single <code>w.files.upload()</code>, ~200ms). On app restart, re-download from Volume restores last flushed state.</p>
+
+<div class="fbox-row">
+  <div class="fbox blue">App start</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">Download .forge.zip (UC Volume)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">Hold in memory (AdmZip)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">set/setMany triggers flush</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">Upload back to UC Volume</div>
+</div>
 
 <h3>Call Sites to Refactor</h3>
 <table>
@@ -1380,17 +1463,18 @@ uv run python -c <span class="str">"from agent.start_server import main; main()"
 <p>These 5 calls become Python SDK calls (WorkspaceClient). The backend already spawns Python for everything else -- same pattern.</p>
 <p><strong>For local mode (C):</strong> Just always use REST API in the backend, since it works in all modes.</p>
 
-<h3>The pythonCmd() Abstraction</h3>
-<pre><span class="cmt">// Detect mode, use appropriate Python command</span>
-<span class="kw">function</span> pythonCmd() {
-  <span class="kw">if</span> (isDbxAppMode()) {
-    <span class="kw">return</span> [<span class="str">'python'</span>];           <span class="cmt">// system Python, pip-installed deps</span>
-  }
-  <span class="kw">if</span> (uvAvailable()) {
-    <span class="kw">return</span> [<span class="str">'uv'</span>, <span class="str">'run'</span>, <span class="str">'python'</span>]; <span class="cmt">// venv isolation</span>
-  }
-  <span class="kw">return</span> [<span class="str">'python'</span>];               <span class="cmt">// fallback</span>
-}</pre>
+<h3>The PY Abstraction (Implemented)</h3>
+<p><code>const PY = { cmd, pre }</code> is defined once at startup in <code>visual/backend/index.js</code>. All 40+ subprocess calls use it -- zero hardcoded <code>uv run python</code> strings remain.</p>
+<pre><span class="cmt">// visual/backend/index.js -- resolved once at startup</span>
+<span class="kw">const</span> FORGE_MODE = process.env.FORGE_MODE === <span class="str">'true'</span>;
+<span class="kw">const</span> PY = FORGE_MODE
+  ? { cmd: <span class="str">'python'</span>, pre: [] }              <span class="cmt">// SaaS: system Python, no uv</span>
+  : { cmd: <span class="str">'uv'</span>,    pre: [<span class="str">'run'</span>, <span class="str">'python'</span>] }; <span class="cmt">// Local: uv venv isolation</span>
+
+<span class="cmt">// Usage in every subprocess call:</span>
+spawn(PY.cmd, [...PY.pre, <span class="str">'scripts/some_script.py'</span>], { env });</pre>
+
+<p><strong>Migration:</strong> 40+ subprocess calls migrated from <code>spawn('uv', ['run', 'python', ...])</code> to <code>spawn(PY.cmd, [...PY.pre, ...])</code>. Consistent pattern, single change point.</p>
 
 <h3>Startup Command for Setup App</h3>
 <pre><span class="cmt"># Setup App app.yaml</span>
@@ -2256,8 +2340,28 @@ cd brickforge-*
     <span class="key">branch</span>: <span class="str">main</span>
     <span class="cmt"># No PAT. Databricks handles git auth via stored credentials.</span></pre>
 
-<h3>Inch 9: Multi-Project (later)</h3>
+<h3>Inch 9: Multi-Project</h3>
 <p>Save/load/switch <code>.forge</code> projects on UC Volume. Per-project schema isolation.</p>
+
+<h3>Multi-Project Implementation</h3>
+<p><code>visual/backend/lib/project-manager.js</code> manages <code>.forge.zip</code> archives on UC Volume. The frontend project selector in the title bar lets users switch between projects without leaving the app.</p>
+<ul>
+  <li>List projects: scans <code>/Volumes/{catalog}/{schema}/brickforge/</code> for <code>*.forge.zip</code> entries</li>
+  <li>Load project: downloads zip, loads into ForgeConfigProvider in-memory store, hydrates <code>process.env</code></li>
+  <li>Save project: flushes in-memory zip back to UC Volume</li>
+  <li>New project: creates fresh <code>.forge</code> manifest from wizard, uploads as new zip</li>
+  <li>Switch project: save current, load selected</li>
+  <li>Active project stored in <code>process.env.FORGE_ACTIVE_PROJECT</code> (in-process state only)</li>
+</ul>
+<div class="fbox-row">
+  <div class="fbox blue">Title bar project selector</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">project-manager.js</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">ForgeConfigProvider.load(name)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">UC Volume .forge.zip</div>
+</div>
 
 <!-- ============================================================ -->
 <!-- EXECUTION PLAN                                                -->
@@ -2334,9 +2438,12 @@ Inch 3: First Deploy Test         |
 <!-- ============================================================ -->
 <h2 id="current-state" class="green">20. Current State</h2>
 
+<p><strong>Status as of May 2026: Setup App deployed and running on Databricks. All plan gaps closed. Only Gap 9 (start.bat Windows launcher) intentionally skipped.</strong></p>
+
+<h3>Foundation (Done before SaaS transition)</h3>
 <ul class="checklist">
-  <li>Domain extraction complete (stash/airops/)</li>
-  <li><code>.forge</code> manifest exists (airops.forge)</li>
+  <li>Domain extraction complete (<code>stash/airops/</code>)</li>
+  <li><code>.forge</code> manifest exists (<code>airops.forge</code>)</li>
   <li>Agent dynamic tool discovery (<code>_discover_domain_tools()</code>)</li>
   <li>Agent lazy WorkspaceClient init (no SDK call at import time)</li>
   <li>KA tool factory (<code>ka_factory.py</code>)</li>
@@ -2349,6 +2456,39 @@ Inch 3: First Deploy Test         |
   <li>Nuclear scan: zero domain references in framework</li>
   <li>Git checkpoint: tag <code>pre-saas-transition</code> on branch <code>forge-saas-databricks</code></li>
   <li>dbc/ courseware isolated to <code>forge-dbc</code> branch</li>
+</ul>
+
+<h3>SaaS Gaps Closed (Implemented)</h3>
+<ul class="checklist">
+  <li><strong>ConfigProvider pattern</strong> -- <code>LocalConfigProvider</code> + <code>ForgeConfigProvider</code> both implemented in <code>visual/backend/lib/config-provider.js</code>. Full interface: <code>list()</code>, <code>get()</code>, <code>set()</code>, <code>setMany()</code>, <code>toggle()</code>, <code>listByPrefix()</code>, <code>toEnvDict()</code>, <code>deleteKey()</code>.</li>
+  <li><strong>PY abstraction</strong> -- <code>const PY = { cmd, pre }</code> in <code>index.js</code>. Returns <code>{cmd:'uv', pre:['run','python']}</code> locally or <code>{cmd:'python', pre:[]}</code> in Forge mode. 40+ subprocess calls migrated.</li>
+  <li><strong>ForgeConfigProvider in-memory zip</strong> -- downloads <code>.forge.zip</code> from UC Volume at startup, holds in memory (AdmZip), event-driven flush on each write. Zero disk I/O after startup.</li>
+  <li><strong>deploy/deploy_setup_app.py</strong> -- deploys Setup App via Databricks CLI. Pure Python, no bash wrapper.</li>
+  <li><strong>deploy/deploy_agent_app.py</strong> -- generates <code>app.yaml</code> + <code>databricks.yml</code> from <code>.forge</code> config, builds zip bundle, uploads via SDK, calls Apps REST API.</li>
+  <li><strong>deploy/git_push.py</strong> -- automated git push via Databricks Git Folders. No PAT required.</li>
+  <li><strong>deploy/grant/run_all_grants.py</strong> -- replaces <code>run_all_grants.sh</code>. 7 grant steps, Step 7 (secrets) uses SDK directly instead of CLI.</li>
+  <li><strong>FORGE_STASH_DIR</strong> -- env var support in <code>create_all_assets.py</code>, <code>create_all_functions.py</code>, <code>create_all_procedures.py</code>. Resolves data paths to stash directory in SaaS mode.</li>
+  <li><strong>GET /api/stash/health</strong> -- scans stash directory, parses <code>.forge</code> manifests, verifies all referenced files exist. Returns structured JSON with per-file status.</li>
+  <li><strong>project-manager.js</strong> -- manages <code>.forge.zip</code> archives on UC Volume. Frontend project selector in title bar for multi-project support.</li>
+</ul>
+
+<h3>Intentionally Skipped</h3>
+<table>
+  <thead><tr><th>Gap</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Gap 9: <code>start.bat</code> (Windows launcher)</td>
+      <td>SKIPPED. Primary deployment target is Databricks (Linux container). Windows local mode not a priority.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Open Items</h3>
+<ul>
+  <li>C1 / C2 / C3: Workspace file upload API details + rate limits -- verify on next end-to-end test</li>
+  <li>C5: Setup App SP grant to Agent App SP -- verify on implementation</li>
+  <li>F3: Dashboard config end-to-end test -- not yet run</li>
+  <li>E1: <code>tool_factory.py</code> (SQL read + action patterns) -- still to build</li>
 </ul>
 
 <hr>

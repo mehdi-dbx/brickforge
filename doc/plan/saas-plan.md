@@ -1354,6 +1354,25 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - [x] Nuclear scan: zero domain references in framework
 - [x] Git checkpoint: tag `pre-saas-transition` on branch `forge-saas-databricks`
 - [x] dbc/ courseware isolated to `forge-dbc` branch
+- [x] ConfigProvider pattern (LocalConfigProvider + ForgeConfigProvider)
+- [x] ForgeConfigProvider: in-memory zip, event-driven flush to UC Volume
+- [x] All index.js call sites migrated to config.xxx()
+- [x] PY.cmd/PY.pre abstraction for subprocess calls (uv vs python)
+- [x] tool_factory.py: create_sql_read_tool() + create_action_tool()
+- [x] discover_forge_tools() integrated in agent.py
+- [x] deploy/deploy_agent_app.py: generate_app_yaml, generate_databricks_yml, build_agent_bundle, deploy
+- [x] deploy/deploy_setup_app.py: one-command Setup App deployment
+- [x] deploy/git_push.py: check_git_credentials, create_git_folder, upload_files, commit_and_push
+- [x] deploy/grant/run_all_grants.py: Python replacement for bash grants
+- [x] project-manager.js: list/load/save/delete projects on UC Volume
+- [x] Frontend project selector in title bar
+- [x] Git setup step (StepId, setupSteps, SetupDag icon)
+- [x] GET /api/stash/health endpoint
+- [x] FORGE_STASH_DIR support in data provisioning scripts
+- [x] app.yaml + databricks.yml templates in stash/airops/
+- [x] Setup App deployed and running on Databricks
+- [x] 5 Databricks CLI calls replaced with SDK (lakebase, deploy)
+- [x] start.sh + build-release.sh packaging scripts
 
 ---
 
