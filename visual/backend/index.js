@@ -986,11 +986,21 @@ for line in additions: print('[+] ' + line)
 
     case 'exec-deploy-agent': {
       // SaaS mode: deploy Agent App via SDK (no DAB CLI needed)
-      // Write config to temp JSON, pass to deploy script
       const configDict = config.toEnvDict()
       const tmpConfig = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
       fs.writeFileSync(tmpConfig, JSON.stringify(configDict, null, 2))
       runCommand('uv', ['run', 'python', 'deploy/deploy_agent_app.py', '--config', tmpConfig])
+      break
+    }
+
+    case 'exec-git-push': {
+      // Push Agent App project to GitHub via Databricks Git Folders
+      const repoUrl = params.repo_url
+      if (!repoUrl) { write('line', { text: '[x] repo_url required\n', stream: 'err' }); done(false); break }
+      const configDict2 = config.toEnvDict()
+      const tmpConfig2 = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
+      fs.writeFileSync(tmpConfig2, JSON.stringify(configDict2, null, 2))
+      runCommand('uv', ['run', 'python', 'deploy/git_push.py', '--repo-url', repoUrl, '--config', tmpConfig2])
       break
     }
 
