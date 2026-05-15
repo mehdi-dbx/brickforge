@@ -37,6 +37,7 @@ import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@chat-template/core';
 import { softNavigateToChatId } from '@/lib/navigation';
 import { useAppConfig } from '@/contexts/AppConfigContext';
+import { useVoice } from '@/hooks/use-voice';
 
 function PureMultimodalInput({
   chatId,
@@ -65,7 +66,7 @@ function PureMultimodalInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
-  const { chatHistoryEnabled } = useAppConfig();
+  const { chatHistoryEnabled, featureEnabled } = useAppConfig();
 
   const adjustHeight = useCallback(() => {
     if (textareaRef.current) {
@@ -112,13 +113,7 @@ function PureMultimodalInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
-  type VoiceState = 'idle' | 'listening' | 'processing';
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const isSpeaking = status === 'streaming';
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const mimeTypeRef = useRef<string>('audio/webm');
 
   const submitForm = useCallback(
     (overrideText?: string) => {
@@ -164,79 +159,9 @@ function PureMultimodalInput({
     ],
   );
 
-  const transcribe = useCallback(async (blob: Blob): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', blob, 'recording.webm');
-    const res = await fetch('/api/audio/transcribe', {
-      method: 'POST',
-      body: formData,
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error((data as { error?: string }).error || 'Transcription failed');
-    }
-    const { text } = (await res.json()) as { text: string };
-    return text;
-  }, []);
-
-  const startRecording = useCallback(async () => {
-    try {
-      console.log('[voice] Recording started');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      chunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-      mimeTypeRef.current = mimeType;
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      mediaRecorder.start();
-      setVoiceState('listening');
-    } catch (err) {
-      console.error('[voice] Microphone access denied', err);
-      toast.error('Microphone access denied');
-    }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    const mr = mediaRecorderRef.current;
-    const stream = streamRef.current;
-    if (!mr || mr.state !== 'recording') return;
-    mr.stop();
-    stream?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    mediaRecorderRef.current = null;
-
-    mr.onstop = async () => {
-      setVoiceState('processing');
-      const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-      console.log('[voice] Recording stopped, transcribing, blob size=', blob.size);
-      try {
-        const text = await transcribe(blob);
-        console.log('[voice] Transcription success, length=', text.length);
-        setVoiceState('idle');
-        if (text.trim()) submitForm(text);
-        else console.log('[voice] Empty transcription, not submitting');
-      } catch (err) {
-        console.error('[voice] Transcription failed', err);
-        toast.error('Transcription failed');
-        setVoiceState('idle');
-      }
-    };
-  }, [transcribe, submitForm]);
-
-  const abortRecording = useCallback(() => {
-    const mr = mediaRecorderRef.current;
-    const stream = streamRef.current;
-    if (!mr || mr.state !== 'recording') return;
-    mr.onstop = () => setVoiceState('idle');
-    mr.stop();
-    stream?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    mediaRecorderRef.current = null;
-  }, []);
+  // Voice-to-text via custom hook (decoupled, toggled by PROJECT_TOOL_VOICE)
+  const voiceEnabled = featureEnabled('voice');
+  const { voiceState, startRecording, stopRecording, abortRecording } = useVoice(submitForm, voiceEnabled);
 
   const uploadFile = useCallback(async (file: File) => {
     const formData = new FormData();
@@ -406,7 +331,7 @@ function PureMultimodalInput({
               autoFocus
             />
             </div>
-            {voiceState === 'listening' && (
+            {voiceEnabled && voiceState === 'listening' && (
               <div
                 className="flex min-w-8 items-center justify-center gap-1 h-8 shrink-0 overflow-visible"
                 aria-hidden
@@ -434,7 +359,7 @@ function PureMultimodalInput({
           >
             <Paperclip className="h-4 w-4 text-muted-foreground" />
           </Button>
-          {voiceState === 'listening' ? (
+          {voiceEnabled && (voiceState === 'listening' ? (
             <button
               type="button"
               className="voice-mic-listening flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none text-muted-foreground shadow-[0_0_4px_8px_rgba(254,226,226,0.5)] transition-colors hover:text-accent-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 dark:shadow-[0_0_4px_10px_rgba(127,29,29,0.4)] [&_svg]:size-4"
@@ -469,7 +394,7 @@ function PureMultimodalInput({
                 <Mic className="h-4 w-4 text-muted-foreground" />
               )}
             </Button>
-          )}
+          ))}
           {(voiceState === 'listening' ||
             status === 'submitted' ||
             status === 'streaming') ? (

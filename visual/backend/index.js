@@ -21,7 +21,7 @@ const app         = express()
 // Prevent uv "VIRTUAL_ENV does not match" warning in all subprocess calls
 delete process.env.VIRTUAL_ENV
 
-const SENSITIVE_PATTERN = /TOKEN|SECRET|PASSWORD|PAT\b/i
+const SENSITIVE_PATTERN = /TOKEN|SECRET|PASSWORD|PAT\b|API_KEY/i
 
 // Parse .env.local into ordered list of active entries, preserving raw lines
 function parseEnvFile() {
@@ -1374,6 +1374,31 @@ except urllib.error.HTTPError as e:
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim()
+    }
+  } else if (step === 'features') {
+    if (envKey === 'PROJECT_TOOL_VOICE') {
+      script = `
+import os, urllib.request, urllib.error
+key = os.environ.get('OPENAI_API_KEY','').strip()
+if not key: print('[x] OPENAI_API_KEY not set'); exit(1)
+try:
+    req = urllib.request.Request('https://api.openai.com/v1/models', headers={'Authorization': f'Bearer {key}'})
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] OpenAI API key valid (' + str(resp.status) + ')')
+except urllib.error.HTTPError as e:
+    if e.code == 401: print('[x] invalid API key')
+    else: print('[x] OpenAI API error: ' + str(e.code))
+    exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+    } else if (envKey === 'PROJECT_TOOL_CHART') {
+      script = `print('[+] chart tool enabled')`
+    } else {
+      const val = envKey ? process.env[envKey] : ''
+      script = val && val.trim().toLowerCase() !== 'false'
+        ? `print('[+] ${envKey} enabled')`
+        : `print('[x] ${envKey} not enabled'); exit(1)`
     }
   }
 

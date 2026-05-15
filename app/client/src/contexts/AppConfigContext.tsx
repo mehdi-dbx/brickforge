@@ -1,10 +1,11 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/utils';
 
 interface ConfigResponse {
   features: {
     chatHistory: boolean;
+    [key: string]: boolean;
   };
 }
 
@@ -13,6 +14,8 @@ interface AppConfigContextType {
   isLoading: boolean;
   error: Error | undefined;
   chatHistoryEnabled: boolean;
+  /** Check if a dynamic feature toggle is enabled (defaults to false until config loads). */
+  featureEnabled: (name: string) => boolean;
 }
 
 const AppConfigContext = createContext<AppConfigContextType | undefined>(
@@ -31,12 +34,18 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
     },
   );
 
+  const featureEnabled = useCallback(
+    (name: string) => data?.features[name] ?? false,
+    [data],
+  );
+
   const value: AppConfigContextType = {
     config: data,
     isLoading,
     error,
     // Default to true until loaded to avoid breaking existing behavior
     chatHistoryEnabled: data?.features.chatHistory ?? true,
+    featureEnabled,
   };
 
   return (
