@@ -81,7 +81,8 @@ def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> boo
 
 
 def main() -> None:
-    proc_dir = ROOT / "data" / "default" / "proc"
+    stash_dir = os.environ.get("FORGE_STASH_DIR", "").strip()
+    proc_dir = (ROOT / stash_dir / "data" / "proc") if stash_dir else (ROOT / "data" / "default" / "proc")
     proc_sql = sorted(proc_dir.glob("*.sql"))
 
     print(f"\n{BOLD}{M}╔══════════════════════════════════════════╗{W}")

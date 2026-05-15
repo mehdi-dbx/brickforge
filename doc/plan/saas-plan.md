@@ -1530,3 +1530,19 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
   - Gap 4 (LOW): Git setup step added to frontend (StepId, setupSteps, icon, subLabel, STEP_ENV_KEYS)
   - Gap 5 (MEDIUM): 3 Databricks CLI calls replaced with Python SDK (lakebase list/test, deploy test)
 - Remaining gaps: pythonCmd() abstraction (LOW), stash verification UI (MEDIUM), start.bat (LOW), deploy-setup.py (MEDIUM), 16 remaining direct call sites (LOW), app.yaml/databricks.yml templates in stash (LOW)
+
+### 2026-05-15 -- Gap closure wave 2 (all except #9 start.bat)
+- **Gap 11 (16 direct call sites):** Replaced all 9 remaining `parseEnvFile()`, `writeEnvValues()`, `parseMultiInstanceKeys()` calls in `index.js` with `config.list()`, `config.setMany()`, `config.listByPrefix()`, `config.toEnvDict()`. Zero direct calls remain outside function definitions and LocalConfigProvider constructor.
+- **Gap 6 (pythonCmd abstraction):** Added `const PY = { cmd, pre }` helper after FORGE_MODE detection. Replaced all 40+ JS-level `'uv', ['run', 'python', ...]` calls with `PY.cmd, [...PY.pre, ...]` across `runCommand()`, `execFile()`, `spawn()`, `sseGenRunner()`. Python-internal subprocess calls unchanged (uv available in both modes).
+- **Gap 12 (bundle templates in stash):** Created `stash/airops/app.yaml` and `stash/airops/databricks.yml` reference templates with placeholder vars.
+- **Gap 3 (stash health endpoint):** Added `GET /api/stash/health` -- scans `stash/` directory, parses each `.forge` manifest, verifies all referenced files (DDL, seed CSV, tools, prompts, configs) exist, checks expected dirs (tools/, data/, conf/) and optional bundle templates.
+- **Gap 10 (deploy-setup.py):** Created `deploy/deploy_setup_app.py` -- one-command Setup App deployment via Databricks CLI. Pre-flight checks (CLI auth, frontend built, app.yaml present), create-or-update app, deploy source, retrieve URL.
+- **Gap 8 (data provisioning from .forge):** Added `FORGE_STASH_DIR` env var support to `create_all_assets.py`, `create_all_functions.py`, `create_all_procedures.py`, and inline `exec-tables` script. When set, data paths resolve to stash directory instead of `data/default/`.
+- All changes syntax-verified: `node -c visual/backend/index.js` passes clean.
+
+### 2026-05-15 -- Full plan audit + last gap
+- Scanned all 11 parts of saas-plan.md against codebase. All items verified: tool_factory, agent.py integration, deploy scripts, project-manager, frontend project selector, ConfigProvider, setup-app.yaml, start scripts, git step, stash completeness, ForgeConfigProvider methods.
+- **One gap found:** `deploy/grant/run_all_grants.py` (Python replacement for bash script) was missing.
+- Created `deploy/grant/run_all_grants.py`: runs all 7 grant steps (tables, functions, warehouse, endpoints, genie, lakebase, secrets) via subprocess. Step 7 uses SDK (`w.secrets.put_acl`) instead of CLI (`databricks secrets put-acl`).
+- Updated `index.js` exec-grants action: `bash deploy/run_all_grants.sh` -> `PY.cmd [...PY.pre, 'deploy/grant/run_all_grants.py']`. One fewer bash dependency.
+- Remaining bash calls in backend: `deploy/deploy.sh` (exec-deploy, exec-deploy-dry) -- kept as local-mode fallback, SDK deploy (`exec-deploy-agent`) exists alongside.

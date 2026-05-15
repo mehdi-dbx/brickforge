@@ -25,10 +25,17 @@ os.chdir(ROOT)
 LOG_FILE = ROOT / "logs" / "create_all_assets.log"
 
 def _active_sources() -> list[tuple[Path, Path]]:
-    """Return (csv_dir, init_dir) pairs based on USE_DEFAULT_DATA / USE_GEN_DATA flags."""
+    """Return (csv_dir, init_dir) pairs based on USE_DEFAULT_DATA / USE_GEN_DATA flags.
+    When FORGE_STASH_DIR is set, uses stash directory data instead of data/default/.
+    """
+    stash_dir = os.environ.get("FORGE_STASH_DIR", "").strip()
     sources = []
-    if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
-        sources.append((ROOT / "data" / "default" / "csv", ROOT / "data" / "default" / "init"))
+    if stash_dir:
+        stash_path = ROOT / stash_dir if not Path(stash_dir).is_absolute() else Path(stash_dir)
+        sources.append((stash_path / "data" / "csv", stash_path / "data" / "init"))
+    else:
+        if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
+            sources.append((ROOT / "data" / "default" / "csv", ROOT / "data" / "default" / "init"))
     if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
         sources.append((ROOT / "data" / "gen" / "csv", ROOT / "data" / "gen" / "init"))
     return sources

@@ -191,6 +191,9 @@ if (FORGE_MODE) {
 }
 console.log(`[config] mode: ${FORGE_MODE ? 'FORGE (SaaS)' : 'LOCAL (.env.local)'}`)
 
+// Python command abstraction: 'uv run python' locally, 'python' in Forge/DBX App mode
+const PY = FORGE_MODE ? { cmd: 'python', pre: [] } : { cmd: 'uv', pre: ['run', 'python'] }
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS')
@@ -270,6 +273,95 @@ app.put('/api/env', (req, res) => {
     res.json({ ok: true })
   } catch (err) {
     console.error('[env] save error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─── Stash health endpoint ──────────────────────────────────────────────────
+
+app.get('/api/stash/health', (_req, res) => {
+  try {
+    const stashDir = path.join(PROJECT_ROOT, 'stash')
+    if (!fs.existsSync(stashDir)) return res.json({ stashes: [] })
+
+    const stashes = []
+    for (const name of fs.readdirSync(stashDir)) {
+      const dir = path.join(stashDir, name)
+      if (!fs.statSync(dir).isDirectory()) continue
+
+      const forgeFile = fs.readdirSync(dir).find(f => f.endsWith('.forge'))
+      if (!forgeFile) {
+        stashes.push({ name, status: 'error', message: 'no .forge manifest', checks: [] })
+        continue
+      }
+
+      // Parse YAML-like .forge manifest (simple key extraction)
+      const raw = fs.readFileSync(path.join(dir, forgeFile), 'utf8')
+      const checks = []
+      let ok = 0, missing = 0
+
+      // Check referenced files
+      const fileRefs = []
+      const lines = raw.split('\n')
+      for (const line of lines) {
+        // Match file references: "file:", "ddl:", "seed:", "system:", "knowledge_base:", "starters:", "config:", "dataset:", "runner:"
+        const m = line.match(/^\s+(?:file|ddl|seed|system|knowledge_base|starters|config|dataset|runner):\s*(.+)/)
+        if (m) {
+          const ref = m[1].trim()
+          if (ref && !ref.startsWith('{') && !ref.startsWith('[')) fileRefs.push(ref)
+        }
+        // Match list items that look like file paths (e.g. "    - some_file.sql")
+        const listMatch = line.match(/^\s+-\s+([\w/._-]+\.(?:sql|py|yml|yaml|csv|jsonl|prompt|base|txt))$/)
+        if (listMatch) {
+          // Determine directory context from preceding section headers
+          const idx = lines.indexOf(line)
+          let ctx = ''
+          for (let i = idx - 1; i >= 0; i--) {
+            if (lines[i].match(/^\s+functions:/)) { ctx = 'data/func/'; break }
+            if (lines[i].match(/^\s+procedures:/)) { ctx = 'data/proc/'; break }
+          }
+          if (ctx) fileRefs.push(ctx + listMatch[1])
+        }
+      }
+
+      for (const ref of fileRefs) {
+        const full = path.join(dir, ref)
+        if (fs.existsSync(full)) {
+          checks.push({ item: ref, status: 'ok' })
+          ok++
+        } else {
+          checks.push({ item: ref, status: 'missing' })
+          missing++
+        }
+      }
+
+      // Check expected directories
+      for (const d of ['tools', 'data', 'conf']) {
+        if (fs.existsSync(path.join(dir, d))) {
+          checks.push({ item: d + '/', status: 'ok' })
+          ok++
+        } else {
+          checks.push({ item: d + '/', status: 'missing' })
+          missing++
+        }
+      }
+
+      // Check bundle templates
+      for (const f of ['app.yaml', 'databricks.yml']) {
+        if (fs.existsSync(path.join(dir, f))) {
+          checks.push({ item: f, status: 'ok' })
+          ok++
+        } else {
+          checks.push({ item: f, status: 'warning', note: 'optional — generated at deploy time' })
+        }
+      }
+
+      const status = missing === 0 ? 'ok' : 'warning'
+      stashes.push({ name, forgeFile, status, ok, missing, checks })
+    }
+
+    res.json({ stashes })
+  } catch (err) {
     res.status(500).json({ error: String(err) })
   }
 })
@@ -370,20 +462,20 @@ app.get('/api/setup/status', (_req, res) => {
         continue
       }
       if (step === 'mcp') {
-        const instances = parseMultiInstanceKeys('PROJECT_MCP_')
+        const instances = config.listByPrefix('PROJECT_MCP_')
         const serverInstances = instances.filter(i => !i.key.endsWith('_HEADER'))
         steps[step] = { status: serverInstances.some(i => i.enabled) ? 'configured' : (serverInstances.length ? 'missing' : 'missing'), values: {}, instances: serverInstances }
         continue
       }
       if (step === 'a2a') {
-        const instances = parseMultiInstanceKeys('PROJECT_A2A_')
+        const instances = config.listByPrefix('PROJECT_A2A_')
         const agentInstances = instances.filter(i => !i.key.endsWith('_HEADER'))
         steps[step] = { status: agentInstances.some(i => i.enabled) ? 'configured' : (agentInstances.length ? 'missing' : 'missing'), values: {}, instances: agentInstances }
         continue
       }
       if (step === 'api') {
         // API slugs: filter to only _CONN or _URL entries (not _METHOD, _PATH, etc.)
-        const instances = parseMultiInstanceKeys('PROJECT_API_')
+        const instances = config.listByPrefix('PROJECT_API_')
         const apiInstances = instances.filter(i => i.key.endsWith('_CONN') || i.key.endsWith('_URL'))
         // Derive label from slug: PROJECT_API_WEATHER_CONN -> "weather (uc)" or PROJECT_API_WEATHER_URL -> "weather (http)"
         const labeled = apiInstances.map(i => ({
@@ -395,7 +487,7 @@ app.get('/api/setup/status', (_req, res) => {
         continue
       }
       if (step === 'features') {
-        const instances = parseMultiInstanceKeys('PROJECT_TOOL_')
+        const instances = config.listByPrefix('PROJECT_TOOL_')
         steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values: {}, instances }
         continue
       }
@@ -513,7 +605,7 @@ except Exception:
   const script = SCRIPTS[type]
   if (!script) return res.status(400).json({ error: 'unknown type: ' + type })
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 20000,
   }, (err, stdout, stderr) => {
@@ -669,7 +761,7 @@ app.post('/api/setup/exec', (req, res) => {
 
   switch (action) {
     case 'exec-pat':
-      runCommand('uv', ['run', 'python', '-c', PAT_SCRIPT])
+      runCommand(PY.cmd, [...PY.pre, '-c', PAT_SCRIPT])
       break
 
     case 'exec-assets': {
@@ -678,13 +770,13 @@ app.post('/api/setup/exec', (req, res) => {
         config.setMany({ PROJECT_UNITY_CATALOG_SCHEMA: schemaSpec })
         subEnv.PROJECT_UNITY_CATALOG_SCHEMA = schemaSpec
       }
-      runCommand('uv', ['run', 'python', 'data/init/create_all_assets.py'])
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_all_assets.py'])
       break
     }
 
     case 'exec-tables': {
       // Only create schema + tables (no functions/procedures)
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 import subprocess, sys
 from pathlib import Path
 ROOT = Path('.')
@@ -695,14 +787,20 @@ r = subprocess.run(['uv', 'run', 'python', 'data/init/create_catalog_schema.py']
 if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
 print('[+] Catalog and schema ready')
 
-# Find table SQL files based on USE_DEFAULT_DATA / USE_GEN_DATA flags (env set by backend)
+# Find table SQL files based on FORGE_STASH_DIR or USE_DEFAULT_DATA / USE_GEN_DATA flags
 import os
 sql_files = []
+stash_dir = os.environ.get('FORGE_STASH_DIR', '').strip()
 use_default = os.environ.get('USE_DEFAULT_DATA', 'true').strip().lower()
 use_gen = os.environ.get('USE_GEN_DATA', 'false').strip().lower()
-print(f'[~] Data sources: default={use_default}, gen={use_gen}')
+if stash_dir:
+    print(f'[~] Data source: stash={stash_dir}')
+    d = ROOT / stash_dir / 'data' / 'init'
+    if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
+else:
+    print(f'[~] Data sources: default={use_default}, gen={use_gen}')
 sys.stdout.flush()
-if use_default in ('true', '1', 'yes'):
+if not stash_dir and use_default in ('true', '1', 'yes'):
     d = ROOT / 'data' / 'default' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
 if os.environ.get('USE_GEN_DATA', 'false').strip().lower() in ('true', '1', 'yes'):
@@ -729,7 +827,7 @@ print(f'[+] All {len(sql_files)} table(s) provisioned')
 
     case 'exec-functions': {
       // Only create functions + procedures
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 import subprocess, sys
 
 print('[~] Creating UC functions...')
@@ -750,7 +848,7 @@ print('[+] All functions and procedures created')
     case 'save-lakebase': {
       const lbName = params.name
       if (!lbName) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from pathlib import Path; import re
 f = Path('.env.local')
 key = 'LAKEBASE_INSTANCE_NAME'
@@ -769,20 +867,20 @@ print('[+] LAKEBASE_INSTANCE_NAME = ' + val)
     }
 
     case 'exec-lakebase':
-      runCommand('uv', ['run', 'python', 'data/init/create_lakebase.py'])
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_lakebase.py'])
       break
 
     case 'exec-mlflow':
-      runCommand('uv', ['run', 'python', 'data/init/create_mlflow_experiment.py'])
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_mlflow_experiment.py'])
       break
 
     case 'exec-grants':
-      runCommand('bash', ['deploy/run_all_grants.sh'])
+      runCommand(PY.cmd, [...PY.pre, 'deploy/grant/run_all_grants.py'])
       break
 
     case 'exec-genie': {
       const genieName = params.name || 'Project Data'
-      runCommand('uv', ['run', 'python', 'data/init/create_genie_space.py'], { GENIE_ROOM_NAME: genieName })
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_genie_space.py'], { GENIE_ROOM_NAME: genieName })
       break
     }
 
@@ -790,7 +888,7 @@ print('[+] LAKEBASE_INSTANCE_NAME = ' + val)
       // Save host from a selected CLI profile
       const profileName = params.profile
       if (!profileName) { write('line', { text: '[x] no profile selected\n', stream: 'err' }); done(false); break }
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
 import subprocess, json, re
@@ -817,7 +915,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = ${profileName}')
       const profName = params.profile || ''
       if (!newHost) { write('line', { text: '[x] no host provided\n', stream: 'err' }); done(false); break }
       const hostUrl = (newHost.startsWith('http') ? newHost : 'https://' + newHost).replace(/\/+$/, '')
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
 from pathlib import Path
@@ -875,7 +973,7 @@ print('[+] done')
       // Pick existing profile for FM workspace, generate PAT, save endpoint+token
       const profileName = params.profile
       if (!profileName) { write('line', { text: '[x] no profile selected\n', stream: 'err' }); done(false); break }
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact, write_env_entry, ENV_FILE
 import subprocess, re
@@ -900,7 +998,7 @@ print('[+] AGENT_MODEL_TOKEN = ' + _redact(t.token_value))
     }
 
     case 'exec-ka': {
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import subprocess, sys
 print('[~] creating Knowledge Assistant from YAML...')
@@ -930,21 +1028,21 @@ print('[+] Knowledge Assistant provisioned')
     case 'save-warehouse': {
       const warehouseId = params.id
       if (!warehouseId) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', SAVE_WAREHOUSE_SCRIPT(warehouseId)])
+      runCommand(PY.cmd, [...PY.pre, '-c', SAVE_WAREHOUSE_SCRIPT(warehouseId)])
       break
     }
 
     case 'save-schema': {
       const { catalog, schema } = params
       if (!catalog || !schema) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', SAVE_SCHEMA_SCRIPT(catalog, schema)])
+      runCommand(PY.cmd, [...PY.pre, '-c', SAVE_SCHEMA_SCRIPT(catalog, schema)])
       break
     }
 
     case 'save-genie': {
       const { id: genieId, name: genieName } = params
       if (!genieId) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', SAVE_GENIE_SCRIPT(genieId, genieName || '')])
+      runCommand(PY.cmd, [...PY.pre, '-c', SAVE_GENIE_SCRIPT(genieId, genieName || '')])
       break
     }
 
@@ -957,7 +1055,7 @@ from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
 write_env_entry(ENV_FILE, 'DBX_APP_NAME', '${appName.replace(/'/g, "\\'")}')
 print('[+] DBX_APP_NAME = ${appName.replace(/'/g, "\\'")}')
 `.trim()
-      runCommand('uv', ['run', 'python', '-c', script])
+      runCommand(PY.cmd, [...PY.pre, '-c', script])
       break
     }
 
@@ -984,7 +1082,7 @@ text = text.rstrip('\\n') + '\\n' + '\\n'.join(additions) + '\\n'
 f.write_text(text)
 for line in additions: print('[+] ' + line)
 `.trim()
-      runCommand('uv', ['run', 'python', '-c', script])
+      runCommand(PY.cmd, [...PY.pre, '-c', script])
       break
     }
 
@@ -1003,7 +1101,7 @@ for line in additions: print('[+] ' + line)
       const configDict = config.toEnvDict()
       const tmpConfig = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
       fs.writeFileSync(tmpConfig, JSON.stringify(configDict, null, 2))
-      runCommand('uv', ['run', 'python', 'deploy/deploy_agent_app.py', '--config', tmpConfig])
+      runCommand(PY.cmd, [...PY.pre, 'deploy/deploy_agent_app.py', '--config', tmpConfig])
       break
     }
 
@@ -1014,7 +1112,7 @@ for line in additions: print('[+] ' + line)
       const configDict2 = config.toEnvDict()
       const tmpConfig2 = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
       fs.writeFileSync(tmpConfig2, JSON.stringify(configDict2, null, 2))
-      runCommand('uv', ['run', 'python', 'deploy/git_push.py', '--repo-url', repoUrl, '--config', tmpConfig2])
+      runCommand(PY.cmd, [...PY.pre, 'deploy/git_push.py', '--repo-url', repoUrl, '--config', tmpConfig2])
       break
     }
 
@@ -1024,7 +1122,7 @@ for line in additions: print('[+] ' + line)
       const key = `${prefix}${slug}`
       const updates = { [key]: url }
       if (header) updates[`${key}_HEADER`] = header
-      writeEnvValues(updates)
+      config.setMany(updates)
       const lines = [`[+] ${key} = ${url}`]
       if (header) lines.push(`[+] ${key}_HEADER = ${header.split(':')[0]}:***`)
       synthetic(lines)
@@ -1249,7 +1347,7 @@ app.get('/api/setup/test', (req, res) => {
   // Dynamic test scripts for genie/ka per-instance testing
   let script = TEST_SCRIPTS[step]
   if (step === 'genie') {
-    const instances = parseMultiInstanceKeys('PROJECT_GENIE_')
+    const instances = config.listByPrefix('PROJECT_GENIE_')
     const firstActive = instances.find(i => i.enabled)
     const key = envKey || (firstActive ? firstActive.key : 'PROJECT_GENIE_DEFAULT')
     script = `
@@ -1265,7 +1363,7 @@ except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim()
   } else if (step === 'ka') {
-    const kaInstances = parseMultiInstanceKeys('PROJECT_KA_')
+    const kaInstances = config.listByPrefix('PROJECT_KA_')
     const firstActiveKa = kaInstances.find(i => i.enabled)
     const key = envKey || (firstActiveKa ? firstActiveKa.key : 'PROJECT_KA_DEFAULT')
     script = `
@@ -1434,7 +1532,7 @@ except Exception as e:
 
   if (!script) return res.json({ ok: false, message: 'no test for step: ' + step })
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 25000,
   }, (err, stdout, stderr) => {
@@ -1502,10 +1600,10 @@ except Exception as e:
     print(json.dumps({"error": str(e)[:200]}))
 `.trim()
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 30000,
-    env: { ...process.env, ...(() => { try { const e = {}; for (const {key:k, value:v} of parseEnvFile()) e[k]=v; return e } catch { return {} } })() },
+    env: { ...process.env, ...config.toEnvDict() },
   }, (err, stdout) => {
     try {
       const data = JSON.parse((stdout || '').trim())
@@ -1554,11 +1652,11 @@ app.post('/api/gen/prompt-generate', (req, res) => {
   const { domain, tableSchemas } = req.body || {}
   if (!domain) return res.status(400).json({ error: 'domain is required' })
 
-  const args = ['run', 'python', 'data/gen/generate_prompts.py', '--mode=generate', `--domain=${domain}`]
+  const args = [...PY.pre, 'data/gen/generate_prompts.py', '--mode=generate', `--domain=${domain}`]
   if (tableSchemas && tableSchemas.length > 0) {
     args.push(`--tables-json=${JSON.stringify(tableSchemas)}`)
   }
-  sseGenRunner(res, 'uv', args)
+  sseGenRunner(res, PY.cmd, args)
 })
 
 // POST /api/gen/prompt-save — save generated prompts to conf/prompt/
@@ -1567,8 +1665,7 @@ app.post('/api/gen/prompt-save', (req, res) => {
   if (!main_prompt) return res.status(400).json({ error: 'main_prompt is required' })
 
   const stdinData = JSON.stringify({ main_prompt, knowledge_base, user_prompt })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_prompts.py', '--mode=save'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_prompts.py', '--mode=save'
   ], stdinData)
 })
 
@@ -1656,7 +1753,7 @@ app.get('/api/gen/tables', (_req, res) => {
 app.get('/api/gen/routines', (_req, res) => {
   try {
     const env = {}
-    for (const { key, value } of parseEnvFile()) env[key] = value
+    for (const { key, value } of config.list()) env[key] = value
 
     const useDefault = (env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
     const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
@@ -1776,8 +1873,7 @@ app.post('/api/gen/schema', (req, res) => {
   const { domain } = req.body || {}
   if (!domain) return res.status(400).json({ error: 'domain is required' })
 
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_tables.py',
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py',
     '--mode=schema', `--domain=${domain}`
   ])
 })
@@ -1788,8 +1884,7 @@ app.post('/api/gen/data', (req, res) => {
   if (!table) return res.status(400).json({ error: 'table is required' })
 
   const stdinData = JSON.stringify({ table, contextTables })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_tables.py', '--mode=data'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py', '--mode=data'
   ], stdinData)
 })
 
@@ -1799,14 +1894,13 @@ app.post('/api/gen/save', (req, res) => {
   if (!table || !rows) return res.status(400).json({ error: 'table and rows are required' })
 
   const stdinData = JSON.stringify({ table, rows, allTables })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_tables.py', '--mode=save'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py', '--mode=save'
   ], stdinData)
 })
 
 // POST /api/gen/provision — SSE stream, runs only generated table SQL
 app.post('/api/gen/provision', (req, res) => {
-  sseGenRunner(res, 'uv', ['run', 'python', 'data/gen/generate_tables.py', '--mode=provision-gen'])
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py', '--mode=provision-gen'])
 })
 
 // GET /api/gen/wizard-state — return saved wizard state or null
@@ -1877,11 +1971,11 @@ app.post('/api/gen/routine-schema', (req, res) => {
   const { domain, tableSchemas } = req.body || {}
   if (!domain) return res.status(400).json({ error: 'domain is required' })
 
-  const args = ['run', 'python', 'data/gen/generate_routines.py', '--mode=schema', `--domain=${domain}`]
+  const args = [...PY.pre, 'data/gen/generate_routines.py', '--mode=schema', `--domain=${domain}`]
   if (tableSchemas && tableSchemas.length > 0) {
     args.push(`--tables-json=${JSON.stringify(tableSchemas)}`)
   }
-  sseGenRunner(res, 'uv', args)
+  sseGenRunner(res, PY.cmd, args)
 })
 
 // POST /api/gen/routine-sql — SSE stream, generates SQL for one routine
@@ -1890,8 +1984,7 @@ app.post('/api/gen/routine-sql', (req, res) => {
   if (!routine) return res.status(400).json({ error: 'routine is required' })
 
   const stdinData = JSON.stringify({ routine, tableSchemas })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_routines.py', '--mode=sql'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_routines.py', '--mode=sql'
   ], stdinData)
 })
 
@@ -1901,14 +1994,13 @@ app.post('/api/gen/routine-save', (req, res) => {
   if (!routine || !sql) return res.status(400).json({ error: 'routine and sql are required' })
 
   const stdinData = JSON.stringify({ routine, sql, allRoutines })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_routines.py', '--mode=save'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_routines.py', '--mode=save'
   ], stdinData)
 })
 
 // POST /api/gen/routine-provision — SSE stream, provisions generated procedures
 app.post('/api/gen/routine-provision', (req, res) => {
-  sseGenRunner(res, 'uv', ['run', 'python', 'data/gen/generate_routines.py', '--mode=provision-gen'])
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_routines.py', '--mode=provision-gen'])
 })
 
 // GET /api/gen/routine-wizard-state
@@ -1975,7 +2067,7 @@ app.get('/api/ka/documents', (_req, res) => {
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
-  execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=list'], {
+  execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=list'], {
     cwd: PROJECT_ROOT,
     env: subEnv,
     timeout: 20000,
@@ -2003,7 +2095,7 @@ app.post('/api/ka/upload', upload.array('files'), (req, res) => {
     const destPath = path.join(path.dirname(file.path), file.originalname)
     fs.renameSync(file.path, destPath)
 
-    execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=upload', `--file=${destPath}`], {
+    execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=upload', `--file=${destPath}`], {
       cwd: PROJECT_ROOT,
       env: subEnv,
       timeout: 60000,
@@ -2037,7 +2129,7 @@ app.post('/api/ka/upload-url', (req, res) => {
 
   const cleanEnv = { ...subEnv, UPLOAD_URL: url }
   console.log('[upload-url] starting for:', url.slice(0, 80))
-  const child = execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=upload-url'], {
+  const child = execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=upload-url'], {
     cwd: PROJECT_ROOT,
     env: cleanEnv,
     timeout: 60000,
@@ -2061,7 +2153,7 @@ app.delete('/api/ka/documents/:name', (req, res) => {
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
-  execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=delete', `--name=${name}`], {
+  execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=delete', `--name=${name}`], {
     cwd: PROJECT_ROOT,
     env: subEnv,
     timeout: 20000,
@@ -2178,7 +2270,7 @@ for key in cleanup_keys:
 print(json.dumps(resources))
 `.trim()
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 60000,
   }, (err, stdout, stderr) => {
@@ -2297,7 +2389,7 @@ else: out('[+] cleanup complete')
   for (const { key, value } of envEntries) subEnv[key] = value
 
   let finished = false
-  const proc = spawn('uv', ['run', 'python', '-c', script], {
+  const proc = spawn(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     env: subEnv,
   })
