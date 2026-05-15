@@ -1,1 +1,1 @@
-command: ["bash", "-c", "echo '[1/2] uv sync...' && uv sync 2>&1 && echo '[1/2] done' && echo '[2/2] starting node...' && exec node visual/backend/index.js"]
+command: ["bash", "-c", "echo '[1/3] uv sync...' && uv sync 2>&1 && echo '[1/3] done' && echo '[2/3] unpacking node_modules...' && cd visual/backend && tar xzf node_modules.tar.gz && echo '[2/3] done' && cd ../.. && echo '[3/3] starting node...' && exec node visual/backend/index.js"]
