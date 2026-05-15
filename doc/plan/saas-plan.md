@@ -61,7 +61,7 @@ The visual Setup App (currently `visual/`) IS the product. It:
 | dbc/ courseware | Separated to `forge-dbc` branch -- different project entirely |
 | `.forge` storage | UC Volume on user's workspace |
 | User writes YAML? | NEVER -- wizard generates it, user only sees UI |
-| Tools need custom Python? | NO -- 3 declarative patterns, framework generates code at runtime |
+| Tools need custom Python? | NO -- 7 declarative patterns, framework generates code at runtime via factories |
 | Notebooks? | STRICTLY PROHIBITED -- code-first only |
 | `.env.local` in SaaS? | DOES NOT EXIST -- `.forge` is the config. ConfigProvider abstraction handles both modes. |
 | User owns code? | YES -- Setup App generates a project the user can download, edit, CI/CD |
@@ -114,7 +114,7 @@ This project needs to be validated by Databricks internal authorities. It must a
 - Table definitions (DDL, seed data references)
 - UC function SQL (inline or sidecar files)
 - Stored procedure SQL
-- Tool definitions (declarative: 3 patterns)
+- Tool definitions (declarative: 7 patterns)
 - System prompt + knowledge base + starter prompts
 - KA configurations
 - Eval dataset + scorer config
@@ -240,7 +240,7 @@ Output a clear report:
 - Missing SQL: "Generate from table schema using the Routines wizard"
 - Missing prompt: "Generate from domain description using the Prompt wizard"
 - Missing KA config: "Create a KA from the Knowledge Assistant setup step"
-- Missing tool file: "Tool will be auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka)"
+- Missing tool file: "Tool will be auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka/api/a2a/mcp/chart)"
 
 **Step 5: Provision check (live workspace verification)**
 After loading files, optionally verify against the live Databricks workspace:
@@ -298,8 +298,23 @@ Migration: pure refactor first (LocalConfigProvider wraps existing functions), t
 
 ### Challenge 4: Tool Generation at Runtime
 
-Tools defined as declarative specs in `.forge`. A `tool_factory.py` generates `@tool` functions at startup.
-`ka_factory.py` already does this for KA tools. Same pattern for SQL read and action tools.
+Tools defined as declarative specs in `.forge`. Factory modules generate `@tool` functions at agent startup.
+
+**7 tool patterns (3 existing factories + 4 to build/extend):**
+
+| # | Pattern | Factory | Status | What it does |
+|---|---------|---------|--------|-------------|
+| 1 | **SQL read** | `tool_factory.py` | TO BUILD | Calls a UC function with params, returns query results |
+| 2 | **Action** | `tool_factory.py` | TO BUILD | Calls a stored procedure with params |
+| 3 | **KA query** | `ka_factory.py` | EXISTS | Calls a Knowledge Assistant endpoint, extracts answer |
+| 4 | **External API** | `api_factory.py` | EXISTS | Calls REST APIs via UC Connection or direct HTTP |
+| 5 | **A2A** | `a2a_factory.py` | EXISTS | Calls remote agents via Google A2A protocol (JSON-RPC) |
+| 6 | **External MCP** | (wired in agent.py) | EXISTS | Connects to external MCP servers, imports their tools |
+| 7 | **Chart** | `generate_chart.py` | EXISTS | Generates inline chart visualizations (framework tool) |
+
+**Plus MCP-based integrations (not tool factories, wired as MCP servers in `agent.py`):**
+- **Genie** -- NL-to-SQL via Databricks Genie MCP (`PROJECT_GENIE_*`)
+- **Vector Search** -- semantic doc retrieval via VS MCP (`PROJECT_VS_*`)
 
 ### Challenge 5: Data Provisioning Without Local Scripts
 
@@ -484,8 +499,8 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 | # | Question | Answer | Status |
 |---|----------|--------|--------|
-| E1 | `tool_factory.py` exists? | No. Only `ka_factory.py`. Need to build `tool_factory.py` for SQL read + action patterns. | TO BUILD |
-| E2 | Can ALL tools be declarative? | 95% yes (3 patterns). Custom logic tools: user writes Python, puts in `tools/`. Both coexist via `_discover_domain_tools()`. | DECIDED |
+| E1 | `tool_factory.py` for SQL read + action? | No. `ka_factory.py`, `api_factory.py`, `a2a_factory.py` exist. Need `tool_factory.py` for SQL read + action patterns. | TO BUILD |
+| E2 | Can ALL tools be declarative? | 95% yes (7 patterns). Custom logic tools: user writes Python, puts in `tools/`. Both coexist via `_discover_domain_tools()`. | DECIDED |
 | E3 | `.forge`-aware tool discovery? | Both paths coexist. File-based (`_discover_domain_tools()` scans `tools/`) + `.forge`-based (`_discover_forge_tools()` reads specs). Agent uses both. | DECIDED |
 
 ### F. Frontend

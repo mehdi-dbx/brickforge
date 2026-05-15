@@ -499,7 +499,7 @@
     </tr>
     <tr>
       <td>Tools need custom Python?</td>
-      <td>NO -- 3 declarative patterns, framework generates code at runtime</td>
+      <td>NO -- 7 declarative patterns, framework generates code at runtime</td>
     </tr>
     <tr>
       <td>Notebooks?</td>
@@ -535,7 +535,7 @@
   <li>Table definitions (DDL, seed data references)</li>
   <li>UC function SQL (inline or sidecar files)</li>
   <li>Stored procedure SQL</li>
-  <li>Tool definitions (declarative: 3 patterns)</li>
+  <li>Tool definitions (declarative: 7 patterns)</li>
   <li>System prompt + knowledge base + starter prompts</li>
   <li>KA configurations</li>
   <li>Eval dataset + scorer config</li>
@@ -829,9 +829,21 @@
   </div>
 </div>
 
-<h3>Solution</h3>
-<p><code>ka_factory.py</code> already does this for KA tools. Same pattern for SQL read and action tools.</p>
-<p>3 declarative patterns cover 95% of tools. Custom logic tools: user writes Python, puts in <code>tools/</code>. Both coexist via <code>_discover_domain_tools()</code>.</p>
+<h3>7 Tool Patterns (3 existing factories + 4 to build/extend)</h3>
+<table>
+  <thead><tr><th>#</th><th>Pattern</th><th>Factory</th><th>Status</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><strong>SQL read</strong></td><td><code>tool_factory.py</code></td><td><span class="badge amber">TO BUILD</span></td><td>Calls a UC function with params, returns query results</td></tr>
+    <tr><td>2</td><td><strong>Action</strong></td><td><code>tool_factory.py</code></td><td><span class="badge amber">TO BUILD</span></td><td>Calls a stored procedure with params</td></tr>
+    <tr><td>3</td><td><strong>KA query</strong></td><td><code>ka_factory.py</code></td><td><span class="badge green">EXISTS</span></td><td>Calls a Knowledge Assistant endpoint, extracts answer</td></tr>
+    <tr><td>4</td><td><strong>External API</strong></td><td><code>api_factory.py</code></td><td><span class="badge green">EXISTS</span></td><td>Calls REST APIs via UC Connection or direct HTTP</td></tr>
+    <tr><td>5</td><td><strong>A2A</strong></td><td><code>a2a_factory.py</code></td><td><span class="badge green">EXISTS</span></td><td>Calls remote agents via Google A2A protocol (JSON-RPC)</td></tr>
+    <tr><td>6</td><td><strong>External MCP</strong></td><td>(wired in agent.py)</td><td><span class="badge green">EXISTS</span></td><td>Connects to external MCP servers, imports their tools</td></tr>
+    <tr><td>7</td><td><strong>Chart</strong></td><td><code>generate_chart.py</code></td><td><span class="badge green">EXISTS</span></td><td>Generates inline chart visualizations (framework tool)</td></tr>
+  </tbody>
+</table>
+<p><strong>Plus MCP-based integrations</strong> (not factories, wired as MCP servers in <code>agent.py</code>): <strong>Genie</strong> (NL-to-SQL, <code>PROJECT_GENIE_*</code>) and <strong>Vector Search</strong> (semantic retrieval, <code>PROJECT_VS_*</code>).</p>
+<p>7 declarative patterns cover 95% of tools. Custom logic tools: user writes Python, puts in <code>tools/</code>. Both coexist via <code>_discover_domain_tools()</code>.</p>
 
 <div class="fbox-row">
   <div class="fbox purple">.forge tool specs</div>
@@ -2027,7 +2039,7 @@ brickforge deploy-setup --workspace https://xxx.cloud.databricks.com</pre>
     <tr>
       <td>E2</td>
       <td>Can ALL tools be declarative?</td>
-      <td>95% yes (3 patterns). Custom logic tools: user writes Python, puts in <code>tools/</code>. Both coexist via <code>_discover_domain_tools()</code>.</td>
+      <td>95% yes (7 patterns). Custom logic tools: user writes Python, puts in <code>tools/</code>. Both coexist via <code>_discover_domain_tools()</code>.</td>
       <td><span class="badge decided">Decided</span></td>
     </tr>
     <tr>
