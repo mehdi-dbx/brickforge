@@ -1041,7 +1041,11 @@ cd brickforge-*
 # Open http://localhost:9000
 ```
 
-### Distribution Path 2: pip install brickforge
+### Distribution Path 2: pip install brickforge + deploy-setup
+
+**Two capabilities in one package:**
+- `brickforge` -- run Setup App locally (needs Node.js)
+- `brickforge deploy-setup` -- deploy Setup App to user's DBX workspace
 
 **mm D2.1: What would the pip package look like?**
 
@@ -1057,6 +1061,7 @@ dependencies = [
 
 [project.scripts]
 brickforge = "brickforge.cli:main"
+brickforge-deploy-setup = "brickforge.deploy_setup:main"
 
 [tool.setuptools.package-data]
 brickforge = [
@@ -1066,15 +1071,15 @@ brickforge = [
 ]
 ```
 
-**mm D2.2: The problem with pip for this project**
+**mm D2.2: Node.js prereq**
 
-pip packages are designed for Python libraries, not multi-runtime applications.
-Including 8MB of Node.js files as package data works but is unusual.
+pip can't install Node.js. The user needs it installed separately for `brickforge` (local mode).
+For `brickforge deploy-setup` (deploys to DBX), Node.js is NOT needed on the user's machine -- it's in the DBX App runtime.
 
-More importantly: the user STILL needs Node.js installed separately. pip can't install Node.js.
-So the pip package saves them `git clone` but they still need to install Node.js manually.
+So: `pip install brickforge && brickforge deploy-setup` works with ONLY Python. No Node.js needed for SaaS deploy.
+`pip install brickforge && brickforge` (local mode) needs Node.js. `start.sh` checks and errors clearly.
 
-**Is it worth it?** Marginal improvement over GitHub Release. The release archive is simpler and doesn't pretend to be a Python package.
+8MB of Node.js files as package data is fine (tensorflow is 500MB+).
 
 **mm D2.3: Publishing to PyPI**
 
@@ -1083,46 +1088,25 @@ So the pip package saves them `git clone` but they still need to install Node.js
 3. Build: `python -m build` (creates `dist/brickforge-1.0.0.tar.gz`)
 4. Upload: `twine upload dist/*`
 5. No approval process -- upload and it's live immediately
-6. Then anyone can: `pip install brickforge && brickforge`
+6. Then anyone can: `pip install brickforge`
 
-**Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later.
+**mm D2.4: deploy-setup without pip install**
 
-### Distribution Path 3: DBX App Deploy
-
-**mm D3.1: One-command deploy to user's workspace**
-
-```bash
-pip install brickforge
-brickforge deploy-setup --workspace https://xxx.cloud.databricks.com
-```
-
-Or without pip install:
+Also works standalone -- no pip needed:
 ```bash
 python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/scripts/deploy-setup.py)"
 ```
 
-**mm D3.2: What deploy-setup actually does**
+**mm D2.5: What deploy-setup does**
 
-1. Authenticate: `databricks auth login --host <workspace>` (opens browser)
+1. Authenticate via Databricks SDK (PAT, CLI profile, or interactive `databricks auth login`)
 2. Create the DBX App: `POST /api/2.0/apps` with name `brickforge-setup`
-3. Upload source files to workspace: files API
+3. Upload source files to workspace (same files as release archive)
 4. Create deployment: `POST /api/2.0/apps/{name}/deployments`
 5. Wait for app to start
 6. Print URL
 
-**mm D3.3: What files get uploaded?**
-
-Same as the release archive, but uploaded to workspace files instead of extracted locally.
-The upload script needs to walk the file tree and PUT each file.
-
-**mm D3.4: Auth for deploy-setup**
-
-User needs a Databricks PAT or CLI profile. The script uses the SDK which reads from:
-- `DATABRICKS_HOST` + `DATABRICKS_TOKEN` env vars
-- Or `~/.databrickscfg` CLI profile
-- Or interactive `databricks auth login`
-
-No new auth mechanism needed -- standard Databricks SDK auth.
+**Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later. deploy-setup works standalone regardless.
 
 ### Distribution Path 4: Docker
 
@@ -1180,9 +1164,8 @@ No hardcoded `/` path separators in critical code.
 | Priority | Method | Prereqs | Effort | When |
 |----------|--------|---------|--------|------|
 | 1 | **GitHub Release** (tar.gz/zip) | Node.js + Python | `build-release.sh` script | FIRST |
-| 2 | **deploy-setup** (one-command DBX App deploy) | Python + Databricks auth | `deploy-setup.py` script | SECOND |
+| 2 | **pip install brickforge** (local + deploy-setup) | Python (+ Node.js for local mode) | pyproject.toml + cli.py + deploy_setup.py | SECOND |
 | 3 | **Docker image** | Docker | Dockerfile | THIRD |
-| 4 | **pip install** | Node.js + Python | pyproject.toml refactor | STRETCH |
 
 ### Files to Create
 

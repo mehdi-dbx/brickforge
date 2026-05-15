@@ -1614,9 +1614,15 @@ cd brickforge-*
 ./start.sh
 <span class="cmt"># Open http://localhost:9000</span></pre>
 
-<h3>Distribution Path 2: pip install brickforge</h3>
+<h3>Distribution Path 2: pip install brickforge + deploy-setup</h3>
 
-<h4>mm D2.1: What the pip package would look like</h4>
+<p><strong>Two capabilities in one package:</strong></p>
+<ul>
+  <li><code>brickforge</code> -- run Setup App locally (needs Node.js)</li>
+  <li><code>brickforge deploy-setup</code> -- deploy Setup App to user's DBX workspace (Python only, no Node.js needed on user machine)</li>
+</ul>
+
+<h4>mm D2.1: pip package</h4>
 <pre><span class="key">[project]</span>
 <span class="key">name</span> = <span class="str">"brickforge"</span>
 <span class="key">version</span> = <span class="str">"1.0.0"</span>
@@ -1628,47 +1634,33 @@ cd brickforge-*
 
 <span class="key">[project.scripts]</span>
 <span class="key">brickforge</span> = <span class="str">"brickforge.cli:main"</span>
+<span class="key">brickforge-deploy-setup</span> = <span class="str">"brickforge.deploy_setup:main"</span></pre>
 
-<span class="key">[tool.setuptools.package-data]</span>
-<span class="key">brickforge</span> = [
-    <span class="str">"visual/backend/**/*"</span>,
-    <span class="str">"visual/frontend/dist/**/*"</span>,
-    <span class="cmt"># ... all non-Python files</span>
-]</pre>
+<h4>mm D2.2: Node.js prereq</h4>
+<p>pip can't install Node.js. For local mode (<code>brickforge</code>): user needs Node.js. For deploy (<code>brickforge deploy-setup</code>): NO Node.js needed -- it's in the DBX App runtime. 8MB of Node.js files as package data is fine (tensorflow is 500MB+).</p>
 
-<h4>mm D2.2: The problem with pip</h4>
-<p>pip packages are designed for Python libraries, not multi-runtime applications. Including 8MB of Node.js files as package data works but is unusual. The user STILL needs Node.js installed separately. pip can't install Node.js.</p>
 <h4>mm D2.3: Publishing to PyPI</h4>
 <ol>
-  <li>Check name availability: <code>pip index versions brickforge</code> or visit <a href="https://pypi.org/project/brickforge/">pypi.org/project/brickforge/</a> (404 = available)</li>
-  <li>Create account at pypi.org, get API token</li>
-  <li>Build: <code>python -m build</code> (creates <code>dist/brickforge-1.0.0.tar.gz</code>)</li>
-  <li>Upload: <code>twine upload dist/*</code></li>
-  <li>No approval process -- upload and it's live immediately</li>
-  <li>Then anyone can: <code>pip install brickforge && brickforge</code></li>
+  <li>Check name: <a href="https://pypi.org/project/brickforge/">pypi.org/project/brickforge/</a> (404 = available)</li>
+  <li>Create account, get API token</li>
+  <li>Build: <code>python -m build</code></li>
+  <li>Upload: <code>twine upload dist/*</code> -- live immediately</li>
 </ol>
-<p><strong>Decision:</strong> pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later.</p>
 
-<h3>Distribution Path 3: DBX App Deploy</h3>
-
-<h4>mm D3.1: One-command deploy</h4>
-<pre>pip install brickforge
-brickforge deploy-setup --workspace https://xxx.cloud.databricks.com</pre>
-<p>Or without pip install:</p>
+<h4>mm D2.4: deploy-setup without pip</h4>
+<p>Also works standalone:</p>
 <pre>python -c <span class="str">"$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/scripts/deploy-setup.py)"</span></pre>
 
-<h4>mm D3.2: What deploy-setup actually does</h4>
+<h4>mm D2.5: What deploy-setup does</h4>
 <ol>
-  <li>Authenticate: <code>databricks auth login --host &lt;workspace&gt;</code> (opens browser)</li>
-  <li>Create the DBX App: <code>POST /api/2.0/apps</code> with name <code>brickforge-setup</code></li>
-  <li>Upload source files to workspace: files API</li>
+  <li>Authenticate via Databricks SDK (PAT, CLI profile, or interactive login)</li>
+  <li>Create DBX App: <code>POST /api/2.0/apps</code></li>
+  <li>Upload source files to workspace</li>
   <li>Create deployment: <code>POST /api/2.0/apps/{name}/deployments</code></li>
-  <li>Wait for app to start</li>
-  <li>Print URL</li>
+  <li>Wait for start, print URL</li>
 </ol>
 
-<h4>mm D3.3: What files get uploaded</h4>
-<p>Same as the release archive, but uploaded to workspace files instead of extracted locally. The upload script walks the file tree and PUTs each file.</p>
+<p><strong>Decision:</strong> pip install is a STRETCH GOAL. GitHub Release first. deploy-setup works standalone regardless.</p>
 
 <h4>mm D3.4: Auth for deploy-setup</h4>
 <p>User needs a Databricks PAT or CLI profile. The script uses the SDK which reads from: <code>DATABRICKS_HOST</code> + <code>DATABRICKS_TOKEN</code> env vars, or <code>~/.databrickscfg</code> CLI profile, or interactive <code>databricks auth login</code>. No new auth mechanism needed.</p>
