@@ -503,11 +503,35 @@ Start from where we are. Take one step. Hit the wall. Solve the wall. Next step.
 
 Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, CORS, etc.).
 
-### Inch 4: Config Persistence
+### Inch 4: Config Persistence -- Stateful Backend
 
-`.env.local` ephemeral in DBX App mode. Wizard creates it via Setup steps.
-**Short-term:** `.env.local` written at runtime, lost on restart. User must reconfigure.
-**Long-term:** ConfigProvider reads/writes `.forge` on UC Volume. Persists across restarts.
+**In SaaS mode, the Node.js backend is stateful.** It holds the project zip in process memory.
+
+**Lifecycle:**
+1. User opens project -> zip downloaded from UC Volume into Node.js memory
+2. User fiddles with wizard -> changes accumulate in the in-memory zip
+3. Each meaningful write (config save, file generation, resource creation) -> update in-memory zip entry + flush to UC Volume
+4. Page refresh -> backend still alive, serves current state from memory. No data lost.
+5. App restart -> zip re-downloaded from UC Volume. Last flushed state restored.
+
+**Flush strategy: event-driven, not periodic.**
+- User saves config value -> flush
+- Wizard generates tables/prompts/routines -> flush
+- User creates/deletes a resource (KA, Genie) -> flush
+- User sits idle -> zero flushes
+- Flush = one `w.files.upload()` call, under 1MB, ~200ms
+
+**What survives page refresh:** Everything. Backend holds the zip in memory.
+**What survives app restart:** Everything that was flushed. Risk window = only during mid-request crash (same as today).
+
+**What is NOT persisted (same as today):**
+- UI position (active step, wizard phase) -- resets on refresh
+- Test cache results -- re-fetched on step activation
+- Terminal output lines -- ephemeral
+
+**Design shift from today:** Current backend is stateless (reads `.env.local` from disk on every request). SaaS backend is stateful (holds zip in memory, flushes on write). The ConfigProvider abstraction handles both: `LocalConfigProvider` reads disk, `ForgeConfigProvider` reads/writes the in-memory zip.
+
+**Local mode (C):** No change. Files on disk. Stateless reads/writes. Same as today.
 
 ### Inch 5: Agent Deploy via Python SDK (DAB-compatible)
 
@@ -545,9 +569,9 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 | # | Question | Answer | Status |
 |---|----------|--------|--------|
-| B1 | Config persistence strategy? | `.forge` on UC Volume IS the persistence. No `.env.local` in SaaS. ConfigProvider reads `.forge`, hydrates env vars. | DECIDED |
+| B1 | Config persistence strategy? | Zip archive in UC Volume. Backend holds zip in memory, flushes on every meaningful write (~200ms). Event-driven, not periodic. No `.env.local` in SaaS. | DECIDED |
 | B2 | Can DBX App set its own env vars at runtime? | Irrelevant -- `.forge` on UC Volume is the persistence, not app env vars. | N/A |
-| B3 | How to restore on restart? | Startup reads `.forge` from UC Volume, hydrates process.env via ForgeConfigProvider. | DECIDED |
+| B3 | How to restore on restart? | Re-download zip from UC Volume into memory. Last flushed state restored. UI position resets (same as today). | DECIDED |
 | B4 | Mode A (hosted): user workspace credentials? | Databricks SSO. | DECIDED |
 
 ### C. Agent App Deployment

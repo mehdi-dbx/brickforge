@@ -2214,10 +2214,17 @@ brickforge deploy-setup --workspace https://xxx.cloud.databricks.com</pre>
 <h3>Inch 3: First Deploy Test</h3>
 <p>Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, CORS, etc.).</p>
 
-<h3>Inch 4: Config Persistence</h3>
-<p><code>.env.local</code> ephemeral in DBX App mode. Wizard creates it via Setup steps.</p>
-<p><strong>Short-term:</strong> <code>.env.local</code> written at runtime, lost on restart. User must reconfigure.</p>
-<p><strong>Long-term:</strong> ConfigProvider reads/writes <code>.forge</code> on UC Volume. Persists across restarts.</p>
+<h3>Inch 4: Config Persistence -- Stateful Backend</h3>
+<p><strong>In SaaS mode, the Node.js backend is stateful.</strong> It holds the project zip in process memory.</p>
+<ol>
+  <li>User opens project &rarr; zip downloaded from UC Volume into memory</li>
+  <li>User fiddles with wizard &rarr; changes accumulate in the in-memory zip</li>
+  <li>Each meaningful write (config save, file gen, resource creation) &rarr; update in-memory zip + flush to UC Volume</li>
+  <li>Page refresh &rarr; backend still alive, serves from memory. No data lost.</li>
+  <li>App restart &rarr; re-download zip from Volume. Last flushed state restored.</li>
+</ol>
+<p><strong>Flush: event-driven, not periodic.</strong> User saves &rarr; flush. User idle &rarr; zero flushes. One <code>w.files.upload()</code>, &lt;1MB, ~200ms.</p>
+<p><strong>Design shift:</strong> current backend is stateless (reads disk per request). SaaS backend is stateful (holds zip in memory). ConfigProvider abstraction handles both.</p>
 
 <h3>Inch 5: Agent Deploy via Python SDK (DAB-compatible)</h3>
 <p>Replace <code>deploy.sh</code> (DAB CLI) with <code>deploy_via_api.py</code> (REST API).</p>
