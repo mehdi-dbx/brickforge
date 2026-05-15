@@ -2302,6 +2302,68 @@ else: out('[+] cleanup complete')
 })
 
 // SPA fallback — serve index.html for non-API routes
+// ── Project Management ──────────────────────────────────────────────────────
+const { ProjectManager } = require('./lib/project-manager')
+const projectManager = new ProjectManager(
+  process.env.DATABRICKS_HOST || '',
+  process.env.DATABRICKS_TOKEN || ''
+)
+
+// GET /api/projects -- list all .forge projects on UC Volume
+app.get('/api/projects', async (req, res) => {
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.json({ projects: [], error: 'no schema configured' })
+  try {
+    const projects = await projectManager.listProjects(schema)
+    res.json({ projects, current: projectManager.currentProject })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/projects -- create a new empty project
+app.post('/api/projects', async (req, res) => {
+  const { name } = req.body || {}
+  if (!name) return res.status(400).json({ error: 'name required' })
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.status(400).json({ error: 'no schema configured' })
+  try {
+    const AdmZip = require('adm-zip')
+    const zip = new AdmZip()
+    zip.addFile('config.env', Buffer.from(`# BrickForge project: ${name}\n`))
+    const ok = await projectManager.saveProject(schema, name, zip.toBuffer())
+    res.json({ ok, name })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/projects/:name -- load a project
+app.get('/api/projects/:name', async (req, res) => {
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.status(400).json({ error: 'no schema configured' })
+  try {
+    const buf = await projectManager.loadProject(schema, req.params.name)
+    if (!buf) return res.status(404).json({ error: 'project not found' })
+    res.json({ ok: true, name: req.params.name, size: buf.length })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/projects/:name -- delete a project
+app.delete('/api/projects/:name', async (req, res) => {
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.status(400).json({ error: 'no schema configured' })
+  try {
+    const ok = await projectManager.deleteProject(schema, req.params.name)
+    res.json({ ok })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// SPA fallback
 const indexHtml = path.join(DIST_DIR, 'index.html')
 if (fs.existsSync(indexHtml)) {
   app.get('*', (req, res) => res.sendFile(indexHtml))
