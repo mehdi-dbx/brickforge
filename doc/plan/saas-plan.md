@@ -615,10 +615,10 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 | # | Question | Answer | Status |
 |---|----------|--------|--------|
-| G1 | How does user download generated project? | Workspace files accessible via `databricks workspace export-dir`. Or Setup App provides "Download project" button (zip + serve). | DECIDED |
-| G2 | Does Setup App know when user edits externally? | No, and doesn't need to. Once exported, user owns it. Setup App manages `.forge`; exported code is independent. | DECIDED |
-| G3 | GitHub repo creation from Setup App? | Stretch goal. Requires GitHub token/OAuth. Not now. | STRETCH |
-| G4 | CI/CD story? | User's own pipeline. Generated project is a standard DBX App -- deploy with any CI/CD tool. BrickForge doesn't provide CI/CD. | DECIDED |
+| G1 | How does user access generated project? | Project files are in a workspace folder. User can: (1) link to git via Databricks Git Folders (`POST /api/2.0/repos`), (2) export via `databricks workspace export-dir`, (3) download via Setup App button. | DECIDED |
+| G2 | Does Setup App know when user edits externally? | No, and doesn't need to. Once exported/linked, user owns it. Setup App manages `.forge`; exported code is independent. | DECIDED |
+| G3 | Git integration? | NOT a custom feature. User links workspace folder to their git repo via Databricks Git Folders (standard DBX feature). No GitHub API, no tokens, no OAuth needed from BrickForge. | DECIDED |
+| G4 | CI/CD story? | User's own pipeline. Push from Git Folder triggers their CI/CD. Generated project is a standard DAB bundle -- deploy with any pipeline. BrickForge doesn't provide CI/CD. | DECIDED |
 
 ### H. Multi-Project
 
@@ -628,7 +628,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 | H2 | Project list? | Scan UC Volume `/Volumes/{catalog}/{schema}/brickforge/` for subdirectories containing `.forge` files. | DECIDED |
 | H3 | Project deletion? | Delete Agent App (Apps API), drop UC tables (or schema), delete `.forge` directory from UC Volume, remove MLflow experiment. Existing cleanup tab handles most of this. | DECIDED |
 
-**Total: 31 questions. 29 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.**
+**Total: 31 questions. 30 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.**
 
 ---
 

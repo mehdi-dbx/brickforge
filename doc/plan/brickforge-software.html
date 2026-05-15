@@ -1909,7 +1909,7 @@ cd brickforge-*
 <!-- ============================================================ -->
 <h2 id="questions" class="amber">16. Open Questions -- All 31 Answered</h2>
 
-<p><strong>Total: 31 questions. 29 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.</strong></p>
+<p><strong>Total: 31 questions. 30 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.</strong></p>
 
 <h3>A. Setup App Deployment (6 questions)</h3>
 <table>
@@ -2142,19 +2142,19 @@ cd brickforge-*
     <tr>
       <td>G2</td>
       <td>Does Setup App know when user edits externally?</td>
-      <td>No, and doesn't need to. Once exported, user owns it. Setup App manages <code>.forge</code>; exported code is independent.</td>
+      <td>No, and doesn't need to. Once exported/linked, user owns it.</td>
       <td><span class="badge decided">Decided</span></td>
     </tr>
     <tr>
       <td>G3</td>
-      <td>GitHub repo creation from Setup App?</td>
-      <td>Stretch goal. Requires GitHub token/OAuth. Not now.</td>
-      <td><span class="badge stretch">Stretch</span></td>
+      <td>Git integration?</td>
+      <td>NOT custom. User links workspace folder to their git repo via Databricks Git Folders (standard DBX feature, <code>POST /api/2.0/repos</code>). No GitHub API, no tokens, no OAuth from BrickForge.</td>
+      <td><span class="badge decided">Decided</span></td>
     </tr>
     <tr>
       <td>G4</td>
       <td>CI/CD story?</td>
-      <td>User's own pipeline. Generated project is a standard DBX App -- deploy with any CI/CD tool. BrickForge doesn't provide CI/CD.</td>
+      <td>User's own pipeline. Push from Git Folder triggers CI/CD. Generated project is a standard DAB bundle.</td>
       <td><span class="badge decided">Decided</span></td>
     </tr>
   </tbody>
