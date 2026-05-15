@@ -1475,3 +1475,13 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 ### 2026-05-15 18:15 -- Setup App verified locally with ConfigProvider refactor
 - `node visual/backend/index.js` starts, health OK, all 19 setup steps reporting correctly
 - LocalConfigProvider wraps existing functions identically -- zero behavior change confirmed
+
+### 2026-05-15 18:30 -- Inch 5+7: Agent deploy script
+- Created `deploy/deploy_agent_app.py`:
+  - `generate_app_yaml(config)` -- injects all PROJECT_* env vars from config dict
+  - `generate_databricks_yml(config)` -- warehouse, genie resources, endpoint resources
+  - `build_agent_bundle(config)` -- 4.7MB zip, 547 files (agent, app/dist, tools, data, conf + generated configs)
+  - `deploy(config)` -- upload zip to workspace, unzip at startup via start.sh, create/deploy app via SDK
+- Backend wired: `exec-deploy-agent` action in index.js writes config JSON, calls deploy script
+- Local test: bundle generates correctly, app.yaml has all env vars, databricks.yml has resources
+- Committed: `587e3da`
