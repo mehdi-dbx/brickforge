@@ -984,6 +984,16 @@ for line in additions: print('[+] ' + line)
       break
     }
 
+    case 'exec-deploy-agent': {
+      // SaaS mode: deploy Agent App via SDK (no DAB CLI needed)
+      // Write config to temp JSON, pass to deploy script
+      const configDict = config.toEnvDict()
+      const tmpConfig = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
+      fs.writeFileSync(tmpConfig, JSON.stringify(configDict, null, 2))
+      runCommand('uv', ['run', 'python', 'deploy/deploy_agent_app.py', '--config', tmpConfig])
+      break
+    }
+
     case 'save-multi-instance': {
       const { prefix, slug, url, header } = params
       if (!prefix || !slug || !url) { write('line', { text: '[x] prefix, slug, and url required\n', stream: 'err' }); done(false); break }
