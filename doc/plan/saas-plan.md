@@ -201,7 +201,9 @@ The airops extraction defined the `.forge` schema by example.
 
 ### Loading a Stash -- Verification & Integrity Check
 
-When a `.forge` bundle is loaded (from UC Volume, local stash, or wizard output), the system MUST verify every piece before proceeding:
+When a `.forge` bundle is loaded (from UC Volume, local stash, or wizard output), the system MUST verify every piece before proceeding.
+
+**Core rule: if the manifest declares it, the file must exist. If the manifest doesn't declare it, it doesn't need to exist.** The verification checks what the manifest REFERENCES, not a fixed checklist.
 
 **Step 1: Parse `.forge` manifest**
 - Validate YAML syntax
@@ -214,14 +216,14 @@ For each reference in the manifest, check the file is actually there:
 | Manifest Section | Expected Files | Check |
 |-----------------|----------------|-------|
 | `data.tables[].ddl` | `data/init/create_*.sql` | File exists, contains `CREATE` |
-| `data.tables[].seed` | `data/csv/*.csv` | Optional -- not needed if DDL exists or tables already in UC |
+| `data.tables[].seed` | `data/csv/*.csv` | If declared in manifest: must exist. Not all tables need seed CSV (DDL-only or existing UC tables OK). |
 | `data.functions[]` | `data/func/*.sql` | File exists |
 | `data.procedures[]` | `data/proc/*.sql` | File exists |
 | `tools[].file` | `tools/*.py` | File exists, contains `@tool` |
 | `prompt.system` | `conf/prompt/main.prompt` | File exists |
 | `prompt.knowledge_base` | `conf/prompt/knowledge.base` | File exists (can be empty) |
 | `prompt.starters` | `conf/prompt/user.prompt` | File exists (can be empty) |
-| `knowledge_assistants[].config` | `conf/ka/*.yml` | Optional -- can pick existing KA endpoint from workspace instead |
+| `knowledge_assistants[].config` | `conf/ka/*.yml` | If declared in manifest: must exist. If no KA section in manifest, not needed. |
 | `eval.dataset` | `eval/data/*.jsonl` | File exists (optional section) |
 
 **Step 3: Report status**
@@ -236,10 +238,10 @@ Output a clear report:
 ```
 
 **Step 4: Suggest fixes for missing assets**
-- Missing CSV: "Not mandatory if DDL SQL exists or tables already exist in UC schema. Otherwise, run the Data Gen wizard to generate seed data."
+- Missing CSV (declared in manifest): "Generate seed data via Data Gen wizard, or remove the `seed:` reference from the manifest if table already exists in UC."
 - Missing SQL: "Generate from table schema using the Routines wizard"
 - Missing prompt: "Generate from domain description using the Prompt wizard"
-- Missing KA config: "Not mandatory -- can pick up an existing KA endpoint from the workspace via the KA setup step instead of provisioning a new one."
+- Missing KA config (declared in manifest): "Provide the KA YAML, or pick an existing KA endpoint from the workspace and update the manifest's `knowledge_assistants[].config` accordingly."
 - Missing tool file: "Tool will be auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka/api/a2a/mcp/chart)"
 
 **Step 5: Provision check (live workspace verification)**
