@@ -818,7 +818,7 @@ This:
 `uv sync` is slow on first run. Options to speed up:
 - **Option A:** Run `uv sync` at deploy time (before starting the app), persist `.venv/` in workspace files
 - **Option B:** Use `pip install -r requirements.txt` instead (no uv needed at all for Setup App -- only Python scripts need packages, not the Node server)
-- **Option C:** Pre-build a Docker layer with deps (if DBX Apps support custom images)
+
 
 Option B is simplest: `pip install -r requirements.txt && node visual/backend/index.js`
 This eliminates the uv dependency for the Setup App entirely. The Python scripts get packages from the system Python.
@@ -1110,10 +1110,6 @@ python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main
 
 **Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later. deploy-setup works standalone regardless.
 
-### ~~Distribution Path 3: Docker~~ DROPPED
-
-Docker trades "install Node.js + Python" for "install Docker Desktop" (2GB+, runs a VM on Mac/Windows). Heavier prereq for near-zero value. In SaaS mode (A/B) user needs nothing installed. In local mode (C) Node.js + Python are lighter than Docker. Not worth the maintenance.
-
 ### Windows Compatibility
 
 **mm W.1: Two bash scripts to replace**
@@ -1160,7 +1156,6 @@ No hardcoded `/` path separators in critical code.
 | `start.bat` (root) | Local launcher (Windows) |
 | `setup-app.yaml` | Setup App DBX App manifest |
 | `scripts/deploy-setup.py` | One-command DBX App deploy |
-| ~~`Dockerfile`~~ | ~~Docker image build~~ DROPPED |
 | `.releaseignore` | Files to exclude from release archive |
 | `deploy/run_all_grants.py` | Python replacement for bash grants script |
 

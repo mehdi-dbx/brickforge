@@ -1665,8 +1665,6 @@ cd brickforge-*
 <h4>mm D3.4: Auth for deploy-setup</h4>
 <p>User needs a Databricks PAT or CLI profile. The script uses the SDK which reads from: <code>DATABRICKS_HOST</code> + <code>DATABRICKS_TOKEN</code> env vars, or <code>~/.databrickscfg</code> CLI profile, or interactive <code>databricks auth login</code>. No new auth mechanism needed.</p>
 
-<h3><s>Distribution Path 3: Docker</s> DROPPED</h3>
-<p>Docker trades "install Node.js + Python" for "install Docker Desktop" (2GB+, runs a VM on Mac/Windows). Heavier prereq for near-zero value. In SaaS mode user needs nothing installed. In local mode Node.js + Python are lighter. Not worth the maintenance.</p>
 
 <h3>Windows Compatibility</h3>
 
