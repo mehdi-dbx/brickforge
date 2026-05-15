@@ -496,7 +496,7 @@ Start from where we are. Take one step. Hit the wall. Solve the wall. Next step.
 
 ### Inch 2: Port + Auth
 
-**Port:** `const PORT = process.env.PORT || process.env.VISUAL_PORT || 9000`
+**Port:** `const PORT = process.env.DATABRICKS_APP_PORT || process.env.VISUAL_PORT || 9000`
 **Auth:** Mode B = app's SP inherits user permissions. Same grant pattern as Agent App.
 
 ### Inch 3: First Deploy Test
@@ -560,10 +560,10 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 |---|----------|--------|--------|
 | A1 | Where does Setup App's `app.yaml` live? | Root. Current `app.yaml` (Agent App) gets renamed to `agent-app.yaml`. Setup App `app.yaml` goes at root. | DECIDED |
 | A2 | Upload entire repo or subset? | Entire repo. Relative paths preserved, subprocess calls work. Exclude `.git/`, `stash/` via `.databricksignore`. | DECIDED |
-| A3 | Is `uv` available in DBX App runtime? | Assume no. Startup command: `pip install uv && uv sync && node visual/backend/index.js` | NEEDS TESTING |
-| A4 | Node.js version in DBX App runtime? | NEEDS TESTING on first deploy. | NEEDS TESTING |
-| A5 | Is `npm` available for Agent App `npm run build:client`? | NEEDS TESTING on first deploy. | NEEDS TESTING |
-| A6 | Exact `PORT` env var behavior? | NEEDS TESTING. Fix is trivial: `process.env.PORT \|\| 9000`. | NEEDS TESTING |
+| A3 | Is `uv` available in DBX App runtime? | YES. Docs confirm: "Python dependencies using `pip` or `uv`". No install needed. | CONFIRMED |
+| A4 | Node.js version in DBX App runtime? | YES, available. Docs: "If your app includes Node.js, the default command is `npm run start`". Exact version TBD. | CONFIRMED |
+| A5 | Is `npm` available? | YES. Docs: "Node.js dependencies using `npm`". | CONFIRMED |
+| A6 | Port env var? | `DATABRICKS_APP_PORT` (not `PORT`). Auto-substituted into command at runtime. | CONFIRMED |
 
 ### B. Config Persistence
 
@@ -628,7 +628,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 | H2 | Project list? | Scan UC Volume `/Volumes/{catalog}/{schema}/brickforge/` for subdirectories containing `.forge` files. | DECIDED |
 | H3 | Project deletion? | Delete Agent App (Apps API), drop UC tables (or schema), delete `.forge` directory from UC Volume, remove MLflow experiment. Existing cleanup tab handles most of this. | DECIDED |
 
-**Total: 31 questions. 25 DECIDED. 4 NEEDS TESTING (first deploy). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.**
+**Total: 31 questions. 29 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.**
 
 ---
 
@@ -673,7 +673,7 @@ DBX Apps run in a container. What's in it?
 |------|-----------|-------|
 | Python 3.x | YES | Standard in DBX runtime |
 | pip | YES | Standard |
-| uv | NO | Must be installed: `pip install uv` |
+| uv | YES | Docs confirm: available alongside pip |
 | Node.js | MAYBE | DBX Apps support Node.js apps, so Node must be available. But which version? |
 | npm | MAYBE | If Node.js is available, npm usually is too |
 | bash | YES | Standard Linux container |
@@ -682,7 +682,7 @@ DBX Apps run in a container. What's in it?
 
 ### Millimeter-by-Millimeter: What Breaks
 
-**mm R.1: uv not available**
+**mm R.1: uv IS available (confirmed by docs)**
 - 41 subprocess calls use `uv run python`
 - Fix options:
   - A: Install uv at startup: `pip install uv && uv sync` in app.yaml command
@@ -776,7 +776,7 @@ Both dist directories already exist locally:
 | Node.js | YES (runs server) | YES (runs Express) | Available in DBX runtime |
 | npm | **NO** | **NO** (dist pre-built) | Not needed -- eliminate from runtime |
 | Python 3.x | YES (subprocess) | YES (main) | Available in DBX runtime |
-| uv | YES (41 calls) | YES (startup) | `pip install uv` in startup command |
+| uv | YES (41 calls) | YES (startup) | Available in DBX App runtime (confirmed by docs) |
 | Python packages | YES (via uv sync) | YES (via uv sync) | Install once at deploy/startup |
 | Node.js | YES (main process) | YES (subprocess) | Available in DBX runtime |
 | npm | NO (pre-built) | YES (build:client) | Available with Node.js |
@@ -800,16 +800,18 @@ These 5 calls become Python SDK calls (WorkspaceClient). The backend already spa
 
 ### Startup Command for Setup App
 
+**Critical: DBX App commands are NOT run in a shell.** No `&&` chaining. Must use `bash -c` or a startup script.
+
 ```yaml
 # Setup App app.yaml
-command:
-  - "pip install uv && uv sync && node visual/backend/index.js"
+command: ["bash", "-c", "uv sync && node visual/backend/index.js"]
 ```
 
 This:
-1. Installs uv (fast, ~5s)
-2. Creates venv and installs Python deps (slow first time, ~2-3 min; fast if .venv persisted)
-3. Starts the Node.js Setup App server
+1. `uv sync` -- creates venv and installs Python deps (uv is pre-installed in DBX runtime). Slow first time (~2-3 min), fast on restart if `.venv` persisted.
+2. `node visual/backend/index.js` -- starts the Setup App server
+
+**Port:** Use `DATABRICKS_APP_PORT` (not `PORT`). Backend must respect: `const PORT = process.env.DATABRICKS_APP_PORT || process.env.VISUAL_PORT || 9000`
 
 ### Startup Optimization
 
@@ -1108,26 +1110,9 @@ python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main
 
 **Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later. deploy-setup works standalone regardless.
 
-### Distribution Path 4: Docker
+### ~~Distribution Path 3: Docker~~ DROPPED
 
-**mm D4.1: Dockerfile**
-
-```dockerfile
-FROM node:20-slim
-RUN apt-get update && apt-get install -y python3 python3-pip
-COPY . /app
-WORKDIR /app
-RUN pip3 install -r requirements.txt
-EXPOSE 9000
-CMD ["node", "visual/backend/index.js"]
-```
-
-**mm D4.2: Pros/cons**
-
-Pros: zero prereqs (just Docker), works everywhere, reproducible.
-Cons: Docker Desktop required (not everyone has it), ~500MB image size, overkill for a dev tool.
-
-**Decision:** Nice-to-have. Build the Dockerfile but don't make it the primary path.
+Docker trades "install Node.js + Python" for "install Docker Desktop" (2GB+, runs a VM on Mac/Windows). Heavier prereq for near-zero value. In SaaS mode (A/B) user needs nothing installed. In local mode (C) Node.js + Python are lighter than Docker. Not worth the maintenance.
 
 ### Windows Compatibility
 
@@ -1165,7 +1150,6 @@ No hardcoded `/` path separators in critical code.
 |----------|--------|---------|--------|------|
 | 1 | **GitHub Release** (tar.gz/zip) | Node.js + Python | `build-release.sh` script | FIRST |
 | 2 | **pip install brickforge** (local + deploy-setup) | Python (+ Node.js for local mode) | pyproject.toml + cli.py + deploy_setup.py | SECOND |
-| 3 | **Docker image** | Docker | Dockerfile | THIRD |
 
 ### Files to Create
 
@@ -1176,7 +1160,7 @@ No hardcoded `/` path separators in critical code.
 | `start.bat` (root) | Local launcher (Windows) |
 | `setup-app.yaml` | Setup App DBX App manifest |
 | `scripts/deploy-setup.py` | One-command DBX App deploy |
-| `Dockerfile` | Docker image build |
+| ~~`Dockerfile`~~ | ~~Docker image build~~ DROPPED |
 | `.releaseignore` | Files to exclude from release archive |
 | `deploy/run_all_grants.py` | Python replacement for bash grants script |
 

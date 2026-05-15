@@ -1665,20 +1665,8 @@ cd brickforge-*
 <h4>mm D3.4: Auth for deploy-setup</h4>
 <p>User needs a Databricks PAT or CLI profile. The script uses the SDK which reads from: <code>DATABRICKS_HOST</code> + <code>DATABRICKS_TOKEN</code> env vars, or <code>~/.databrickscfg</code> CLI profile, or interactive <code>databricks auth login</code>. No new auth mechanism needed.</p>
 
-<h3>Distribution Path 4: Docker</h3>
-
-<h4>mm D4.1: Dockerfile</h4>
-<pre><span class="kw">FROM</span> node:<span class="num">20</span>-slim
-<span class="kw">RUN</span> apt-get update &amp;&amp; apt-get install -y python3 python3-pip
-<span class="kw">COPY</span> . /app
-<span class="kw">WORKDIR</span> /app
-<span class="kw">RUN</span> pip3 install -r requirements.txt
-<span class="kw">EXPOSE</span> <span class="num">9000</span>
-<span class="kw">CMD</span> [<span class="str">"node"</span>, <span class="str">"visual/backend/index.js"</span>]</pre>
-
-<h4>mm D4.2: Pros/cons</h4>
-<p>Pros: zero prereqs (just Docker), works everywhere, reproducible. Cons: Docker Desktop required (not everyone has it), ~500MB image size, overkill for a dev tool.</p>
-<p><strong>Decision:</strong> Nice-to-have. Build the Dockerfile but don't make it the primary path.</p>
+<h3><s>Distribution Path 3: Docker</s> DROPPED</h3>
+<p>Docker trades "install Node.js + Python" for "install Docker Desktop" (2GB+, runs a VM on Mac/Windows). Heavier prereq for near-zero value. In SaaS mode user needs nothing installed. In local mode Node.js + Python are lighter. Not worth the maintenance.</p>
 
 <h3>Windows Compatibility</h3>
 
@@ -1923,7 +1911,7 @@ cd brickforge-*
 <!-- ============================================================ -->
 <h2 id="questions" class="amber">16. Open Questions -- All 31 Answered</h2>
 
-<p><strong>Total: 31 questions. 25 DECIDED. 4 NEEDS TESTING (first deploy). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.</strong></p>
+<p><strong>Total: 31 questions. 29 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.</strong></p>
 
 <h3>A. Setup App Deployment (6 questions)</h3>
 <table>
@@ -1946,26 +1934,26 @@ cd brickforge-*
     <tr>
       <td>A3</td>
       <td>Is <code>uv</code> available in DBX App runtime?</td>
-      <td>Assume no. Startup command: <code>pip install uv && uv sync && node visual/backend/index.js</code></td>
-      <td><span class="badge testing">Needs Testing</span></td>
+      <td>YES. Docs confirm: "Python dependencies using <code>pip</code> or <code>uv</code>". No install needed.</td>
+      <td><span class="badge decided">Confirmed</span></td>
     </tr>
     <tr>
       <td>A4</td>
-      <td>Node.js version in DBX App runtime?</td>
-      <td>NEEDS TESTING on first deploy.</td>
-      <td><span class="badge testing">Needs Testing</span></td>
+      <td>Node.js available in DBX App runtime?</td>
+      <td>YES. Docs: "If your app includes Node.js, the default command is <code>npm run start</code>". Exact version TBD.</td>
+      <td><span class="badge decided">Confirmed</span></td>
     </tr>
     <tr>
       <td>A5</td>
-      <td>Is <code>npm</code> available for Agent App <code>npm run build:client</code>?</td>
-      <td>NEEDS TESTING on first deploy.</td>
-      <td><span class="badge testing">Needs Testing</span></td>
+      <td>Is <code>npm</code> available?</td>
+      <td>YES. Docs: "Node.js dependencies using <code>npm</code>".</td>
+      <td><span class="badge decided">Confirmed</span></td>
     </tr>
     <tr>
       <td>A6</td>
-      <td>Exact <code>PORT</code> env var behavior?</td>
-      <td>NEEDS TESTING. Fix is trivial: <code>process.env.PORT || 9000</code>.</td>
-      <td><span class="badge testing">Needs Testing</span></td>
+      <td>Port env var?</td>
+      <td><code>DATABRICKS_APP_PORT</code> (not <code>PORT</code>). Auto-substituted into command at runtime.</td>
+      <td><span class="badge decided">Confirmed</span></td>
     </tr>
   </tbody>
 </table>
