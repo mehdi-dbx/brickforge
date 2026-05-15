@@ -1451,19 +1451,20 @@ uv run python -c <span class="str">"from agent.start_server import main; main()"
 <h3>Bloat to Exclude</h3>
 <table>
   <thead>
-    <tr><th>Directory</th><th>Size</th></tr>
+    <tr><th>Excluded</th><th>Size</th><th>Why safe</th><th>Reconstructed on target?</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>.mypy_cache/</code></td><td>1.1 GB (!!)</td></tr>
-    <tr><td><code>.venv/</code></td><td>662 MB</td></tr>
-    <tr><td><code>app/client/node_modules/</code></td><td>100 MB</td></tr>
-    <tr><td><code>app/server/node_modules/</code></td><td>18 MB</td></tr>
-    <tr><td><code>visual/frontend/node_modules/</code></td><td>(gitignored)</td></tr>
-    <tr><td><code>__pycache__/</code></td><td>~1 MB</td></tr>
-    <tr><td><code>.git/</code></td><td>varies</td></tr>
-    <tr><td><code>.DS_Store</code> files</td><td>trivial</td></tr>
+    <tr><td><code>.mypy_cache/</code></td><td>1.1 GB</td><td>Type checker cache. Not needed at runtime.</td><td>Never. Only if someone runs <code>mypy</code>.</td></tr>
+    <tr><td><code>.venv/</code></td><td>662 MB</td><td>Python virtual environment.</td><td>Rebuilt at startup: <code>pip install -r requirements.txt</code> or <code>uv sync</code> (1-2 min first time).</td></tr>
+    <tr><td><code>app/client/node_modules/</code></td><td>100 MB</td><td>Only needed to BUILD React frontend.</td><td>Never. Pre-built <code>app/client/dist/</code> included instead.</td></tr>
+    <tr><td><code>app/server/node_modules/</code></td><td>18 MB</td><td>Only needed to BUILD Express server.</td><td>Never. Pre-built <code>app/server/dist/</code> included instead.</td></tr>
+    <tr><td><code>visual/frontend/node_modules/</code></td><td>--</td><td>Already gitignored. Only for dev.</td><td>Never. Pre-built <code>visual/frontend/dist/</code> included.</td></tr>
+    <tr><td><code>__pycache__/</code></td><td>~1 MB</td><td>Python bytecode cache.</td><td>Auto-created by Python on first import. Zero action.</td></tr>
+    <tr><td><code>.git/</code></td><td>varies</td><td>Version control history.</td><td>Not needed. User can <code>git init</code> for CI/CD.</td></tr>
+    <tr><td><code>.DS_Store</code></td><td>tiny</td><td>macOS metadata.</td><td>Never. Platform artifact.</td></tr>
   </tbody>
 </table>
+<p><strong>Note: <code>visual/backend/node_modules/</code> (8MB) is NOT excluded.</strong> It IS included -- the Setup App backend needs it to run.</p>
 
 <h3>The Two-Runtime Problem</h3>
 <p>BrickForge needs BOTH Node.js (Setup App server) and Python (Databricks SDK, agent, data gen). No single package manager handles both. Don't try to force it.</p>
