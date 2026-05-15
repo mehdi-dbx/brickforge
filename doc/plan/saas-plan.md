@@ -1511,3 +1511,13 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Backend endpoints wired: `GET/POST/DELETE /api/projects`
 - Local test: endpoints respond correctly
 - Committed: `9e317ca`
+
+### 2026-05-15 19:35 -- Project selector frontend UI
+- Added project selector dropdown in title bar (next to BrickForge logo)
+- FolderOpen icon + current project name as button
+- Dropdown shows: project list from UC Volume, size, delete button (hover)
+- Create new project: inline input + Create button
+- Local mode fallback shown at bottom
+- Click-outside-to-close behavior
+- Frontend rebuilt
+- Committed: `b9e1178`
