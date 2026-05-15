@@ -252,6 +252,57 @@ After loading files, optionally verify against the live Databricks workspace:
 
 This turns the load process into a guided setup: load -> verify -> fix gaps -> ready.
 
+### UI: Visual Stash Health Report
+
+The Setup App displays the verification results as a visual checklist in the UI -- same pattern as the Setup DAG with [+]/[x]/[!] orbs.
+
+**Stash Health panel (new tab or section in Setup):**
+
+```
+Stash: airops                                    [Reload] [Fix All]
+─────────────────────────────────────────────────────────────────
+[+] airops.forge              valid YAML, v1.0
+[+] app.yaml                  found
+[+] databricks.yml            found
+
+DATA
+[+] data/csv/flights.csv      5 rows
+[+] data/init/create_flights.sql    CREATE TABLE
+[x] data/init/create_metrics.sql    NOT FOUND         [Generate]
+[+] data/func/flights_at_risk.sql   found
+[!] data/proc/update_risk.sql       NOT FOUND (optional)
+
+PROMPTS
+[+] conf/prompt/main.prompt   211 lines
+[+] conf/prompt/knowledge.base 42 lines
+[!] conf/prompt/user.prompt   empty (no starters)    [Generate]
+
+TOOLS
+[+] tools/query_flights.py    @tool found
+[+] tools/update_risk.py      @tool found
+
+INTEGRATIONS
+[+] KA: passengers            ka-e0012089-endpoint
+[!] KA config YAML            not in stash (using existing endpoint)
+[+] Genie: checkin            01f142...
+[!] Vector Search             not configured
+
+WORKSPACE (live)
+[+] Schema: catalog.schema    exists
+[x] Table: flights            NOT PROVISIONED        [Provision]
+[+] Table: checkin_agents     exists
+[x] Function: flights_at_risk NOT CREATED            [Create]
+[+] Genie space               accessible
+[!] KA endpoint               PENDING (not yet ACTIVE)
+```
+
+**UI implementation:**
+- Backend: new endpoint `GET /api/stash/health?name=airops` -- runs the 5-step verification, returns structured JSON
+- Frontend: new component `StashHealthView` -- renders the checklist with orbs, action buttons
+- Each [x] item has a contextual action button (Generate, Provision, Create) that triggers the relevant wizard step
+- [Fix All] button runs all missing provisions in sequence
+- Reusable for any stash -- not airops-specific
+
 ---
 
 ## PART 5: The 7 Engineering Challenges

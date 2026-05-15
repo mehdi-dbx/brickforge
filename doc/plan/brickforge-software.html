@@ -706,6 +706,40 @@
 </table>
 <p><strong>This turns the load process into a guided setup:</strong> load &rarr; verify &rarr; fix gaps &rarr; ready.</p>
 
+<h3>UI: Visual Stash Health Report</h3>
+<p>The Setup App displays verification results as a visual checklist -- same pattern as the Setup DAG with [+]/[x]/[!] orbs.</p>
+
+<pre>Stash: airops                                    [Reload] [Fix All]
+─────────────────────────────────────────────────────────────────
+<span class="str">[+]</span> airops.forge              valid YAML, v1.0
+<span class="str">[+]</span> app.yaml                  found
+<span class="str">[+]</span> databricks.yml            found
+
+DATA
+<span class="str">[+]</span> data/csv/flights.csv      5 rows
+<span class="str">[+]</span> data/init/create_flights.sql    CREATE TABLE
+<span class="comment">[x]</span> data/init/create_metrics.sql    NOT FOUND         [Generate]
+<span class="str">[+]</span> data/func/flights_at_risk.sql   found
+
+PROMPTS
+<span class="str">[+]</span> conf/prompt/main.prompt   211 lines
+<span class="comment">[!]</span> conf/prompt/user.prompt   empty (no starters)    [Generate]
+
+WORKSPACE (live)
+<span class="str">[+]</span> Schema: catalog.schema    exists
+<span class="comment">[x]</span> Table: flights            NOT PROVISIONED        [Provision]
+<span class="str">[+]</span> Genie space               accessible
+<span class="comment">[!]</span> KA endpoint               PENDING (not yet ACTIVE)</pre>
+
+<p><strong>Implementation:</strong></p>
+<ul>
+  <li>Backend: <code>GET /api/stash/health?name=airops</code> -- runs 5-step verification, returns structured JSON</li>
+  <li>Frontend: <code>StashHealthView</code> component -- renders checklist with orbs and action buttons</li>
+  <li>Each [x] item has a contextual action button (Generate, Provision, Create) triggering the relevant wizard step</li>
+  <li>[Fix All] runs all missing provisions in sequence</li>
+  <li>Reusable for any stash -- not domain-specific</li>
+</ul>
+
 <!-- ============================================================ -->
 <!-- 7. CHALLENGE 1                                                -->
 <!-- ============================================================ -->
