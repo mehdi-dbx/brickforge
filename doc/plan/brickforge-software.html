@@ -1471,50 +1471,35 @@ uv run python -c <span class="str">"from agent.start_server import main; main()"
 
 <h3>Distribution Path 1: GitHub Release (FIRST PRIORITY)</h3>
 
-<h4>mm D1.1: What goes in the archive</h4>
-<pre><span class="str">brickforge-v1.0.0/</span>
-  visual/
-    backend/
-      index.js
-      lib/
-      node_modules/     <span class="cmt">&lt;-- 8MB, committed, required</span>
-      package.json
-    frontend/
-      dist/             <span class="cmt">&lt;-- 580KB, pre-built</span>
-    start.sh            <span class="cmt">&lt;-- existing</span>
-  agent/                <span class="cmt">&lt;-- 5 Python files, ~30KB</span>
-  app/
-    client/src/         <span class="cmt">&lt;-- 528KB React source</span>
-    server/src/         <span class="cmt">&lt;-- 60KB Express source</span>
-    packages/           <span class="cmt">&lt;-- 38MB shared packages</span>
-    CLAUDE.md
-    app.yaml            <span class="cmt">&lt;-- Agent App manifest (renamed)</span>
-  tools/                <span class="cmt">&lt;-- framework tools only, ~20KB</span>
-  data/
-    init/               <span class="cmt">&lt;-- provisioning scripts</span>
-    gen/                <span class="cmt">&lt;-- data generation scripts</span>
-    py/                 <span class="cmt">&lt;-- shared Python utilities</span>
-    default/            <span class="cmt">&lt;-- empty (domain content in stash)</span>
-  conf/
-    prompt/             <span class="cmt">&lt;-- skeleton prompts</span>
-    ka/                 <span class="cmt">&lt;-- output_format.yml only</span>
-    .env.example
-  scripts/              <span class="cmt">&lt;-- setup, KA management</span>
-  deploy/               <span class="cmt">&lt;-- deploy pipeline</span>
-  eval/                 <span class="cmt">&lt;-- framework eval scripts</span>
-  stash/                <span class="cmt">&lt;-- airops example (optional)</span>
-  doc/
-  edu/
-  pyproject.toml
-  requirements.txt
-  start.sh              <span class="cmt">&lt;-- root launcher</span>
-  start.bat             <span class="cmt">&lt;-- Windows launcher</span>
-  setup-app.yaml        <span class="cmt">&lt;-- Setup App DBX App manifest</span>
-  README.md</pre>
+<h4>mm D1.1: What goes in the archive (two layers)</h4>
+<p><strong>Deploy footprint: ~13MB / ~150 files</strong> (learned from first deploy: 787 files / 175MB was 90% trash)</p>
+<pre><span class="str">SETUP APP (runs this):</span>
+  visual/backend/index.js + lib/     <span class="cmt">&lt;-- ~100KB</span>
+  visual/backend/node_modules/       <span class="cmt">&lt;-- 8MB, REQUIRED (express, dotenv, etc.)</span>
+  visual/frontend/dist/              <span class="cmt">&lt;-- 580KB, pre-built UI</span>
 
-<h4>mm D1.2: The app/packages/ problem</h4>
-<p><code>app/packages/</code> is 38MB, 5367 files. These are shared npm workspace packages (core, auth, ai-sdk-providers, db, utils). They are SOURCE packages -- compiled at build time.</p>
-<p><strong>Decision:</strong> Include source. 38MB is acceptable in a ~50MB archive. Users who don't need to edit won't notice.</p>
+<span class="str">AGENT APP BUNDLE (carried, deployed on user's "Deploy"):</span>
+  agent/                             <span class="cmt">&lt;-- ~40KB Python runtime</span>
+  app/client/dist/                   <span class="cmt">&lt;-- ~16MB pre-built React chat</span>
+  app/server/dist/                   <span class="cmt">&lt;-- ~2MB pre-built Express</span>
+  tools/                             <span class="cmt">&lt;-- ~48KB framework tools</span>
+  data/ conf/ eval/                  <span class="cmt">&lt;-- ~600KB scripts + config</span>
+
+<span class="str">SHARED:</span>
+  pyproject.toml, requirements.txt, scripts/, deploy/</pre>
+
+<h4>mm D1.2: What is EXCLUDED (learned from first deploy crash)</h4>
+<table>
+  <thead><tr><th>Excluded</th><th>Size</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>app/client/node_modules/</code></td><td>100MB</td><td>Pre-built <code>dist/</code> included. Build deps not needed.</td></tr>
+    <tr><td><code>app/server/node_modules/</code></td><td>18MB</td><td>Pre-built <code>dist/</code> included. Build deps not needed.</td></tr>
+    <tr><td><code>app/packages/</code></td><td>38MB</td><td>npm workspace shared packages. Only for source editing. Not needed for deploy.</td></tr>
+    <tr><td><code>app/client/src/</code></td><td>528KB</td><td>React source. Agent App runs from <code>dist/</code>.</td></tr>
+    <tr><td><code>app/server/src/</code></td><td>60KB</td><td>Express source. Agent App runs from <code>dist/</code>.</td></tr>
+  </tbody>
+</table>
+<p><strong>Result: 10x reduction.</strong> From 787 files / ~175MB to ~150 files / ~13MB.</p>
 
 <h4>mm D1.3: build-release.sh</h4>
 <pre><span class="cmt">#!/bin/bash</span>

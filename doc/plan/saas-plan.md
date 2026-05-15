@@ -909,9 +909,9 @@ The abstraction is the right answer. Same pattern as ConfigProvider -- detect mo
 
 ### Current State: What We're Shipping
 
-**Clean repo size (no .git, .venv, node_modules, __pycache__, .mypy_cache): 25MB**
-With visual backend node_modules (committed, 8MB): **33MB**
-Compressed: **~10-12MB estimated**
+**Deploy footprint (Setup App + Agent bundle): ~13MB (~150 files)**
+With visual backend node_modules (8MB, required): included in the 13MB.
+First deploy lesson: 787 files / ~175MB uploaded. After excluding `app/*/node_modules/` + `app/packages/`: 150 files / ~13MB. 10x reduction.
 
 Bloat to exclude from any distribution:
 
@@ -937,61 +937,67 @@ No single package manager handles both. Don't try to force it.
 
 **mm D1.1: What goes in the archive?**
 
+Two layers: what the SETUP APP runs, and what it CARRIES for Agent App deployment.
+
 ```
 brickforge-v1.0.0/
-  visual/
-    backend/
-      index.js
-      lib/
-      node_modules/     <-- 8MB, committed, required
-      package.json
-    frontend/
-      dist/             <-- 580KB, pre-built
-    start.sh            <-- existing
-  agent/                <-- 5 Python files, ~30KB
-  app/
-    client/src/         <-- 528KB React source
-    server/src/         <-- 60KB Express source
-    packages/           <-- 38MB shared packages (THIS IS A PROBLEM -- see mm D1.2)
-    CLAUDE.md
-    app.yaml            <-- Agent App manifest (renamed)
-  tools/                <-- framework tools only, ~20KB
-  data/
-    init/               <-- provisioning scripts
-    gen/                <-- data generation scripts
-    py/                 <-- shared Python utilities
-    default/            <-- empty (domain content in stash)
-  conf/
-    prompt/             <-- skeleton prompts
-    ka/                 <-- output_format.yml only
-    .env.example
-  scripts/              <-- setup, KA management
-  deploy/               <-- deploy pipeline
-  eval/                 <-- framework eval scripts
-  stash/                <-- airops example (optional, include for demo)
-  doc/
-  edu/
-  pyproject.toml
-  requirements.txt
-  start.sh              <-- root launcher
-  start.bat             <-- Windows launcher
-  setup-app.yaml        <-- Setup App DBX App manifest
-  README.md
+
+  SETUP APP (runs this):
+    visual/
+      backend/
+        index.js
+        lib/
+        node_modules/     <-- 8MB, committed, REQUIRED (express, dotenv, etc.)
+        package.json
+      frontend/
+        dist/             <-- 580KB, pre-built UI
+
+  AGENT APP BUNDLE (carried, deployed to workspace on user's "Deploy"):
+    agent/                <-- 5 Python files, ~40KB
+    app/
+      client/dist/        <-- pre-built React chat UI (~16MB)
+      server/dist/        <-- pre-built Express server (~2MB)
+      app.yaml            <-- Agent App manifest (template)
+    tools/                <-- framework tools only, ~48KB
+    data/
+      init/               <-- provisioning scripts
+      gen/                <-- data generation scripts
+      py/                 <-- shared Python utilities
+      default/            <-- empty (domain content from .forge)
+    conf/
+      prompt/             <-- skeleton prompts
+      ka/                 <-- output_format.yml only
+      .env.example
+    eval/                 <-- framework eval scripts
+
+  SHARED:
+    pyproject.toml        <-- Python deps
+    requirements.txt
+    scripts/              <-- setup, KA management
+    deploy/               <-- deploy pipeline
+
+  LOCAL-ONLY (GitHub Release archive):
+    start.sh              <-- root launcher (Mac/Linux)
+    start.bat             <-- Windows launcher
+    setup-app.yaml        <-- Setup App DBX App manifest
+    README.md
+    stash/                <-- airops example (optional)
 ```
 
-**mm D1.2: The app/packages/ problem**
+**mm D1.2: What is EXCLUDED (learned from first deploy)**
 
-`app/packages/` is 38MB, 5367 files. This is the shared npm workspace packages (core, auth, ai-sdk-providers, db, utils). These are SOURCE packages -- they're compiled at build time.
+| Excluded | Size | Why |
+|----------|------|-----|
+| `app/client/node_modules/` | 100MB | Pre-built `dist/` included. Build deps not needed at runtime. |
+| `app/server/node_modules/` | 18MB | Pre-built `dist/` included. Build deps not needed at runtime. |
+| `app/packages/` | 38MB | npm workspace shared packages. Only for source editing/rebuilding. Not needed for deploy. |
+| `app/client/src/` | 528KB | React source. Not needed at runtime. Agent App runs from `dist/`. Developer mode: download separately. |
+| `app/server/src/` | 60KB | Express source. Not needed at runtime. Same. |
+| All other `node_modules/` | varies | Only `visual/backend/node_modules/` is needed (8MB). |
 
-Options:
-- Include them (38MB of source -- meh but works)
-- Pre-build the client and server, include only `dist/` (smaller, but user can't edit)
-- Include them but strip `node_modules` within packages
+**Actual footprint: ~13MB (~150 files) instead of ~175MB (~787 files).**
 
-For developer mode (user wants to edit), we NEED the source. Include them.
-For non-developer mode, we could ship only `dist/`.
-
-**Decision:** Include source. 38MB is acceptable in a ~50MB archive. Users who don't need to edit won't notice.
+First deploy uploaded 787 files / ~175MB. After fixing exclusions: ~150 files / ~13MB. 10x smaller, 10x faster.
 
 **mm D1.3: Building the release archive**
 
@@ -1412,3 +1418,10 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - **Bug location:** Upload script `/tmp/upload_setup_app_v2.py` line: `EXCLUDE = {"node_modules", ...}`
 - **Fix needed:** Exclude `node_modules` EXCEPT `visual/backend/node_modules/` which must be uploaded
 - **Principle:** Fix the automated process, not the instance. Re-run after fix.
+
+### 2026-05-15 16:50 -- Size analysis before fix
+- Uploaded 787 files, ~175MB. Actual need: ~150 files, ~13MB.
+- **156MB trash:** `app/client/node_modules/` (100MB), `app/server/node_modules/` (18MB), `app/packages/` (38MB)
+- None of these are needed: pre-built `dist/` is included for both client and server.
+- Fix: exclude these 3 dirs + INCLUDE `visual/backend/node_modules/` (8MB, required).
+- Expected result: 10x smaller upload, 10x faster.
