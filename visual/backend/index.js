@@ -11,7 +11,7 @@ const multer         = require('multer')
 const { buildGraph } = require('./lib/graph-builder')
 
 const DIST_DIR    = path.resolve(__dirname, '../frontend/dist')
-const PORT        = process.env.VISUAL_PORT || 9000
+const PORT        = process.env.DATABRICKS_APP_PORT || process.env.VISUAL_PORT || 9000
 const LAYOUT_FILE = path.resolve(__dirname, '../graph-layout.json')
 const ENV_FILE    = path.resolve(__dirname, '../../.env.local')
 const PROJECT_ROOT = path.resolve(__dirname, '../..')

@@ -1,0 +1,5 @@
+command: ["bash", "-c", "uv sync && node visual/backend/index.js"]
+
+env:
+  - name: DATABRICKS_APP_PORT
+    value: "9000"
