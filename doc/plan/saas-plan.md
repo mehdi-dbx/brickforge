@@ -1500,3 +1500,14 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Created `build-release.sh`: include-only rsync, 7.1MB / 1767 files. First attempt was 160MB (copied everything).
 - Created `start.sh`: checks Node.js + Python, installs deps (uv or pip), starts server.
 - Committed: `0bf61c9`, fixed: `b453e86`
+
+### 2026-05-15 19:20 -- Inch 9: Multi-project
+- Created `visual/backend/lib/project-manager.js`:
+  - `listProjects(schema)` -- scan UC Volume for `.forge.zip` files via Files API
+  - `loadProject(schema, name)` -- download zip from Volume
+  - `saveProject(schema, name, zipBuffer)` -- upload zip to Volume
+  - `deleteProject(schema, name)` -- remove zip from Volume
+  - `_ensureVolume(schema)` -- create stash directory if needed
+- Backend endpoints wired: `GET/POST/DELETE /api/projects`
+- Local test: endpoints respond correctly
+- Committed: `9e317ca`
