@@ -1263,10 +1263,30 @@ uv run python -c <span class="str">"from agent.start_server import main; main()"
 <h4>mm R.5: npm for Setup App</h4>
 <p>Setup App backend is Node.js with pre-built frontend and committed <code>node_modules</code>. No <code>npm install</code> needed at runtime. Just Node.js to run the server.</p>
 
-<h4>mm R.6: Agent App's startup chain in DBX App mode</h4>
-<p>Today this ALREADY WORKS -- the current Agent App deploys this way. The only new thing: the Setup App triggers the deploy, instead of <code>databricks bundle deploy</code> from a terminal. No change needed for the Agent App's runtime.</p>
+<h4>mm R.6: Eliminate npm from Agent App runtime (PRE-BUILD)</h4>
+<p>Currently the Agent App builds the chat frontend at startup (<code>npm install && npm run build:client</code>). But the startup hook already skips the build if <code>dist/</code> exists.</p>
+<p><strong>Solution:</strong> pre-build and include <code>app/client/dist/</code> and <code>app/server/dist/</code> in the deployment bundle. Remove <code>client/dist/</code> from <code>.databricksignore</code>. Startup sees dist exists, skips npm. <strong>npm eliminated from Agent App runtime.</strong></p>
 
-<h3>Summary: What Must Change</h3>
+<h4>mm R.7: No rebuild needed when adding tools</h4>
+<p>Tools are Python -- no build step. The agent discovers tools at startup by scanning <code>tools/</code> directory via <code>pkgutil.iter_modules()</code>. Adding a tool = drop a <code>.py</code> file + restart agent. The factories (<code>ka_factory</code>, <code>api_factory</code>, <code>a2a_factory</code>) discover tools from env vars at startup. The <code>.forge</code> tool specs are read at startup. <strong>Zero build step for any tool change. Just restart.</strong></p>
+
+<h3>Pre-built vs Built at Runtime</h3>
+<table>
+  <thead>
+    <tr><th>Piece</th><th>Pre-built?</th><th>In bundle?</th><th>Runtime need</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Setup App frontend (React)</td><td>YES -- <code>visual/frontend/dist/</code></td><td>YES (committed)</td><td>Nothing</td></tr>
+    <tr><td>Setup App backend (Node.js)</td><td>YES -- <code>node_modules/</code> committed</td><td>YES</td><td>Node.js only</td></tr>
+    <tr><td>Setup App Python scripts</td><td>Source, no build</td><td>YES</td><td>Python + packages</td></tr>
+    <tr><td>Agent App frontend (React chat)</td><td>YES -- <code>app/client/dist/</code></td><td><strong>MUST INCLUDE</strong> (change <code>.databricksignore</code>)</td><td>Nothing</td></tr>
+    <tr><td>Agent App server (Express)</td><td>YES -- <code>app/server/dist/</code></td><td><strong>MUST INCLUDE</strong></td><td>Node.js only</td></tr>
+    <tr><td>Agent App agent (Python)</td><td>Source, no build</td><td>YES</td><td>Python + packages</td></tr>
+    <tr><td>Tools (Python)</td><td>Source, no build</td><td>YES</td><td>Discovered at startup -- restart only, no build</td></tr>
+  </tbody>
+</table>
+
+<h3>Lightest Runtime Footprint</h3>
 <table>
   <thead>
     <tr><th>Dependency</th><th>Setup App</th><th>Agent App</th><th>Action</th></tr>
@@ -1298,8 +1318,8 @@ uv run python -c <span class="str">"from agent.start_server import main; main()"
     </tr>
     <tr>
       <td>npm</td>
-      <td>NO (pre-built)</td>
-      <td>YES (build:client)</td>
+      <td><strong>NO</strong></td>
+      <td><strong>NO</strong> (dist pre-built)</td>
       <td>Available with Node.js</td>
     </tr>
     <tr>

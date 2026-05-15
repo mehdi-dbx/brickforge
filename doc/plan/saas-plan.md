@@ -729,20 +729,52 @@ DBX Apps run in a container. What's in it?
 **mm R.5: npm for Setup App**
 - Setup App backend is Node.js with pre-built frontend and committed node_modules
 - No `npm install` needed at runtime for the Setup App itself
-- But if the Setup App needs to build the Agent App's frontend... that happens in the AGENT App's runtime, not the Setup App's.
 - **No npm needed in Setup App runtime.** Just Node.js to run the server.
 
-**mm R.6: The Agent App's startup chain in DBX App mode**
-- `app.yaml`: `uv run python -c "from agent.start_server import main; main()"`
-- This needs: uv + Python + all Python deps + Node.js + npm (for build:client)
-- Today this ALREADY WORKS -- the current Agent App deploys this way
-- The only new thing: the Setup App is what triggers the deploy, instead of `databricks bundle deploy` from a terminal
-- **No change needed for the Agent App's runtime.** It already works.
+**mm R.6: Eliminate npm from Agent App runtime (PRE-BUILD)**
 
-### Summary: What Must Change
+Currently the Agent App builds the chat frontend at startup:
+```python
+# agent/start_server.py line 27-30
+if not _CLIENT_DIST.exists() and _NODE_SERVER.exists():
+    subprocess.run(["npm", "install"], ...)    # needs npm
+    subprocess.run(["npm", "run", "build:client"], ...)  # needs npm
+```
+
+This means npm must be available at runtime. But the startup hook ALREADY SKIPS the build if `dist/` exists (line 27: `if not _CLIENT_DIST.exists()`).
+
+**Solution: pre-build and include `dist/` in the deployment bundle.**
+
+Both dist directories already exist locally:
+- `app/client/dist/index.html` -- React chat frontend (pre-built)
+- `app/server/dist/index.mjs` -- Express server (pre-built)
+
+**What must change:**
+1. Include `app/client/dist/` and `app/server/dist/` in the deployment bundle
+2. Remove `app/client/dist/` from `.databricksignore` (currently excluded because it was designed to build remotely)
+3. The startup hook sees `dist/` exists, skips `npm install` + `npm run build:client`
+4. Agent App startup becomes: `pip install -r requirements.txt && python -c "from agent.start_server import main; main()"`
+5. **npm is no longer needed at Agent App runtime**
+
+**Result: both Setup App and Agent App need only Node.js + Python + pip. Zero build tools at runtime.**
+
+### Pre-built vs Built at Runtime -- Complete Picture
+
+| Piece | Pre-built? | Included in bundle? | Needs at runtime |
+|-------|-----------|-------------------|-----------------|
+| **Setup App frontend** (React) | YES -- `visual/frontend/dist/` | YES (committed) | Nothing |
+| **Setup App backend** (Node.js) | YES -- `node_modules/` committed | YES | Node.js only |
+| **Setup App Python scripts** | Source, no build | YES | Python + packages |
+| **Agent App frontend** (React chat) | YES -- `app/client/dist/` | **MUST INCLUDE** (change `.databricksignore`) | Nothing |
+| **Agent App server** (Express) | YES -- `app/server/dist/` | **MUST INCLUDE** | Node.js only |
+| **Agent App agent** (Python) | Source, no build | YES | Python + packages |
+
+### Lightest Runtime Footprint
 
 | Dependency | Setup App | Agent App | Action |
 |------------|-----------|-----------|--------|
+| Node.js | YES (runs server) | YES (runs Express) | Available in DBX runtime |
+| npm | **NO** | **NO** (dist pre-built) | Not needed -- eliminate from runtime |
 | Python 3.x | YES (subprocess) | YES (main) | Available in DBX runtime |
 | uv | YES (41 calls) | YES (startup) | `pip install uv` in startup command |
 | Python packages | YES (via uv sync) | YES (via uv sync) | Install once at deploy/startup |
