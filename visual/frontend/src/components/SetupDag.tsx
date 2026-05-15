@@ -261,7 +261,7 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
   return (
     <div className="relative h-full">
       {/* ── Floating toolbar: env pill + counter + zoom controls ── */}
-      <div className="absolute top-2 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
+      <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           <span className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 bg-white/90 dark:bg-dbx-gray-800/90 backdrop-blur-sm border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-full px-3 py-0.5 shadow-node">
             .env.local
@@ -305,7 +305,7 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
       <div ref={scrollRef} className="h-full overflow-auto">
         <div
           ref={contentRef}
-          className="flex flex-col items-center px-4 pt-10 pb-6"
+          className="flex flex-col items-center px-4 pt-8 pb-6"
           style={{ zoom } as React.CSSProperties}
         >
           {ALL_STEPS.map((id, idx) => {

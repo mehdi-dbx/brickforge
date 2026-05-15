@@ -369,6 +369,11 @@ app.get('/api/setup/status', (_req, res) => {
         steps[step] = { status: labeled.some(i => i.enabled) ? 'configured' : (labeled.length ? 'missing' : 'missing'), values: {}, instances: labeled }
         continue
       }
+      if (step === 'features') {
+        const instances = parseMultiInstanceKeys('PROJECT_TOOL_')
+        steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values: {}, instances }
+        continue
+      }
 
       steps[step] = { status, values }
     }
@@ -384,8 +389,8 @@ app.put('/api/setup/toggle', (req, res) => {
   const { key } = req.body
   if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key required' })
   // Only allow toggling PROJECT_GENIE_* and PROJECT_KA_* keys
-  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_') && !key.startsWith('PROJECT_MCP_') && !key.startsWith('PROJECT_API_') && !key.startsWith('PROJECT_A2A_')) {
-    return res.status(400).json({ error: 'can only toggle genie/ka/vs/mcp/a2a keys' })
+  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_') && !key.startsWith('PROJECT_MCP_') && !key.startsWith('PROJECT_API_') && !key.startsWith('PROJECT_A2A_') && !key.startsWith('PROJECT_TOOL_')) {
+    return res.status(400).json({ error: 'can only toggle genie/ka/vs/mcp/a2a/tool keys' })
   }
   const ok = toggleEnvKey(key)
   res.json({ ok })

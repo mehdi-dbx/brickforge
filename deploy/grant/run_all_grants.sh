@@ -64,7 +64,13 @@ uv run python deploy/grant/authorize_genie_for_app.py || {
 }
 
 echo ""
-echo "6. Granting secret scope READ access..."
+echo "6. Granting Lakebase permissions..."
+uv run python deploy/grant/grant_lakebase_for_app.py "$APP_NAME" || {
+  echo "Warning: grant_lakebase_for_app.py failed (non-blocking)" >&2
+}
+
+echo ""
+echo "7. Granting secret scope READ access..."
 _sp_client_id=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null)
 if [ -n "$_sp_client_id" ]; then

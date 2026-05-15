@@ -2,11 +2,13 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Optional
 
 import mlflow
+import uuid_utils
 from databricks.sdk import WorkspaceClient
-from databricks_langchain import ChatDatabricks, DatabricksMCPServer, DatabricksMultiServerMCPClient
+from databricks_langchain import AsyncCheckpointSaver, AsyncDatabricksStore, ChatDatabricks, DatabricksMCPServer, DatabricksMultiServerMCPClient
 from databricks_langchain.multi_server_mcp_client import MCPServer
 from langchain.agents import create_agent
 from mlflow.genai.agent_server import invoke, stream
@@ -51,6 +53,46 @@ def _discover_domain_tools() -> list:
     return discovered
 mlflow.langchain.autolog()
 _log = logging.getLogger(__name__)
+
+# ── Lakebase memory context ─────────────────────────────────────────────────────
+
+_LAKEBASE_INSTANCE = os.environ.get("LAKEBASE_INSTANCE_NAME", "").strip()
+_MEMORY_SCHEMA = os.environ.get("LAKEBASE_AGENT_MEMORY_SCHEMA", "agent_memory").strip()
+
+
+@asynccontextmanager
+async def lakebase_context():
+    """Yield (checkpointer, store) if Lakebase is configured, else (None, None)."""
+    if not _LAKEBASE_INSTANCE:
+        _log.info("LAKEBASE_INSTANCE_NAME not set — running without checkpointing/memory")
+        yield None, None
+        return
+    async with AsyncCheckpointSaver(
+        instance_name=_LAKEBASE_INSTANCE,
+    ) as checkpointer, AsyncDatabricksStore(
+        instance_name=_LAKEBASE_INSTANCE,
+    ) as store:
+        yield checkpointer, store
+
+
+def _get_thread_id(request: "ResponsesAgentRequest") -> str:
+    """Extract thread_id from request or generate a new one."""
+    ci = dict(request.custom_inputs or {})
+    if ci.get("thread_id"):
+        return str(ci["thread_id"])
+    if request.context and getattr(request.context, "conversation_id", None):
+        return str(request.context.conversation_id)
+    return str(uuid_utils.uuid7())
+
+
+def _get_user_id(request: "ResponsesAgentRequest") -> Optional[str]:
+    """Extract user_id from request context (SSO identity on Databricks Apps)."""
+    ci = dict(request.custom_inputs or {})
+    if ci.get("user_id"):
+        return str(ci["user_id"])
+    if request.context and getattr(request.context, "user_id", None):
+        return str(request.context.user_id)
+    return None
 
 _sp_workspace_client = None
 
@@ -134,7 +176,12 @@ async def _get_mcp_tools_safe(workspace_client: WorkspaceClient) -> list:
     return all_tools
 
 
-async def init_agent(workspace_client: Optional[WorkspaceClient] = None):
+async def init_agent(
+    workspace_client: Optional[WorkspaceClient] = None,
+    checkpointer: Any = None,
+    store: Any = None,
+    user_id: Optional[str] = None,
+):
     """Returns (agent, llm_supports_streaming).
 
     llm_supports_streaming=False when the remote endpoint has output guardrails
@@ -151,7 +198,11 @@ async def init_agent(workspace_client: Optional[WorkspaceClient] = None):
     _log.info("Discovered %d domain tools, %d KA tools, %d API tools, %d A2A tools", len(domain_tools), len(ka_tools), len(api_tools), len(a2a_tools))
     # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
     chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
-    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + chart_tools + [get_current_time] + domain_tools
+    from agent.memory_tools import create_memory_tools
+    memory_tools = create_memory_tools(store, user_id) if store and user_id else []
+    if memory_tools:
+        _log.info("Memory tools enabled for user '%s'", user_id)
+    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
     endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
     databricks_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
 
@@ -171,7 +222,7 @@ async def init_agent(workspace_client: Optional[WorkspaceClient] = None):
         if host == databricks_host:
             # Same workspace — use local auth, no remote client needed
             llm = ChatDatabricks(endpoint=name)
-            return create_agent(tools=tools, model=llm), True
+            return create_agent(tools=tools, model=llm, checkpointer=checkpointer, store=store), True
 
         # Cross-workspace endpoint: build a WorkspaceClient for the remote host
         token = os.environ.get("AGENT_MODEL_TOKEN", "").strip()
@@ -202,11 +253,11 @@ async def init_agent(workspace_client: Optional[WorkspaceClient] = None):
         finally:
             os.environ.update(_saved)
         llm = ChatDatabricks(endpoint=name, workspace_client=remote_client)
-        return create_agent(tools=tools, model=llm), False
+        return create_agent(tools=tools, model=llm, checkpointer=checkpointer, store=store), False
     else:
         # Local endpoint name — same workspace
         llm = ChatDatabricks(endpoint=endpoint)
-        return create_agent(tools=tools, model=llm), True
+        return create_agent(tools=tools, model=llm, checkpointer=checkpointer, store=store), True
 
 
 @invoke()
@@ -229,21 +280,31 @@ def _load_system_prompt() -> str:
 
 
 async def _run_agent(request: ResponsesAgentRequest) -> AsyncGenerator[ResponsesAgentStreamEvent, None]:
-    agent, llm_supports_streaming = await init_agent()
-    user_messages = to_chat_completions_input([i.model_dump() for i in request.input])
-    system_content = _load_system_prompt()
-    messages = (
-        {"messages": [{"role": "system", "content": system_content}] + user_messages}
-        if system_content
-        else {"messages": user_messages}
-    )
-    # "messages" stream_mode forces LangGraph to call the LLM with stream=True,
-    # which breaks endpoints with output guardrails. Use "updates" only in that case.
-    stream_mode = ["updates", "messages"] if llm_supports_streaming else ["updates"]
-    async for event in process_agent_astream_events(
-        agent.astream(input=messages, stream_mode=stream_mode)
-    ):
-        yield event
+    async with lakebase_context() as (checkpointer, store):
+        agent, llm_supports_streaming = await init_agent(
+            checkpointer=checkpointer, store=store, user_id=user_id,
+        )
+        thread_id = _get_thread_id(request)
+        user_id = _get_user_id(request)
+        config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+        if user_id:
+            config["configurable"]["user_id"] = user_id
+        mlflow.update_current_trace(metadata={"mlflow.trace.session": thread_id})
+
+        user_messages = to_chat_completions_input([i.model_dump() for i in request.input])
+        system_content = _load_system_prompt()
+        messages = (
+            {"messages": [{"role": "system", "content": system_content}] + user_messages}
+            if system_content
+            else {"messages": user_messages}
+        )
+        # "messages" stream_mode forces LangGraph to call the LLM with stream=True,
+        # which breaks endpoints with output guardrails. Use "updates" only in that case.
+        stream_mode = ["updates", "messages"] if llm_supports_streaming else ["updates"]
+        async for event in process_agent_astream_events(
+            agent.astream(input=messages, config=config, stream_mode=stream_mode)
+        ):
+            yield event
 
 
 @stream()
