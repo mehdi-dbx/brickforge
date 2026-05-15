@@ -1495,3 +1495,8 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
   - Uses Databricks-stored git credentials, zero PAT from user
 - Backend wired: `exec-git-push` action with `repo_url` param
 - Committed: `8db1e27`
+
+### 2026-05-15 19:00 -- Packaging scripts
+- Created `build-release.sh`: include-only rsync, 7.1MB / 1767 files. First attempt was 160MB (copied everything).
+- Created `start.sh`: checks Node.js + Python, installs deps (uv or pip), starts server.
+- Committed: `0bf61c9`, fixed: `b453e86`
