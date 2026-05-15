@@ -9,6 +9,7 @@ const { spawn }      = require('child_process')
 const { execFile }   = require('child_process')
 const multer         = require('multer')
 const { buildGraph } = require('./lib/graph-builder')
+const { LocalConfigProvider } = require('./lib/config-provider')
 
 const DIST_DIR    = path.resolve(__dirname, '../frontend/dist')
 const PORT        = process.env.DATABRICKS_APP_PORT || process.env.VISUAL_PORT || 9000
@@ -167,6 +168,15 @@ function toggleEnvKey(key) {
   return true
 }
 
+// ConfigProvider instance — wraps the local .env.local helpers above
+const config = new LocalConfigProvider(ENV_FILE, {
+  parseEnvFile,
+  writeEnvValues,
+  commentOutKeys,
+  toggleEnvKey,
+  parseMultiInstanceKeys,
+})
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS')
@@ -229,7 +239,7 @@ app.put('/api/layout', (req, res) => {
 
 app.get('/api/env', (_req, res) => {
   try {
-    res.json(parseEnvFile())
+    res.json(config.list())
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -242,7 +252,7 @@ app.put('/api/env', (req, res) => {
     if (typeof updates !== 'object' || Array.isArray(updates)) {
       return res.status(400).json({ error: 'expected { KEY: value, ... }' })
     }
-    writeEnvValues(updates)
+    config.setMany(updates)
     res.json({ ok: true })
   } catch (err) {
     console.error('[env] save error:', err)
@@ -277,7 +287,7 @@ const STEP_ENV_KEYS = {
 // GET /api/setup/status — parse .env.local, return per-step status
 app.get('/api/setup/status', (_req, res) => {
   try {
-    const entries = parseEnvFile()
+    const entries = config.list()
     const env = {}
     for (const { key, value } of entries) env[key] = value
 
@@ -328,17 +338,17 @@ app.get('/api/setup/status', (_req, res) => {
 
       // Multi-instance steps: attach instances array
       if (step === 'genie') {
-        const instances = parseMultiInstanceKeys('PROJECT_GENIE_')
+        const instances = config.listByPrefix('PROJECT_GENIE_')
         steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values, instances }
         continue
       }
       if (step === 'ka') {
-        const instances = parseMultiInstanceKeys('PROJECT_KA_')
+        const instances = config.listByPrefix('PROJECT_KA_')
         steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values, instances }
         continue
       }
       if (step === 'vs') {
-        const instances = parseMultiInstanceKeys('PROJECT_VS_')
+        const instances = config.listByPrefix('PROJECT_VS_')
         // Filter to only index entries (not endpoint)
         const indexInstances = instances.filter(i => i.key.includes('INDEX'))
         steps[step] = { status: indexInstances.some(i => i.enabled) ? 'configured' : (indexInstances.length ? 'missing' : 'missing'), values, instances: indexInstances }
@@ -392,7 +402,7 @@ app.put('/api/setup/toggle', (req, res) => {
   if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_') && !key.startsWith('PROJECT_MCP_') && !key.startsWith('PROJECT_API_') && !key.startsWith('PROJECT_A2A_') && !key.startsWith('PROJECT_TOOL_')) {
     return res.status(400).json({ error: 'can only toggle genie/ka/vs/mcp/a2a/tool keys' })
   }
-  const ok = toggleEnvKey(key)
+  const ok = config.toggle(key)
   res.json({ ok })
 })
 
@@ -613,7 +623,7 @@ app.post('/api/setup/exec', (req, res) => {
   }
 
   // Load .env.local vars into subprocess environment
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
@@ -651,7 +661,7 @@ app.post('/api/setup/exec', (req, res) => {
     case 'exec-assets': {
       const schemaSpec = params.schema || ''
       if (schemaSpec) {
-        writeEnvValues({ PROJECT_UNITY_CATALOG_SCHEMA: schemaSpec })
+        config.setMany({ PROJECT_UNITY_CATALOG_SCHEMA: schemaSpec })
         subEnv.PROJECT_UNITY_CATALOG_SCHEMA = schemaSpec
       }
       runCommand('uv', ['run', 'python', 'data/init/create_all_assets.py'])
@@ -889,7 +899,7 @@ print('[+] Knowledge Assistant provisioned')
 
     case 'exec-same': {
       try {
-        commentOutKeys(['AGENT_MODEL_ENDPOINT', 'AGENT_MODEL_TOKEN'])
+        config.disableMany(['AGENT_MODEL_ENDPOINT', 'AGENT_MODEL_TOKEN'])
         synthetic([
           '[+] same-workspace mode selected',
           '[+] AGENT_MODEL_ENDPOINT commented out (will use DATABRICKS_HOST at runtime)',
@@ -1512,7 +1522,7 @@ app.post('/api/gen/prompt-save', (req, res) => {
 // GET /api/gen/status — check model config + list previously generated tables
 app.get('/api/gen/status', (_req, res) => {
   try {
-    const entries = parseEnvFile()
+    const entries = config.list()
     const env = {}
     for (const { key, value } of entries) env[key] = value
 
@@ -1538,7 +1548,7 @@ app.get('/api/gen/status', (_req, res) => {
 app.get('/api/gen/tables', (_req, res) => {
   try {
     const env = {}
-    for (const { key, value } of parseEnvFile()) env[key] = value
+    for (const { key, value } of config.list()) env[key] = value
 
     const useDefault = (env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
     const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
@@ -1662,7 +1672,7 @@ function sseGenRunner(res, cmd, args, stdinData = null) {
     if (!res.writableEnded) res.end()
   }
 
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
@@ -1780,7 +1790,7 @@ app.delete('/api/gen/wizard-state', (_req, res) => {
 // GET /api/gen/routine-status — manifest + model status + table schemas for context
 app.get('/api/gen/routine-status', (_req, res) => {
   try {
-    const entries = parseEnvFile()
+    const entries = config.list()
     const env = {}
     for (const { key, value } of entries) env[key] = value
 
@@ -1906,7 +1916,7 @@ const upload = multer({ dest: path.join(PROJECT_ROOT, 'data', '.tmp-uploads') })
 
 // GET /api/ka/documents — list files in the KA volume
 app.get('/api/ka/documents', (_req, res) => {
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
@@ -1926,7 +1936,7 @@ app.post('/api/ka/upload', upload.array('files'), (req, res) => {
   const files = req.files || []
   if (files.length === 0) return res.status(400).json({ ok: false, error: 'no files provided' })
 
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
@@ -1966,7 +1976,7 @@ app.post('/api/ka/upload-url', (req, res) => {
   const { url } = req.body || {}
   if (!url) return res.status(400).json({ ok: false, error: 'url is required' })
 
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
@@ -1992,7 +2002,7 @@ app.delete('/api/ka/documents/:name', (req, res) => {
   const name = req.params.name
   if (!name) return res.status(400).json({ ok: false, error: 'name is required' })
 
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
@@ -2227,7 +2237,7 @@ if errors: out(f'[~] completed with {errors} error(s)')
 else: out('[+] cleanup complete')
 `.trim()
 
-  const envEntries = parseEnvFile()
+  const envEntries = config.list()
   const subEnv = { ...process.env }
   for (const { key, value } of envEntries) subEnv[key] = value
 
