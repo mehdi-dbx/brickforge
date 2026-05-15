@@ -843,14 +843,19 @@ With visual backend node_modules (committed, 8MB): **33MB**
 Compressed: **~10-12MB estimated**
 
 Bloat to exclude from any distribution:
-- `.mypy_cache/` -- 1.1GB (!!) across agent/, tools/, data/, scripts/
-- `.venv/` -- 662MB
-- `app/client/node_modules/` -- 100MB
-- `app/server/node_modules/` -- 18MB
-- `visual/frontend/node_modules/` -- (already gitignored)
-- `__pycache__/` -- ~1MB
-- `.git/` -- varies
-- `.DS_Store` files
+
+| Excluded | Size | Why safe to exclude | How reconstructed on target |
+|----------|------|--------------------|-----------------------------|
+| `.mypy_cache/` | 1.1GB | Type checker cache. Not needed at runtime. | Never. Only created if someone runs `mypy`. |
+| `.venv/` | 662MB | Python virtual environment. | Rebuilt at startup: `pip install -r requirements.txt` or `uv sync` (1-2 min first time). |
+| `app/client/node_modules/` | 100MB | Only needed to BUILD the React frontend. | Never. Pre-built `app/client/dist/` included in bundle instead. |
+| `app/server/node_modules/` | 18MB | Only needed to BUILD the Express server. | Never. Pre-built `app/server/dist/` included in bundle instead. |
+| `visual/frontend/node_modules/` | -- | Already gitignored. Only needed to dev the Setup App frontend. | Never. Pre-built `visual/frontend/dist/` included in bundle. |
+| `__pycache__/` | ~1MB | Python bytecode cache. | Auto-created by Python on first import. Zero action needed. |
+| `.git/` | varies | Version control history. | Not needed at runtime. User can init git if they want CI/CD. |
+| `.DS_Store` | tiny | macOS filesystem metadata. | Never. Platform artifact. |
+
+**Key: `visual/backend/node_modules/` (8MB) is NOT excluded.** It IS included in the bundle -- the Setup App backend needs it to run.
 
 ### The Two-Runtime Problem
 
