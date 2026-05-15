@@ -1283,11 +1283,17 @@ After A+B+C converge:
 
 ### Recommended Execution
 
-**Wave 1 (parallel):**
-- [ ] Track A: Inch 1+2 -- Setup App `app.yaml`, port fix, startup command
-- [ ] Track B: Inch 4 -- ConfigProvider interface + LocalConfigProvider (pure refactor, zero behavior change)
-- [ ] Track C: Inch 6 -- define file manifest (which files = Agent App vs Setup App)
-- [ ] Track C: `tool_factory.py` -- SQL read + action tool generation from `.forge` specs
+**Wave 1 -- sequenced to avoid merge conflicts in `index.js`:**
+
+**Step 1 (2 min, do first):**
+- [ ] Track A: Inch 1+2 -- Setup App `app.yaml` (new file), port fix (1 line in `index.js`)
+- Commit. Tiny change, no conflict risk.
+
+**Step 2 (parallel, via `isolation: "worktree"`):**
+- [ ] Track B: Inch 4 -- ConfigProvider + 36 call sites in `index.js` (starts from Track A's commit, no overlap -- A changed PORT line, B changes function calls)
+- [ ] Track C: Inch 6 + `tool_factory.py` -- file manifest doc + new Python file (touches zero of B's files)
+
+**Why this order:** A and B both touch `index.js`. A is 1 line (PORT). B is 36 call site replacements. Do A first (trivial), commit. Then B and C in parallel via worktrees -- B edits `index.js` call sites, C writes new Python files. Zero overlap.
 
 **Wave 1 checkpoint:** Deploy Setup App (Inch 3). Test everything works.
 
@@ -1319,9 +1325,10 @@ Each wave can be a separate Claude Code session:
 - **Session 2:** Wave 2 (agent deploy + config injection) + end-to-end test
 - **Session 3:** Wave 3 (git + multi-project)
 
-Or with parallelization within a session:
-- Use Claude Code's Agent tool to run tracks A, B, C simultaneously in background
-- Merge results, test, proceed to Wave 2
+Parallelization within a session uses Claude Code's Agent tool with `isolation: "worktree"`:
+- Track A first (2 min, commit)
+- Then B + C in parallel worktrees (no file overlap)
+- Merge worktree branches, test, proceed to Wave 2
 
 ---
 
