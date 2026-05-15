@@ -1458,3 +1458,20 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Everything except 3 trivial DBX-runtime checks works locally.
 - Proceeding with local development: ForgeConfigProvider, agent deploy, .forge injection.
 - Will deploy once when all code is ready.
+
+### 2026-05-15 18:10 -- Inch 4b: ForgeConfigProvider implemented
+- Added `adm-zip` dep to `visual/backend/` (zero transitive deps)
+- Wrote `ForgeConfigProvider` class (~200 lines):
+  - In-memory zip with `config.env` (same key=value format as .env.local)
+  - Event-driven flush to UC Volume via Files API (`PUT /api/2.0/fs/files/...`)
+  - Bootstrap phase (before schema set): config in memory only
+  - Persisted phase (after schema set): derives Volume path, flushes on every write
+  - File management: `getFile()`, `setFile()`, `deleteFile()`, `listFiles()` for non-config zip entries
+  - Auto-creates UC Volume if needed (`CREATE VOLUME IF NOT EXISTS`)
+- All in-memory tests passing: list, get, set, toggle, disable, listByPrefix, deleteKey, file ops
+- Flush errors expected in local test (no real DATABRICKS_HOST) -- will work in DBX App runtime
+- Committed: `dd6e713`
+
+### 2026-05-15 18:15 -- Setup App verified locally with ConfigProvider refactor
+- `node visual/backend/index.js` starts, health OK, all 19 setup steps reporting correctly
+- LocalConfigProvider wraps existing functions identically -- zero behavior change confirmed
