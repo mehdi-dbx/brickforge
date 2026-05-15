@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Globe, KeyRound, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, type LucideIcon } from 'lucide-react'
+import { Globe, KeyRound, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, type LucideIcon } from 'lucide-react'
 import type { StepId, StepStatus, StepState, StepInstance } from '../types'
 import { SETUP_STEPS } from '../setupSteps'
 
@@ -25,6 +25,7 @@ const STEP_ICON: Record<StepId, LucideIcon> = {
   mlflow:    FlaskConical,
   grants:    ShieldCheck,
   deploy:    Rocket,
+  git:       GitBranch,
 }
 
 const MULTI_INSTANCE_STEPS: StepId[] = ['genie', 'ka', 'vs', 'mcp', 'api', 'a2a', 'features']
@@ -76,6 +77,7 @@ function subLabel(id: StepId, state: StepState): string {
     case 'mlflow':    return v.MLFLOW_EXPERIMENT_ID || 'set'
     case 'grants':    return 'run to apply'
     case 'deploy':    return v.DBX_APP_NAME || 'not configured'
+    case 'git':       return 'not configured'
     default:          return 'set'
   }
 }

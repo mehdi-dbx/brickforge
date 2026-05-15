@@ -208,4 +208,15 @@ export const SETUP_STEPS: SetupStep[] = [
       { title: 'skip',           desc: 'skip deployment for now',                                                        action: 'done' },
     ],
   },
+  {
+    id: 'git',
+    label: 'source control',
+    title: 'Push to Git',
+    help: 'Push your agent project to a GitHub or GitLab repository. Uses Databricks-stored git credentials -- no PAT entry needed. The Setup App creates a Databricks Git Folder linked to your repo, writes the project files, and commits+pushes automatically.',
+    choices: [
+      { title: 'push to GitHub',  desc: 'push project to a GitHub repo (uses Databricks git credentials)',  action: 'cfg-git' },
+      { title: 'push to GitLab',  desc: 'push project to a GitLab repo',                                    action: 'cfg-git' },
+      { title: 'skip',            desc: 'no source control for now',                                         action: 'done' },
+    ],
+  },
 ]

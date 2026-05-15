@@ -29,11 +29,12 @@ from tools.generate_chart import generate_chart
 from tools.ka_factory import discover_ka_tools
 from tools.api_factory import discover_api_tools
 from tools.a2a_factory import discover_a2a_tools
+from tools.tool_factory import discover_forge_tools
 
 import importlib
 import pkgutil
 
-_FRAMEWORK_MODULES = {"sql_executor", "ka_factory", "api_factory", "a2a_factory", "generate_chart", "get_current_time", "__init__"}
+_FRAMEWORK_MODULES = {"sql_executor", "ka_factory", "api_factory", "a2a_factory", "generate_chart", "get_current_time", "tool_factory", "__init__"}
 
 
 def _discover_domain_tools() -> list:
@@ -195,14 +196,16 @@ async def init_agent(
     api_tools = discover_api_tools()
     a2a_tools = discover_a2a_tools()
     domain_tools = _discover_domain_tools()
-    _log.info("Discovered %d domain tools, %d KA tools, %d API tools, %d A2A tools", len(domain_tools), len(ka_tools), len(api_tools), len(a2a_tools))
+    # .forge declarative tools (SQL read + action patterns from config)
+    forge_tools = discover_forge_tools(dict(os.environ))
+    _log.info("Discovered %d domain, %d forge, %d KA, %d API, %d A2A tools", len(domain_tools), len(forge_tools), len(ka_tools), len(api_tools), len(a2a_tools))
     # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
     chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
     from agent.memory_tools import create_memory_tools
     memory_tools = create_memory_tools(store, user_id) if store and user_id else []
     if memory_tools:
         _log.info("Memory tools enabled for user '%s'", user_id)
-    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
+    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + forge_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
     endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
     databricks_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
 

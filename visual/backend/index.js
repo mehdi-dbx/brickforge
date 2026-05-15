@@ -168,14 +168,28 @@ function toggleEnvKey(key) {
   return true
 }
 
-// ConfigProvider instance — wraps the local .env.local helpers above
-const config = new LocalConfigProvider(ENV_FILE, {
-  parseEnvFile,
-  writeEnvValues,
-  commentOutKeys,
-  toggleEnvKey,
-  parseMultiInstanceKeys,
-})
+// ConfigProvider instance — mode detection at startup
+const { ForgeConfigProvider } = require('./lib/config-provider')
+const FORGE_MODE = process.env.FORGE_MODE === 'true' || process.env.DATABRICKS_APP_PORT != null
+let config
+if (FORGE_MODE) {
+  config = new ForgeConfigProvider()
+  // Async init — download zip from UC Volume if schema is known
+  config.init().then(() => {
+    console.log('[forge] ForgeConfigProvider initialized' + (config.get('PROJECT_UNITY_CATALOG_SCHEMA') ? ` (schema: ${config.get('PROJECT_UNITY_CATALOG_SCHEMA')})` : ' (bootstrap phase)'))
+  }).catch(e => {
+    console.error('[forge] init failed, falling back to empty config:', e.message)
+  })
+} else {
+  config = new LocalConfigProvider(ENV_FILE, {
+    parseEnvFile,
+    writeEnvValues,
+    commentOutKeys,
+    toggleEnvKey,
+    parseMultiInstanceKeys,
+  })
+}
+console.log(`[config] mode: ${FORGE_MODE ? 'FORGE (SaaS)' : 'LOCAL (.env.local)'}`)
 
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -282,6 +296,7 @@ const STEP_ENV_KEYS = {
   mlflow:    ['MLFLOW_EXPERIMENT_ID'],
   grants:    [],  // always re-runnable, no single env key
   deploy:    ['DBX_APP_NAME'],
+  git:       [],  // optional, no env key required
 }
 
 // GET /api/setup/status — parse .env.local, return per-step status
@@ -483,15 +498,14 @@ print(json.dumps(out))
 `.trim(),
     lakebase: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-import subprocess, json
+import json
+from databricks.sdk import WorkspaceClient
 try:
-  r = subprocess.run(['databricks', 'database', 'list-database-instances', '--output', 'json'], capture_output=True, text=True, timeout=15)
-  if r.returncode != 0: print('[]'); exit(0)
-  data = json.loads(r.stdout)
-  instances = data if isinstance(data, list) else data.get('database_instances', [])
-  out = [{'id': i.get('name',''), 'name': i.get('name',''), 'state': i.get('state','UNKNOWN')} for i in instances]
+  w = WorkspaceClient()
+  instances = list(w.database.list_database_instances())
+  out = [{'id': getattr(i,'name',''), 'name': getattr(i,'name',''), 'state': str(getattr(i,'state','UNKNOWN'))} for i in instances]
   print(json.dumps(out))
-except Exception as e:
+except Exception:
   print('[]')
 `.trim(),
   }
@@ -1186,15 +1200,15 @@ except Exception as e:
 
   lakebase: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-import os, subprocess, json
+import os
+from databricks.sdk import WorkspaceClient
 name = os.environ.get('LAKEBASE_INSTANCE_NAME','').strip()
 if not name: print('[x] LAKEBASE_INSTANCE_NAME not set'); exit(1)
 try:
-    r = subprocess.run(['databricks', 'database', 'get-database-instance', name, '--output', 'json'], capture_output=True, text=True, timeout=15)
-    if r.returncode != 0: print('[x] instance not found — ' + name); exit(1)
-    d = json.loads(r.stdout)
-    state = d.get('state', 'UNKNOWN').upper()
-    if state == 'AVAILABLE': print('[+] available — ' + name)
+    w = WorkspaceClient()
+    inst = w.database.get_database_instance(name=name)
+    state = str(getattr(inst, 'state', 'UNKNOWN')).upper()
+    if 'AVAILABLE' in state or 'ACTIVE' in state: print('[+] available — ' + name)
     else: print('[x] ' + name + ' — ' + state); exit(1)
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
@@ -1202,33 +1216,29 @@ except Exception as e:
 
   deploy: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-import os, subprocess, json
+import os
+from databricks.sdk import WorkspaceClient
 app_name = os.environ.get('DBX_APP_NAME', '').strip()
 if not app_name: print('[x] DBX_APP_NAME not set'); exit(1)
 try:
-    out = subprocess.check_output(
-        ['databricks', 'apps', 'get', app_name, '--output', 'json'],
-        text=True, timeout=15, stderr=subprocess.PIPE
-    )
-    d = json.loads(out)
-    status = d.get('status', {}).get('state', d.get('compute_status', {}).get('state', 'UNKNOWN'))
-    url = d.get('url', '')
-    if status in ('RUNNING', 'ACTIVE', 'IDLE'):
+    w = WorkspaceClient()
+    app = w.apps.get(app_name)
+    status = str(getattr(getattr(app, 'app_status', None), 'state', 'UNKNOWN'))
+    url = getattr(app, 'url', '') or ''
+    if 'RUNNING' in status:
         print('[+] running — ' + (url or app_name))
-    elif status in ('STARTING', 'DEPLOYING', 'PENDING'):
+    elif 'STARTING' in status or 'PENDING' in status:
         print('[+] deploying — ' + status.lower())
     else:
         print('[x] ' + app_name + ' — ' + status)
         exit(1)
-except subprocess.CalledProcessError as e:
-    err = (e.stderr or '').strip()[:100]
+except Exception as e:
+    err = str(e)[:100]
     if 'not found' in err.lower() or '404' in err:
         print('[x] app not found — deploy first')
     else:
         print('[x] ' + err)
     exit(1)
-except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
 `.trim(),
 }
 
