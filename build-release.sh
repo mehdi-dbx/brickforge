@@ -11,29 +11,39 @@ echo "Building BrickForge release: ${OUT}"
 rm -rf "$OUT" "${OUT}.tar.gz"
 mkdir -p "$OUT"
 
-# Copy files (exclude bloat)
-rsync -a \
-  --exclude='.git' \
-  --exclude='.venv' \
-  --exclude='__pycache__' \
-  --exclude='.mypy_cache' \
-  --exclude='.DS_Store' \
-  --exclude='.claude' \
-  --exclude='.env.local' \
-  --exclude='.env.*.local' \
-  --exclude='*.pyc' \
-  --exclude='app/client/node_modules' \
-  --exclude='app/server/node_modules' \
-  --exclude='app/packages' \
-  --exclude='app/client/src' \
-  --exclude='app/server/src' \
-  --exclude='visual/frontend/node_modules' \
-  --exclude='visual/frontend/src' \
-  --exclude='edu' \
-  --exclude='doc/plan' \
-  --exclude='.tmp-*' \
-  --exclude='app.yaml.bak' \
-  ./ "$OUT/"
+# INCLUDE-ONLY approach -- only copy what we need
+DIRS=(
+  visual/backend
+  visual/frontend/dist
+  agent
+  app/client/dist
+  app/server/dist
+  tools
+  data/default
+  data/init
+  data/gen
+  data/py
+  conf
+  eval
+  scripts
+  deploy
+  stash
+)
+
+for d in "${DIRS[@]}"; do
+  if [ -d "$d" ]; then
+    mkdir -p "$OUT/$d"
+    rsync -a \
+      --exclude='__pycache__' --exclude='.mypy_cache' \
+      --exclude='.DS_Store' --exclude='*.pyc' \
+      "$d/" "$OUT/$d/"
+  fi
+done
+
+# Individual files
+for f in pyproject.toml requirements.txt setup-app.yaml databricks.yml README.md start.sh .gitignore .databricksignore uv.lock; do
+  [ -f "$f" ] && cp "$f" "$OUT/"
+done
 
 # Compress
 tar czf "${OUT}.tar.gz" "$OUT"
