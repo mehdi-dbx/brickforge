@@ -1230,7 +1230,102 @@ No hardcoded `/` path separators in critical code.
 
 ---
 
-## PART 9: Current State
+## PART 10: Execution Plan -- Parallelization
+
+### Dependency Graph
+
+```
+TRACK A (Setup App Deploy)     TRACK B (Backend Refactor)     TRACK C (Independent)
+─────────────────────────      ────────────────────────       ─────────────────────
+
+Inch 1: app.yaml + startup     Inch 4: ConfigProvider         Inch 6: File Manifest
+    |                              |                           (design, no code deps)
+    v                              |
+Inch 2: Port + Auth               |                           tool_factory.py
+    |                              |                           (SQL read + action)
+    v                              |
+Inch 3: First Deploy Test          |
+    |                              |
+    +--------- MERGE POINT --------+
+               |
+               v
+         Inch 5: Agent Deploy via SDK
+               |
+               v
+         Inch 7: .forge Config Injection
+               |
+               v
+         Inch 8: Git Push + Git Folder
+               |
+               v
+         Inch 9: Multi-Project
+```
+
+### What Can Run in Parallel
+
+| Track | Work | Dependencies | Can Start |
+|-------|------|-------------|-----------|
+| **A** | Inch 1-3: Setup App as DBX App | None | IMMEDIATELY |
+| **B** | Inch 4: ConfigProvider refactor | None | IMMEDIATELY |
+| **C** | Inch 6: File Manifest + tool_factory.py | None | IMMEDIATELY |
+
+**Tracks A, B, C are fully independent.** They touch different files, different concerns:
+- Track A: `visual/app.yaml` (new), port fix in `index.js`, deploy + test
+- Track B: `visual/backend/lib/config-provider.js` (new), 36 call sites in `index.js`
+- Track C: manifest definition (doc), `tools/tool_factory.py` (new)
+
+### Merge Point
+
+After A+B+C converge:
+- Inch 5 needs: Setup App working (A) + ConfigProvider (B) + file manifest (C)
+- Inch 7 needs: ConfigProvider (B) + file manifest (C)
+- Both can proceed sequentially from the merge point
+
+### Recommended Execution
+
+**Wave 1 (parallel):**
+- [ ] Track A: Inch 1+2 -- Setup App `app.yaml`, port fix, startup command
+- [ ] Track B: Inch 4 -- ConfigProvider interface + LocalConfigProvider (pure refactor, zero behavior change)
+- [ ] Track C: Inch 6 -- define file manifest (which files = Agent App vs Setup App)
+- [ ] Track C: `tool_factory.py` -- SQL read + action tool generation from `.forge` specs
+
+**Wave 1 checkpoint:** Deploy Setup App (Inch 3). Test everything works.
+
+**Wave 2 (sequential, depends on Wave 1):**
+- [ ] Inch 4b: ForgeConfigProvider (reads/writes in-memory zip)
+- [ ] Inch 5: Agent Deploy via SDK (generate databricks.yml + app.yaml, upload, deploy)
+- [ ] Inch 7: .forge config injection (generate domain files from .forge, write to workspace)
+
+**Wave 2 checkpoint:** End-to-end test: Setup App -> configure -> deploy Agent App -> live.
+
+**Wave 3 (sequential, depends on Wave 2):**
+- [ ] Inch 8: Git push + Databricks Git Folder
+- [ ] Inch 9: Multi-project save/load/switch
+
+### Estimated Effort per Track
+
+| Track | Inches | Scope | Key Files | Effort |
+|-------|--------|-------|-----------|--------|
+| A | 1-3 | Setup App app.yaml, port, first deploy | `visual/app.yaml` (new), `index.js` (1 line), `.databricksignore` | Small -- mostly config |
+| B | 4 | ConfigProvider + 36 call site refactor | `config-provider.js` (new), `index.js` (36 edits) | Medium -- refactor |
+| C | 6 + tool_factory | Manifest + SQL/action tool generation | `tool_factory.py` (new), doc | Medium -- new code |
+| Merge | 5+7 | Agent deploy + config injection | `deploy_via_sdk.py` (new), template generation | Large -- core SaaS logic |
+| Post | 8+9 | Git + multi-project | Git API integration, project manager UI | Medium each |
+
+### Session Planning
+
+Each wave can be a separate Claude Code session:
+- **Session 1:** Wave 1 (parallel tracks A+B+C) + Inch 3 test
+- **Session 2:** Wave 2 (agent deploy + config injection) + end-to-end test
+- **Session 3:** Wave 3 (git + multi-project)
+
+Or with parallelization within a session:
+- Use Claude Code's Agent tool to run tracks A, B, C simultaneously in background
+- Merge results, test, proceed to Wave 2
+
+---
+
+## PART 11: Current State
 
 - [x] Domain extraction complete (stash/airops/)
 - [x] `.forge` manifest exists (airops.forge)
