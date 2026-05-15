@@ -163,12 +163,35 @@ config:
 ```
 
 ### Where It's Stored
-- UC Volume: `/Volumes/{catalog}/{schema}/brickforge/stash/{name}/`
-- Same directory holds sidecar files (CSV, SQL, PDFs) with relative paths
-- Local mode: `stash/{name}/` on filesystem
+
+**Single zip archive per project.** Not scattered files.
+
+| Mode | Path | Format |
+|------|------|--------|
+| SaaS (A/B) | `/Volumes/{catalog}/{schema}/brickforge/stash/airops.forge.zip` | Zip archive |
+| Local (C) | `stash/airops/` on filesystem (unzipped for dev convenience) | Directory |
+
+**What's IN the archive:** `.forge` YAML, SQL files, prompts, tool specs, KA configs, `app.yaml`, `databricks.yml` -- all small text files. Typically under 1MB compressed.
+
+**What's NOT in the archive:** PDFs (stay in UC Volume, referenced by path in the manifest), large datasets (already in UC tables as Delta).
+
+**How it works:**
+1. Download one zip from UC Volume (single API call: `w.files.download()`)
+2. Open in memory (`zipfile.ZipFile(io.BytesIO(bytes))` in Python, `AdmZip(buffer)` in Node)
+3. Read any file on demand -- no disk extraction
+4. When saving: update entries in memory, upload zip back (single API call: `w.files.upload()`)
+
+**Why zip over scattered files:**
+- One file = one project. Dead simple to copy, share, backup, version
+- Atomic: it's there or it's not (no partial uploads)
+- Single API call to load, single call to save
+- Under 1MB -- trivially fast
+- In-memory access: zero disk I/O, zero temp files
+
+**Implementation:** Python `zipfile` (stdlib, zero deps, 20+ years battle-tested). Node.js `adm-zip` (50KB, zero transitive deps). Rock solid, dead simple.
 
 ### First Example
-`stash/airops/airops.forge` -- extracted from the original airops domain.
+`stash/airops/airops.forge` -- extracted from the original airops domain. Currently a directory; will be archived to `airops.forge.zip` for UC Volume storage.
 
 ---
 
@@ -541,11 +564,11 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 | # | Question | Answer | Status |
 |---|----------|--------|--------|
-| D1 | Inline vs sidecar? | Sidecar files, same structure as local stash. | DECIDED |
+| D1 | Storage format? | Single zip archive per project. Text files inside (SQL, prompts, YAML). PDFs stay in UC Volume (referenced by path). Under 1MB per project. | DECIDED |
 | D2 | UC Volume path convention? | `/Volumes/{catalog}/{schema}/brickforge/{project_name}/` | DECIDED |
 | D3 | What catalog/schema for stash Volume? | The project's own catalog.schema. User picks it in Schema setup step. | DECIDED |
 | D4 | How does wizard write to UC Volume? | Python subprocess via `volume_ops.py` (already exists for KA doc upload). Same pattern for all Volume writes. | DECIDED |
-| D5 | Copy to workspace files or agent reads Volume directly? | Copy to workspace files at deploy time. Agent reads local relative paths at runtime -- same as today. | DECIDED |
+| D5 | How does stash content reach the Agent App? | Download zip from Volume, extract files in memory, write to workspace files at deploy time. Agent reads local relative paths at runtime. | DECIDED |
 | D6 | Developer mode: `.forge` abandoned? | Yes. `.forge` is the seed. Once exported, code is source of truth. User deploys via own CI/CD. Setup App optional from that point. | DECIDED |
 
 ### E. Tool Generation

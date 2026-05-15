@@ -585,21 +585,37 @@
 <h3>Where It's Stored</h3>
 <table>
   <thead>
-    <tr><th>Mode</th><th>Path</th></tr>
+    <tr><th>Mode</th><th>Path</th><th>Format</th></tr>
   </thead>
   <tbody>
     <tr>
       <td>SaaS (A/B)</td>
-      <td><code>/Volumes/{catalog}/{schema}/brickforge/stash/{name}/</code></td>
+      <td><code>/Volumes/{catalog}/{schema}/brickforge/stash/airops.forge.zip</code></td>
+      <td>Single zip archive</td>
     </tr>
     <tr>
       <td>Local (C)</td>
-      <td><code>stash/{name}/</code> on filesystem</td>
+      <td><code>stash/airops/</code> on filesystem</td>
+      <td>Directory (unzipped for dev)</td>
     </tr>
   </tbody>
 </table>
-<p>Same directory holds sidecar files (CSV, SQL, PDFs) with relative paths.</p>
-<p>First example: <code>stash/airops/airops.forge</code> -- extracted from the original airops domain.</p>
+
+<h4>What's IN the archive</h4>
+<p><code>.forge</code> YAML, SQL files, prompts, tool specs, KA configs, <code>app.yaml</code>, <code>databricks.yml</code> -- all small text files. Typically <strong>under 1MB compressed</strong>.</p>
+
+<h4>What's NOT in the archive</h4>
+<p>PDFs (stay in UC Volume, referenced by path). Large datasets (already in UC tables as Delta).</p>
+
+<h4>How it works</h4>
+<ol>
+  <li>Download one zip from UC Volume (single API call: <code>w.files.download()</code>)</li>
+  <li>Open in memory (<code>zipfile.ZipFile(io.BytesIO(bytes))</code> in Python, <code>AdmZip(buffer)</code> in Node)</li>
+  <li>Read any file on demand -- no disk extraction, no temp files</li>
+  <li>When saving: update entries in memory, upload zip back (single API call: <code>w.files.upload()</code>)</li>
+</ol>
+
+<p><strong>Implementation:</strong> Python <code>zipfile</code> (stdlib, zero deps). Node.js <code>adm-zip</code> (50KB, zero transitive deps). Rock solid.</p>
 
 <!-- ============================================================ -->
 <!-- 6. STASH SYSTEM                                               -->
