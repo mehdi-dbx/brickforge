@@ -1485,3 +1485,13 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Backend wired: `exec-deploy-agent` action in index.js writes config JSON, calls deploy script
 - Local test: bundle generates correctly, app.yaml has all env vars, databricks.yml has resources
 - Committed: `587e3da`
+
+### 2026-05-15 18:45 -- Inch 8: Git push script
+- Created `deploy/git_push.py`:
+  - `check_git_credentials()` -- verify Databricks has GitHub connected
+  - `create_git_folder()` -- create Git Folder linked to user's repo via `w.repos.create()`
+  - `upload_files_to_git_folder()` -- extract bundle zip, write files into Git Folder via workspace API
+  - `commit_and_push()` -- submit one-shot Databricks job for `git add . && git commit && git push`
+  - Uses Databricks-stored git credentials, zero PAT from user
+- Backend wired: `exec-git-push` action with `repo_url` param
+- Committed: `8db1e27`
