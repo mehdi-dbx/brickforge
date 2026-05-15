@@ -2148,7 +2148,7 @@ cd brickforge-*
     <tr>
       <td>G3</td>
       <td>Git integration?</td>
-      <td>NOT custom. User links workspace folder to their git repo via Databricks Git Folders (standard DBX feature, <code>POST /api/2.0/repos</code>). No GitHub API, no tokens, no OAuth from BrickForge.</td>
+      <td>AUTOMATED. Setup App pushes to GitHub/GitLab via Git Data API (one commit). Then creates DBX Git Folder linked to repo. User provides repo URL + PAT. PAT in Databricks Secrets.</td>
       <td><span class="badge decided">Decided</span></td>
     </tr>
     <tr>
@@ -2248,7 +2248,26 @@ cd brickforge-*
 <p>Setup App generates <code>app.yaml</code> for Agent App with all env vars from <code>.forge</code>.</p>
 <p>Domain files (prompts, SQL, tools) written to workspace files before deploy.</p>
 
-<h3>Inch 8: Multi-Project (later)</h3>
+<h3>Inch 8: Automated Git Push + Databricks Git Folder</h3>
+<p>New setup step <code>git</code> (source control). After deploy. User provides: repo URL, PAT, branch.</p>
+<p><strong>Fully automated:</strong></p>
+<ol>
+  <li>Generate project files from <code>.forge</code> + agent bundle</li>
+  <li>Push ALL files to GitHub in ONE commit via Git Data API (4 API calls: blobs, tree, commit, ref update)</li>
+  <li>Create Databricks Git Folder: <code>w.repos.create(url, provider="github")</code></li>
+  <li>Store PAT in Databricks Secrets, repo URL in <code>.forge</code></li>
+</ol>
+<p><strong>Result:</strong> Code on GitHub AND browsable in Databricks. Zero manual git ops. Subsequent pushes reuse stored config -- just click "Push".</p>
+<p><strong>.forge config:</strong></p>
+<pre><span class="key">config</span>:
+  <span class="key">git</span>:
+    <span class="key">provider</span>: <span class="str">github</span>
+    <span class="key">repo_url</span>: <span class="str">"https://github.com/user/my-agent.git"</span>
+    <span class="key">branch</span>: <span class="str">main</span>
+    <span class="cmt"># PAT in Databricks Secrets, NOT here</span></pre>
+<p>GitLab: same pattern, simpler API (multi-file commit in one call). GitHub first.</p>
+
+<h3>Inch 9: Multi-Project (later)</h3>
 <p>Save/load/switch <code>.forge</code> projects on UC Volume. Per-project schema isolation.</p>
 
 <!-- ============================================================ -->

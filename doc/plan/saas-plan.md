@@ -546,7 +546,60 @@ Define exactly which files are Agent App vs Setup App. Agent App gets: `agent/`,
 Setup App generates `app.yaml` for Agent App with all env vars from `.forge`.
 Domain files (prompts, SQL, tools) written to workspace files before deploy.
 
-### Inch 8: Multi-Project (later)
+### Inch 8: Automated Git Push + Databricks Git Folder
+
+**New setup step: `git` (source control)**
+
+Position: after deploy. User configures, deploys, tests, THEN pushes to git.
+
+**UI -- Setup step choices:**
+```
+source control
+  [1] push to GitHub
+  [2] push to GitLab
+  [3] skip
+```
+
+**Configure phase -- user provides:**
+1. Repo URL: `https://github.com/user/my-agent.git` (user creates empty repo on GitHub first)
+2. PAT: personal access token with `repo` scope (password-masked input)
+3. Branch: default `main`
+
+**Execute phase -- fully automated, SSE stream:**
+1. Generate project files from `.forge` + agent bundle (in memory)
+2. Push ALL files to GitHub in ONE commit via Git Data API:
+   - `POST /repos/{owner}/{repo}/git/blobs` -- create blob per file
+   - `POST /repos/{owner}/{repo}/git/trees` -- create tree with all blobs
+   - `POST /repos/{owner}/{repo}/git/commits` -- create commit
+   - `PATCH /repos/{owner}/{repo}/git/refs/heads/main` -- update branch
+3. Create Databricks Git Folder: `w.repos.create(url, provider="github")`
+4. Store PAT in Databricks Secrets (`scope="brickforge", key="github_pat"`)
+5. Store repo URL + branch in `.forge` config
+
+**Result:** Code is on GitHub AND browsable in Databricks. Zero manual git operations.
+
+**Subsequent pushes:** Repo URL in `.forge`, PAT in Secrets. User clicks "Push" again after changes -- new commit, same repo. No re-entry.
+
+**.forge config section:**
+```yaml
+config:
+  git:
+    provider: github
+    repo_url: "https://github.com/user/my-agent.git"
+    branch: main
+    # PAT in Databricks Secrets, NOT here
+```
+
+**Implementation:**
+- New `StepId: 'git'` in `types.ts`
+- New step in `setupSteps.ts` with choices cfg-github / cfg-gitlab / done
+- New backend action `exec-github-push` in `index.js` (Python subprocess calling GitHub API)
+- `SetupDag` icon: `GitBranch` from lucide
+- `SetupDrawer` configure: 3 input fields
+
+**GitLab:** Same pattern, simpler API (`POST /api/v4/projects/{id}/repository/commits` supports multi-file in ONE call). GitHub first, GitLab later.
+
+### Inch 9: Multi-Project (later)
 
 Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
@@ -615,10 +668,10 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 | # | Question | Answer | Status |
 |---|----------|--------|--------|
-| G1 | How does user access generated project? | Project files are in a workspace folder. User can: (1) link to git via Databricks Git Folders (`POST /api/2.0/repos`), (2) export via `databricks workspace export-dir`, (3) download via Setup App button. | DECIDED |
-| G2 | Does Setup App know when user edits externally? | No, and doesn't need to. Once exported/linked, user owns it. Setup App manages `.forge`; exported code is independent. | DECIDED |
-| G3 | Git integration? | NOT a custom feature. User links workspace folder to their git repo via Databricks Git Folders (standard DBX feature). No GitHub API, no tokens, no OAuth needed from BrickForge. | DECIDED |
-| G4 | CI/CD story? | User's own pipeline. Push from Git Folder triggers their CI/CD. Generated project is a standard DAB bundle -- deploy with any pipeline. BrickForge doesn't provide CI/CD. | DECIDED |
+| G1 | How does user access generated project? | Automated push to GitHub/GitLab via Git Data API + auto-created Databricks Git Folder. Also: export via CLI or download button. | DECIDED |
+| G2 | Does Setup App know when user edits externally? | No, and doesn't need to. Once pushed, user owns it. | DECIDED |
+| G3 | Git integration? | AUTOMATED. Setup App pushes to user's GitHub/GitLab repo via Git Data API (4 API calls, one commit). Then creates DBX Git Folder linked to that repo. User provides repo URL + PAT. PAT stored in Databricks Secrets. | DECIDED |
+| G4 | CI/CD story? | User's own pipeline. Code is in git, push triggers CI/CD. Standard DAB bundle. | DECIDED |
 
 ### H. Multi-Project
 
