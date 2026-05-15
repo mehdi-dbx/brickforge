@@ -163,7 +163,7 @@ config:
 ```
 
 ### Where It's Stored
-- UC Volume: `/Volumes/{catalog}/{schema}/brickforge/projects/{name}/`
+- UC Volume: `/Volumes/{catalog}/{schema}/brickforge/stash/{name}/`
 - Same directory holds sidecar files (CSV, SQL, PDFs) with relative paths
 - Local mode: `stash/{name}/` on filesystem
 
