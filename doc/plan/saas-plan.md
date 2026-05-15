@@ -214,14 +214,14 @@ For each reference in the manifest, check the file is actually there:
 | Manifest Section | Expected Files | Check |
 |-----------------|----------------|-------|
 | `data.tables[].ddl` | `data/init/create_*.sql` | File exists, contains `CREATE` |
-| `data.tables[].seed` | `data/csv/*.csv` | File exists, non-empty |
+| `data.tables[].seed` | `data/csv/*.csv` | Optional -- not needed if DDL exists or tables already in UC |
 | `data.functions[]` | `data/func/*.sql` | File exists |
 | `data.procedures[]` | `data/proc/*.sql` | File exists |
 | `tools[].file` | `tools/*.py` | File exists, contains `@tool` |
 | `prompt.system` | `conf/prompt/main.prompt` | File exists |
 | `prompt.knowledge_base` | `conf/prompt/knowledge.base` | File exists (can be empty) |
 | `prompt.starters` | `conf/prompt/user.prompt` | File exists (can be empty) |
-| `knowledge_assistants[].config` | `conf/ka/*.yml` | File exists, valid YAML |
+| `knowledge_assistants[].config` | `conf/ka/*.yml` | Optional -- can pick existing KA endpoint from workspace instead |
 | `eval.dataset` | `eval/data/*.jsonl` | File exists (optional section) |
 
 **Step 3: Report status**
@@ -236,10 +236,10 @@ Output a clear report:
 ```
 
 **Step 4: Suggest fixes for missing assets**
-- Missing CSV: "Run the Data Gen wizard to generate seed data"
+- Missing CSV: "Not mandatory if DDL SQL exists or tables already exist in UC schema. Otherwise, run the Data Gen wizard to generate seed data."
 - Missing SQL: "Generate from table schema using the Routines wizard"
 - Missing prompt: "Generate from domain description using the Prompt wizard"
-- Missing KA config: "Create a KA from the Knowledge Assistant setup step"
+- Missing KA config: "Not mandatory -- can pick up an existing KA endpoint from the workspace via the KA setup step instead of provisioning a new one."
 - Missing tool file: "Tool will be auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka/api/a2a/mcp/chart)"
 
 **Step 5: Provision check (live workspace verification)**

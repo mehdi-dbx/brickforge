@@ -661,13 +661,13 @@
   <thead><tr><th>Manifest Section</th><th>Expected Files</th><th>Check</th></tr></thead>
   <tbody>
     <tr><td><code>data.tables[].ddl</code></td><td><code>data/init/create_*.sql</code></td><td>File exists, contains CREATE</td></tr>
-    <tr><td><code>data.tables[].seed</code></td><td><code>data/csv/*.csv</code></td><td>File exists, non-empty</td></tr>
+    <tr><td><code>data.tables[].seed</code></td><td><code>data/csv/*.csv</code></td><td>Optional -- not needed if DDL exists or tables already in UC</td></tr>
     <tr><td><code>data.functions[]</code></td><td><code>data/func/*.sql</code></td><td>File exists</td></tr>
     <tr><td><code>data.procedures[]</code></td><td><code>data/proc/*.sql</code></td><td>File exists</td></tr>
     <tr><td><code>tools[].file</code></td><td><code>tools/*.py</code></td><td>File exists, contains @tool</td></tr>
     <tr><td><code>prompt.system</code></td><td><code>conf/prompt/main.prompt</code></td><td>File exists</td></tr>
     <tr><td><code>prompt.knowledge_base</code></td><td><code>conf/prompt/knowledge.base</code></td><td>File exists (can be empty)</td></tr>
-    <tr><td><code>knowledge_assistants[].config</code></td><td><code>conf/ka/*.yml</code></td><td>File exists, valid YAML</td></tr>
+    <tr><td><code>knowledge_assistants[].config</code></td><td><code>conf/ka/*.yml</code></td><td>Optional -- can pick existing KA endpoint from workspace instead</td></tr>
     <tr><td><code>eval.dataset</code></td><td><code>eval/data/*.jsonl</code></td><td>File exists (optional)</td></tr>
   </tbody>
 </table>
@@ -684,10 +684,10 @@
 <table>
   <thead><tr><th>Missing Asset</th><th>Suggested Fix</th></tr></thead>
   <tbody>
-    <tr><td>CSV seed data</td><td>Run the Data Gen wizard to generate seed data</td></tr>
+    <tr><td>CSV seed data</td><td>Not mandatory if DDL SQL exists or tables already in UC schema. Otherwise, run the Data Gen wizard.</td></tr>
     <tr><td>SQL function/procedure</td><td>Generate from table schema using the Routines wizard</td></tr>
     <tr><td>System prompt</td><td>Generate from domain description using the Prompt wizard</td></tr>
-    <tr><td>KA config</td><td>Create a KA from the Knowledge Assistant setup step</td></tr>
+    <tr><td>KA config</td><td>Not mandatory -- can pick up an existing KA endpoint from the workspace via the KA setup step.</td></tr>
     <tr><td>Tool file</td><td>Auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka)</td></tr>
   </tbody>
 </table>
