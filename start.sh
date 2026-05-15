@@ -26,17 +26,14 @@ if [ -z "$PYTHON" ]; then
 fi
 echo "[+] Python $($PYTHON --version 2>&1 | cut -d' ' -f2)"
 
-# Install Python deps (first run only, or if pyproject.toml changed)
-if command -v uv &>/dev/null; then
-  echo "[~] Installing Python deps (uv sync)..."
-  uv sync --quiet
-  echo "[+] Python deps ready"
-elif [ ! -f ".deps_installed" ] || [ "pyproject.toml" -nt ".deps_installed" ]; then
-  echo "[~] Installing Python deps (pip)..."
-  $PYTHON -m pip install -r requirements.txt --quiet
-  touch .deps_installed
-  echo "[+] Python deps ready"
+# Install Python deps via uv (installs uv if needed)
+if ! command -v uv &>/dev/null; then
+  echo "[~] Installing uv..."
+  $PYTHON -m pip install uv --quiet
 fi
+echo "[~] Installing Python deps (uv sync)..."
+uv sync --quiet
+echo "[+] Python deps ready"
 
 # Start
 echo ""

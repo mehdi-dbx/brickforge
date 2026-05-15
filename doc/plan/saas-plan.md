@@ -1565,3 +1565,64 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Created `deploy/grant/run_all_grants.py`: runs all 7 grant steps (tables, functions, warehouse, endpoints, genie, lakebase, secrets) via subprocess. Step 7 uses SDK (`w.secrets.put_acl`) instead of CLI (`databricks secrets put-acl`).
 - Updated `index.js` exec-grants action: `bash deploy/run_all_grants.sh` -> `PY.cmd [...PY.pre, 'deploy/grant/run_all_grants.py']`. One fewer bash dependency.
 - Remaining bash calls in backend: `deploy/deploy.sh` (exec-deploy, exec-deploy-dry) -- kept as local-mode fallback, SDK deploy (`exec-deploy-agent`) exists alongside.
+
+### 2026-05-15 -- The npm/pip Deploy Saga (chronological)
+
+**Context:** App was working. Redeploying with new code (gap closures, stash health UI, PY abstraction).
+
+**Deploy 1 -- `01f1508205551f7e` (17:17)**
+- Uploaded 188 files to workspace via SDK. Upload script had `node_modules` in EXCLUDE_PATTERNS.
+- SDK reported SUCCEEDED + ACTIVE. But browser showed "App Not Available".
+- **Cause:** `npm ci` ran without local `node_modules` (excluded from upload), tried to download from `npm-proxy.dev.databricks.com`. Timed out after 8 minutes (ETIMEDOUT on `util-deprecate-1.0.2.tgz`). Node never started. The `&&` chain stopped silently.
+- **Misleading signal:** SDK said SUCCEEDED because deployment = "source code copied". The app command crash happened AFTER the deployment was marked successful.
+
+**Deploy 2 -- `.npmrc` with cloud proxy (18:22)**
+- Created `visual/backend/.npmrc` with `registry=https://npm-proxy.cloud.databricks.com/`.
+- SDK reported SUCCEEDED. But `npm ci` returned corrupted tarballs: `npm warn tarball data for supports-color ... seems to be corrupted. Trying again.` Retried for minutes, never recovered.
+- **Lesson:** Both Databricks npm proxies are unreliable:
+  - `npm-proxy.dev.databricks.com` -- times out (ETIMEDOUT)
+  - `npm-proxy.cloud.databricks.com` -- returns corrupted tarballs
+
+**Deploy 3 -- `.npmrc` with public registry (19:09)**
+- Changed `.npmrc` to `registry=https://registry.npmjs.org/`.
+- **But:** `.npmrc` dotfile was NOT included in the workspace snapshot. npm still hit `npm-proxy.dev.databricks.com`. Same ETIMEDOUT.
+- **Lesson:** Databricks workspace snapshots skip dotfiles.
+
+**Deploy 4 -- `--registry` CLI flag (19:38)**
+- Changed `app.yaml` command to `npm ci --registry https://registry.npmjs.org/`.
+- **But:** npm IGNORED the `--registry` flag. Still hit `npm-proxy.dev.databricks.com`. Same ETIMEDOUT.
+- **Lesson:** Databricks App runtime has a system-level npm proxy config (likely `~/.npmrc` or env var) that overrides both `.npmrc` project files and `--registry` CLI flags. Cannot be bypassed.
+
+**pip ERROR discovered in parallel**
+- Platform BUILD phase auto-ran `pip install -r requirements.txt` (because file existed in source).
+- 12 dependency conflicts with pre-installed runtime packages (databricks-sql-connector, dash, streamlit, gradio need older versions of pandas, pyarrow, flask, pillow, protobuf, etc.).
+- pip printed `ERROR:` -- initially dismissed as "just a warning". Wrong. It broke the environment.
+- Then `uv sync` ran and **uninstalled 86 packages** trying to reconcile.
+- **Fix:** Deleted `requirements.txt` from workspace AND from git. `uv sync` from `pyproject.toml` handles all Python deps in an isolated `.venv/`. No conflict with pre-installed packages.
+- **Lesson:** When the log says ERROR, it's an error. Don't dismiss.
+
+**Deploy 5 -- instrumented command, no npm ci (20:02)**
+- Added step markers `[1/2] uv sync...`, `[2/2] starting node...` to `app.yaml` for visibility.
+- Removed `npm ci` entirely (deps are all pure JS, no native binaries needed).
+- Node crashed: `Error: Cannot find module 'adm-zip'`.
+- **Cause:** `adm-zip` was added to `package.json` for ForgeConfigProvider but never committed to git. Previous deploys installed it via `npm ci`. Without `npm ci`, it's missing.
+
+**Deploy 6 -- adm-zip uploaded manually (20:24)**
+- Uploaded 19 `adm-zip` files to workspace via SDK.
+- Deployed with `app.yaml`: `uv sync && node visual/backend/index.js` (no npm ci).
+- **Result: App started successfully. 502 gone. Working.**
+
+**What finally worked:**
+1. Delete `requirements.txt` (stops platform BUILD phase pip conflicts)
+2. `uv sync` for Python deps (isolated `.venv/`, no conflicts with pre-installed packages)
+3. No `npm ci` (Databricks npm proxy cannot be bypassed, all deps are pure JS anyway)
+4. `node_modules/` uploaded as source (including `adm-zip` which was missing from git)
+5. Final `app.yaml`: `command: ["bash", "-c", "uv sync && node visual/backend/index.js"]`
+
+**Key learnings for DBX App deployments:**
+- Deployment SUCCEEDED != app is running. The status only covers source code copy, not app startup.
+- Databricks npm proxy (`npm-proxy.dev.databricks.com`) is baked into the runtime. Cannot be overridden by `.npmrc`, `--registry`, or any config. It times out and returns corrupted data.
+- Dotfiles (`.npmrc`) are excluded from workspace snapshots.
+- `pip install -r requirements.txt` runs automatically in BUILD phase if the file exists. Conflicts with pre-installed packages. Use `uv sync` instead (isolated venv).
+- Always pull actual logs with `databricks apps logs <name> -p <profile>`. SDK status is misleading.
+- Never stop app compute (`w.apps.stop()`). Just create new deployments.
