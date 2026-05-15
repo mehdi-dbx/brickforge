@@ -1521,3 +1521,12 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - Click-outside-to-close behavior
 - Frontend rebuilt
 - Committed: `b9e1178`
+
+### 2026-05-15 20:00 -- Plan review + gap closure
+- Reviewed full plan vs implementation. Found 12 gaps.
+- Fixed 5 gaps in one commit (`4acd595`):
+  - Gap 1 (HIGH): ForgeConfigProvider wired at startup with mode detection (FORGE_MODE or DATABRICKS_APP_PORT)
+  - Gap 2 (MEDIUM): tool_factory.py integrated into agent.py (discover_forge_tools() in init_agent)
+  - Gap 4 (LOW): Git setup step added to frontend (StepId, setupSteps, icon, subLabel, STEP_ENV_KEYS)
+  - Gap 5 (MEDIUM): 3 Databricks CLI calls replaced with Python SDK (lakebase list/test, deploy test)
+- Remaining gaps: pythonCmd() abstraction (LOW), stash verification UI (MEDIUM), start.bat (LOW), deploy-setup.py (MEDIUM), 16 remaining direct call sites (LOW), app.yaml/databricks.yml templates in stash (LOW)
