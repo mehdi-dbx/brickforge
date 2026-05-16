@@ -180,6 +180,8 @@ if (FORGE_MODE) {
   }).catch(e => {
     console.error('[forge] init failed, falling back to empty config:', e.message)
   })
+  // Disable CLI profile in deployed mode -- no CLI, no profiles, auth via SP or bridge
+  delete process.env.DATABRICKS_CONFIG_PROFILE
 } else {
   config = new LocalConfigProvider(ENV_FILE, {
     parseEnvFile,
@@ -364,6 +366,129 @@ app.get('/api/stash/health', (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
+})
+
+// ─── Bridge auth endpoints ──────────────────────────────────────────────────
+
+const crypto = require('crypto')
+const bridgeNonces = new Map()  // nonce_id -> { value, expires }
+let bridgeState = { status: 'waiting' }
+
+// Cleanup expired nonces
+function cleanExpiredNonces() {
+  const now = Date.now()
+  for (const [id, n] of bridgeNonces) {
+    if (now > n.expires) bridgeNonces.delete(id)
+  }
+}
+
+// GET /api/auth/bridge-nonce -- generate a one-time nonce (5 min TTL)
+app.get('/api/auth/bridge-nonce', (_req, res) => {
+  cleanExpiredNonces()
+  const nonceId = crypto.randomBytes(16).toString('hex')
+  const nonceValue = crypto.randomBytes(32).toString('hex')
+  bridgeNonces.set(nonceId, { value: nonceValue, expires: Date.now() + 5 * 60 * 1000 })
+  bridgeState = { status: 'waiting' }
+  console.log(`[bridge] nonce generated: id=${nonceId.substring(0, 8)}... TTL=5min, active nonces=${bridgeNonces.size}`)
+  res.json({ nonce_id: nonceId, nonce: nonceValue })
+})
+
+// POST /api/auth/bridge-receive -- receive encrypted token from local script
+app.post('/api/auth/bridge-receive', (req, res) => {
+  cleanExpiredNonces()
+  const { ciphertext, nonce_id, host, user } = req.body
+  console.log(`[bridge] receive: nonce_id=${(nonce_id || '').substring(0, 8)}... host=${host || '?'} user=${user || '?'} ciphertext_len=${(ciphertext || '').length}`)
+
+  if (!ciphertext || !nonce_id) {
+    console.log('[bridge] receive REJECTED: missing ciphertext or nonce_id')
+    return res.status(400).json({ error: 'ciphertext and nonce_id required' })
+  }
+
+  const nonce = bridgeNonces.get(nonce_id)
+  if (!nonce) {
+    console.log(`[bridge] receive REJECTED: nonce not found (expired or already used). active nonces=${bridgeNonces.size}`)
+    return res.status(403).json({ error: 'invalid or expired nonce' })
+  }
+
+  try {
+    // Decrypt AES-256-CBC (openssl enc compatible format)
+    const buf = Buffer.from(ciphertext, 'base64')
+    console.log(`[bridge] decrypting: buf_len=${buf.length}, prefix=${buf.subarray(0, 8).toString('ascii')}`)
+    // openssl prefixes with "Salted__" (8 bytes) + salt (8 bytes)
+    const salt = buf.subarray(8, 16)
+    const ct = buf.subarray(16)
+    const keyIv = crypto.pbkdf2Sync(nonce.value, salt, 10000, 48, 'sha256')
+    const key = keyIv.subarray(0, 32)
+    const iv = keyIv.subarray(32, 48)
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv)
+    const token = decipher.update(ct, undefined, 'utf8') + decipher.final('utf8')
+
+    console.log(`[bridge] decrypted OK: token_len=${token.length}, starts_with=${token.substring(0, 6)}...`)
+
+    if (!token || token.length < 5) {
+      console.log(`[bridge] REJECTED: decrypted token is empty or too short (len=${token.length})`)
+      return res.status(400).json({ error: 'received empty or invalid token' })
+    }
+
+    bridgeNonces.delete(nonce_id)  // single use
+
+    // Store in config -- clear profile to avoid conflicts with new host+token
+    const updates = {}
+    if (host) updates.DATABRICKS_HOST = host
+    updates.DATABRICKS_TOKEN = token
+    config.setMany(updates)
+    // Remove profile from config AND process.env so SDK uses token auth
+    config.disable('DATABRICKS_CONFIG_PROFILE')
+    delete process.env.DATABRICKS_CONFIG_PROFILE
+    console.log(`[bridge] config saved: host=${host || '(none)'}, token_len=${token.length}`)
+
+    bridgeState = { status: 'connected', host: host || '', user: user || '', time: Date.now() }
+    console.log(`[bridge] state -> connected (host=${host}, user=${user})`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.log(`[bridge] decryption FAILED: ${err.message || err}`)
+    res.status(400).json({ error: 'decryption failed: ' + (err.message || err) })
+  }
+})
+
+// GET /api/auth/bridge-status -- frontend polls this
+app.get('/api/auth/bridge-status', (_req, res) => {
+  if (bridgeState.status === 'connected') console.log(`[bridge] status poll -> connected (host=${bridgeState.host})`)
+  res.json(bridgeState)
+})
+
+// GET /api/auth/bridge-script -- serve downloadable .command file
+app.get('/api/auth/bridge-script', (req, res) => {
+  const nonceId = req.query.nonce
+  if (!nonceId) {
+    console.log('[bridge] script download REJECTED: missing nonce query param')
+    return res.status(400).send('nonce query param required')
+  }
+
+  const nonce = bridgeNonces.get(nonceId)
+  if (!nonce) {
+    console.log(`[bridge] script download REJECTED: nonce ${nonceId.substring(0, 8)}... not found or expired`)
+    return res.status(403).send('invalid or expired nonce')
+  }
+
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https'
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  const appUrl = `${proto}://${host}`
+  console.log(`[bridge] script download: nonce=${nonceId.substring(0, 8)}... appUrl=${appUrl}`)
+
+  // Build script from scripts/connect.sh template, injecting only the 3 config vars
+  const scriptTemplate = fs.readFileSync(path.join(PROJECT_ROOT, 'scripts', 'connect.sh'), 'utf8')
+  const script = scriptTemplate
+    .replace(/^APP_URL=.*$/m, `APP_URL="${appUrl}"`)
+    .replace(/^NONCE=.*$/m, `NONCE="${nonce.value}"`)
+    .replace(/^NONCE_ID=.*$/m, `NONCE_ID="${nonceId}"`)
+    // Remove the arg parsing lines (they're for standalone use)
+    .replace(/^APP_URL="\$\{1:.*$/m, `APP_URL="${appUrl}"`)
+    .replace(/^NONCE="\$\{2:.*$/m, `NONCE="${nonce.value}"`)
+
+  res.setHeader('Content-Disposition', 'attachment; filename=brickforge-connect.command')
+  res.setHeader('Content-Type', 'application/octet-stream')
+  res.send(script)
 })
 
 // ─── Setup endpoints ───────────────────────────────────────────────────────────

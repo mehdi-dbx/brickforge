@@ -7,6 +7,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Databricks host',
     help: 'The Databricks workspace URL where your agent will run. This is the base URL for all API calls, CLI commands, and resource provisioning. If you have multiple workspaces, pick the one intended for this project.',
     choices: [
+      { title: 'connect via terminal', desc: 'run a local script to authenticate automatically (recommended)', action: 'forge-bridge' },
       { title: 'use existing CLI profile', desc: 'pick from detected workspace profiles and save host automatically', action: 'cfg-profile' },
       { title: 'set up new workspace', desc: 'authenticate and configure a new workspace',     action: 'cfg-new' },
       { title: 'enter manually',     desc: 'paste a workspace URL directly',                  action: 'manual' },
@@ -18,6 +19,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Databricks token / profile',
     help: 'Authentication credentials for the Databricks CLI and API. A personal access token (PAT) or CLI profile is required to provision resources, deploy the app, and run queries. PATs expire after 7 days by default -- regenerate when switching workspaces.',
     choices: [
+      { title: 'connect via terminal', desc: 'run a local script to authenticate automatically', action: 'forge-bridge' },
       { title: 'generate 7-day PAT',   desc: 'create a personal access token from current profile', action: 'exec-pat' },
       { title: 'enter token manually', desc: 'paste a dapi... token directly',                     action: 'manual' },
     ],

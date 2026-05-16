@@ -940,6 +940,141 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
   }
 }
 
+// ─── Bridge auth panel ──────────────────────────────────────────────────────
+
+function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const [nonce, setNonce] = useState<{ nonce_id: string; nonce: string } | null>(null)
+  const [status, setStatus] = useState<'loading' | 'waiting' | 'connected' | 'error'>('loading')
+  const [connInfo, setConnInfo] = useState<{ host: string; user: string } | null>(null)
+  const [copied, setCopied] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Fetch nonce on mount
+  useEffect(() => {
+    fetch('/api/auth/bridge-nonce')
+      .then(r => r.json())
+      .then((data: { nonce_id: string; nonce: string }) => {
+        setNonce(data)
+        setStatus('waiting')
+      })
+      .catch(() => setStatus('error'))
+  }, [])
+
+  // Poll for connection
+  useEffect(() => {
+    if (status !== 'waiting') return
+    pollRef.current = setInterval(() => {
+      fetch('/api/auth/bridge-status')
+        .then(r => r.json())
+        .then((data: { status: string; host?: string; user?: string }) => {
+          if (data.status === 'connected') {
+            setStatus('connected')
+            setConnInfo({ host: data.host || '', user: data.user || '' })
+            if (pollRef.current) clearInterval(pollRef.current)
+            setTimeout(onDone, 1500)
+          }
+        })
+        .catch(() => {})
+    }, 2000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [status, onDone])
+
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const command = nonce ? `curl -sL "${appUrl}/api/auth/bridge-script?nonce=${nonce.nonce_id}" | bash` : ''
+
+  const copyCommand = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">
+        {status === 'loading' && (
+          <div className="text-sm text-dbx-gray-400 animate-pulse">Generating secure session...</div>
+        )}
+
+        {status === 'error' && (
+          <div className="text-sm text-dbx-red">Failed to initialize bridge session. Try again.</div>
+        )}
+
+        {(status === 'waiting' || status === 'connected') && nonce && (
+          <>
+            <div className="text-[13px] font-semibold text-dbx-gray-700 dark:text-dbx-gray-200 mb-3">
+              Connect to external workspace
+            </div>
+
+            {/* Option 1: Copy command */}
+            <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
+              Run this in your terminal:
+            </div>
+            <div className="relative group">
+              <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50">
+                {command}
+              </pre>
+              <button
+                onClick={copyCommand}
+                className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
+              >
+                {copied ? 'copied' : 'copy'}
+              </button>
+            </div>
+
+            {/* Option 2: Download script */}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">or</span>
+              <a
+                href={`/api/auth/bridge-script?nonce=${nonce.nonce_id}`}
+                download="brickforge-connect.command"
+                className="text-[12px] text-dbx-blue hover:text-dbx-blue/80 font-medium underline"
+              >
+                download script
+              </a>
+              <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">
+                and double-click to run
+              </span>
+            </div>
+
+            {/* Status */}
+            <div className="mt-5 flex items-center gap-2">
+              {status === 'waiting' ? (
+                <>
+                  <span className="inline-block w-2 h-2 rounded-full bg-dbx-amber animate-pulse" />
+                  <span className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500">
+                    Waiting for connection...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="inline-block w-2 h-2 rounded-full bg-dbx-green" />
+                  <span className="text-[12px] text-dbx-green font-medium">
+                    Connected to {connInfo?.host}
+                    {connInfo?.user ? ` as ${connInfo.user}` : ''}
+                  </span>
+                </>
+              )}
+            </div>
+
+            <div className="mt-4 text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 leading-relaxed">
+              The script authenticates via Databricks CLI (installs it if needed), then sends credentials securely to this app. Your token is encrypted before transmission.
+            </div>
+          </>
+        )}
+      </div>
+      <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800">
+        <button
+          onClick={onBack}
+          className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-700 font-mono transition-all duration-150"
+        >
+          back
+        </button>
+      </div>
+    </>
+  )
+}
+
 // ─── Main drawer ───────────────────────────────────────────────────────────────
 
 export function SetupDrawer({
@@ -1356,6 +1491,8 @@ export function SetupDrawer({
       body = <KaDocsPicker onReady={setKaDocsReady} />
     else if (action === 'cfg-grants')
       body = <InfoBox>Run the grant script to apply UC table, routine, and warehouse permissions to the app service principal.</InfoBox>
+    else if (action === 'forge-bridge')
+      return <BridgeAuthPanel onDone={() => { onRefresh(); wrappedExecDone(true) }} onBack={onBack} />
     else
       body = <InfoBox>This action will execute automatically.</InfoBox>
 

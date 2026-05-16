@@ -70,23 +70,36 @@ export function SetupView() {
   const handleContinue = useCallback(() => {
     const step = SETUP_STEPS.find(s => s.id === activeStep)!
     if (selectedChoice === null) return
-    const action = step.choices[selectedChoice].action
+    // Filter choices same as SetupDrawer does in forge mode
+    const CLI_ACTIONS = new Set(['cfg-profile', 'cfg-new'])
+    const DEPLOY_CLI_ACTIONS = new Set(['exec-deploy', 'exec-deploy-dry'])
+    const choices = forgeMode
+      ? step.choices.filter(c => !CLI_ACTIONS.has(c.action) && !DEPLOY_CLI_ACTIONS.has(c.action))
+      : step.choices
+    const action = choices[selectedChoice].action
 
     if (action === 'done') { setPhase('done'); return }
 
-    // Already in configure — always advance to execute
-    if (phase === 'configure') {
+    // Already in configure — advance to execute (unless action handles its own lifecycle)
+    const SELF_CONTAINED = new Set(['forge-bridge', 'cfg-prompt', 'cfg-prompt-gen'])
+    if (phase === 'configure' && !SELF_CONTAINED.has(action)) {
       setExecLines([])
       setPhase('execute')
       return
     }
 
-    const NEEDS_CONFIGURE = ['cfg-profile', 'cfg-warehouse', 'cfg-catalog', 'cfg-genie', 'cfg-lakebase',
-      'cfg-grants', 'cfg-new', 'cfg-ka', 'cfg-deploy-name', 'cfg-prompt', 'cfg-prompt-gen', 'cfg-api-uc', 'cfg-api-direct', 'manual', 'exec-genie']
-    if (NEEDS_CONFIGURE.includes(action)) { setPhase('configure'); return }
+    // Actions that go straight to execute (no configure phase)
+    const DIRECT_EXEC = new Set(['exec-pat', 'exec-assets', 'exec-tables', 'exec-functions',
+      'exec-lakebase', 'exec-mlflow', 'exec-grants', 'exec-deploy', 'exec-deploy-dry',
+      'exec-deploy-agent', 'exec-same', 'exec-git-push'])
+    if (DIRECT_EXEC.has(action)) {
+      setExecLines([])
+      setPhase('execute')
+      return
+    }
 
-    setExecLines([])
-    setPhase('execute')
+    // Everything else goes to configure
+    setPhase('configure')
   }, [activeStep, selectedChoice, phase])
 
   const handleBack = useCallback(() => {
