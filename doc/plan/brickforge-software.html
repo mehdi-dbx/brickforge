@@ -308,6 +308,57 @@
     }
     .note strong { color: var(--blue); }
 
+    /* -- DARK MODE -- */
+    .dark {
+      --bg:        #0d0d12;
+      --surface:   #1a1a24;
+      --border:    #2a2a3a;
+      --text:      #e4e4e8;
+      --text2:     #a0a0b0;
+      --text3:     #6a6a7a;
+      --code-bg:   #12121c;
+      --red-dim:   rgba(235,22,0,0.12);
+      --blue-dim:  rgba(27,115,232,0.12);
+      --green-dim: rgba(26,158,103,0.12);
+      --amber-dim: rgba(184,114,0,0.12);
+      --purple-dim:rgba(109,40,217,0.12);
+    }
+    .dark nav {
+      background: rgba(13,13,18,0.97);
+      border-bottom-color: var(--border);
+    }
+    .dark th {
+      background: #22222e;
+      color: var(--text2);
+    }
+    .dark tr:nth-child(even) td { background: #16161e; }
+    .dark tr:nth-child(odd)  td { background: var(--surface); }
+    .dark td code, .dark th code, .dark p code, .dark li code {
+      background: rgba(27,115,232,0.15);
+    }
+    .dark .ba-card p { color: var(--text); }
+    .dark .badge.na { background: #22222e; color: var(--text3); }
+
+    /* -- DARK MODE TOGGLE -- */
+    .dark-toggle {
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text2);
+      transition: all 0.15s;
+    }
+    .dark-toggle:hover {
+      background: var(--blue-dim);
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
     @media (max-width: 768px) {
       .before-after { grid-template-columns: 1fr; }
       .toc { columns: 1; }
@@ -323,6 +374,7 @@
 <!-- ============================================================ -->
 <nav>
   <div class="nav-title"><em>Brick</em>Forge SaaS Blueprint</div>
+  <button class="dark-toggle" onclick="document.body.classList.toggle('dark'); this.innerHTML = document.body.classList.contains('dark') ? '<svg width=&quot;16&quot; height=&quot;16&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;><circle cx=&quot;12&quot; cy=&quot;12&quot; r=&quot;5&quot;/><line x1=&quot;12&quot; y1=&quot;1&quot; x2=&quot;12&quot; y2=&quot;3&quot;/><line x1=&quot;12&quot; y1=&quot;21&quot; x2=&quot;12&quot; y2=&quot;23&quot;/><line x1=&quot;4.22&quot; y1=&quot;4.22&quot; x2=&quot;5.64&quot; y2=&quot;5.64&quot;/><line x1=&quot;18.36&quot; y1=&quot;18.36&quot; x2=&quot;19.78&quot; y2=&quot;19.78&quot;/><line x1=&quot;1&quot; y1=&quot;12&quot; x2=&quot;3&quot; y2=&quot;12&quot;/><line x1=&quot;21&quot; y1=&quot;12&quot; x2=&quot;23&quot; y2=&quot;12&quot;/><line x1=&quot;4.22&quot; y1=&quot;19.78&quot; x2=&quot;5.64&quot; y2=&quot;18.36&quot;/><line x1=&quot;18.36&quot; y1=&quot;5.64&quot; x2=&quot;19.78&quot; y2=&quot;4.22&quot;/></svg>' : '<svg width=&quot;16&quot; height=&quot;16&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;><path d=&quot;M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z&quot;/></svg>'" title="Toggle dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
 </nav>
 
 <div class="container">
@@ -355,7 +407,8 @@
   <a href="#stashability"><span class="toc-num">15.</span> Setup Blocks Stashability</a>
   <a href="#questions"><span class="toc-num">16.</span> Open Questions (31)</a>
   <a href="#roadmap"><span class="toc-num">17.</span> Execution Roadmap</a>
-  <a href="#current-state"><span class="toc-num">18.</span> Current State</a>
+  <a href="#invocation-map"><span class="toc-num">20.</span> UI Invocation Map</a>
+  <a href="#current-state"><span class="toc-num">21.</span> Current State</a>
 </div>
 
 <!-- ============================================================ -->
@@ -2434,9 +2487,104 @@ Inch 3: First Deploy Test         |
 </ul>
 
 <!-- ============================================================ -->
+<!-- UI INVOCATION MAP                                             -->
+<!-- ============================================================ -->
+<h2 id="invocation-map" class="amber">20. Setup App UI -- Invocation Map</h2>
+
+<p>Every backend action invoked by the Setup App UI, classified by method and deployed-mode compatibility.</p>
+
+<h3>Legend</h3>
+<table>
+  <thead><tr><th>Method</th><th>Description</th><th>Works deployed?</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge decided">SDK</span></td><td>Python <code>WorkspaceClient()</code></td><td>YES</td></tr>
+    <tr><td><span class="badge verification">REST</span></td><td>Raw <code>urllib.request</code> HTTP calls</td><td>YES</td></tr>
+    <tr><td><span class="badge tobuild">PY</span></td><td>Python script via subprocess</td><td>YES</td></tr>
+    <tr><td><span class="badge na">Config</span></td><td>Read/write config (ConfigProvider)</td><td>YES</td></tr>
+    <tr><td><span class="badge stretch">CLI</span></td><td><code>databricks</code> Go binary</td><td>NO</td></tr>
+    <tr><td><span class="badge stretch">Bash</span></td><td>Shell script (<code>deploy.sh</code>)</td><td>NO</td></tr>
+  </tbody>
+</table>
+
+<h3>Setup Steps</h3>
+<table>
+  <thead><tr><th>Step</th><th>Action</th><th>Method</th><th>Deployed?</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="3"><strong>Host</strong></td><td>use existing CLI profile</td><td><span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>enter manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Auth</strong></td><td>generate 7-day PAT</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter token manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Warehouse</strong></td><td>pick from workspace</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Schema</strong></td><td>pick existing catalog</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td><strong>Tables</strong></td><td>provision tables</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td><strong>Functions</strong></td><td>create all</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td rowspan="4"><strong>Model</strong></td><td>same workspace</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td>use existing profile</td><td><span class="badge stretch">CLI</span>+<span class="badge decided">SDK</span></td><td>NO</td></tr>
+    <tr><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>enter manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Prompt</strong></td><td>generate from domain</td><td><span class="badge tobuild">PY</span> (LLM)</td><td>YES</td></tr>
+    <tr><td>view / edit prompts</td><td>Filesystem</td><td>YES</td></tr>
+    <tr><td rowspan="3"><strong>Genie</strong></td><td>pick existing space</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>create new room</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>KA</strong></td><td>provision from PDFs</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="3"><strong>Lakebase</strong></td><td>pick existing</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>create instance</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter name manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>MLflow</strong></td><td>create new experiment</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Grants</strong></td><td>run grant script</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>view issues</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="4"><strong>Deploy</strong></td><td>deploy now (DAB)</td><td><span class="badge stretch">Bash</span>+<span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>dry run</td><td><span class="badge stretch">Bash</span>+<span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>deploy agent (SDK)</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>set app name</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Git</strong></td><td>push to GitHub/GitLab</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>skip</td><td>-</td><td>YES</td></tr>
+    <tr><td><strong>MCP / API / A2A</strong></td><td>add server / connection / agent</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td><strong>VS</strong></td><td>enter index path</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td><strong>Features</strong></td><td>toggle on/off</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+  </tbody>
+</table>
+
+<h3>Test Endpoints</h3>
+<table>
+  <thead><tr><th>Step</th><th>Method</th><th>Deployed?</th></tr></thead>
+  <tbody>
+    <tr><td>host</td><td><span class="badge verification">REST</span> (<code>/api/2.0/preview/scim/v2/Me</code>)</td><td>YES</td></tr>
+    <tr><td>auth</td><td><span class="badge verification">REST</span> (SCIM with token)</td><td>YES</td></tr>
+    <tr><td>warehouse</td><td><span class="badge decided">SDK</span> (<code>w.warehouses.get()</code>)</td><td>YES</td></tr>
+    <tr><td>schema</td><td><span class="badge decided">SDK</span> (<code>w.schemas.get()</code>)</td><td>YES</td></tr>
+    <tr><td>model</td><td><span class="badge verification">REST</span> (POST to endpoint)</td><td>YES</td></tr>
+    <tr><td>genie</td><td><span class="badge decided">SDK</span> (<code>w.genie.get_space()</code>)</td><td>YES</td></tr>
+    <tr><td>ka</td><td><span class="badge decided">SDK</span> (<code>w.serving_endpoints.get()</code>)</td><td>YES</td></tr>
+    <tr><td>mlflow</td><td><span class="badge decided">SDK</span> (<code>w.experiments.get_experiment()</code>)</td><td>YES</td></tr>
+    <tr><td>lakebase</td><td><span class="badge decided">SDK</span> (<code>w.database.get_database_instance()</code>)</td><td>YES</td></tr>
+    <tr><td>deploy</td><td><span class="badge decided">SDK</span> (<code>w.apps.get()</code>)</td><td>YES</td></tr>
+  </tbody>
+</table>
+
+<h3>What Breaks on Deployed</h3>
+<div class="wall"><strong>5 broken actions out of ~50 total.</strong> All caused by CLI dependency. All fixable by hiding in FORGE_MODE or replacing with SDK equivalents.</div>
+<table>
+  <thead><tr><th>Step</th><th>Broken Action</th><th>Method</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>host</td><td>use existing CLI profile</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE, or replace with SDK workspace discovery</td></tr>
+    <tr><td>host</td><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE, use manual entry</td></tr>
+    <tr><td>model</td><td>use existing profile</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE</td></tr>
+    <tr><td>model</td><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE</td></tr>
+    <tr><td>deploy</td><td>deploy now / dry run</td><td><span class="badge stretch">Bash</span>+<span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE, use SDK deploy</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
 <!-- CURRENT STATE                                                 -->
 <!-- ============================================================ -->
-<h2 id="current-state" class="green">20. Current State</h2>
+<h2 id="current-state" class="green">21. Current State</h2>
 
 <p><strong>Status as of May 2026: Setup App deployed and running on Databricks. All plan gaps closed. Only Gap 9 (start.bat Windows launcher) intentionally skipped.</strong></p>
 

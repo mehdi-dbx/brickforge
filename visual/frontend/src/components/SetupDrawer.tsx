@@ -23,6 +23,7 @@ interface SetupDrawerProps {
   onNext?: () => void
   selectedInstanceKey?: string | null
   instances?: { key: string; value: string; enabled: boolean; label: string }[]
+  forgeMode?: boolean
 }
 
 // ─── Resource hook ─────────────────────────────────────────────────────────────
@@ -945,10 +946,18 @@ export function SetupDrawer({
   activeStep, phase, selectedChoice, execLines, currentValues,
   testCache, onTestResult,
   onSelectChoice, onContinue, onBack, onReconfigure, onExecDone, onRefresh, onNext,
-  selectedInstanceKey, instances,
+  selectedInstanceKey, instances, forgeMode,
 }: SetupDrawerProps) {
   const step      = SETUP_STEPS.find(s => s.id === activeStep)!
-  const choice    = selectedChoice !== null ? step.choices[selectedChoice] : null
+
+  // Hide CLI-dependent choices in forge/deployed mode
+  const CLI_ACTIONS = new Set(['cfg-profile', 'cfg-new'])
+  const DEPLOY_CLI_ACTIONS = new Set(['exec-deploy', 'exec-deploy-dry'])
+  const filteredChoices = forgeMode
+    ? step.choices.filter(c => !CLI_ACTIONS.has(c.action) && !DEPLOY_CLI_ACTIONS.has(c.action))
+    : step.choices
+
+  const choice    = selectedChoice !== null ? filteredChoices[selectedChoice] : null
   const keepLabel = currentValueLabel(activeStep, currentValues)
 
   const abortRef = useRef<AbortController | null>(null)
@@ -1161,7 +1170,7 @@ export function SetupDrawer({
     return (
       <>
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
-          {step.choices.map((c, i) => (
+          {filteredChoices.map((c, i) => (
               <button
                 key={i}
                 onClick={() => onSelectChoice(i)}

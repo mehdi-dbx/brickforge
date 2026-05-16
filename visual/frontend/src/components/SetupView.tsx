@@ -18,11 +18,13 @@ export function SetupView() {
   const [execLines, setExecLines]           = useState<ExecLine[]>([])
   const [testCache, setTestCache]           = useState<Partial<Record<StepId, TestResult>>>({})
   const [selectedInstanceKey, setSelectedInstanceKey] = useState<string | null>(null)
+  const [forgeMode, setForgeMode] = useState(false)
 
   const refreshStatus = useCallback(() => {
     fetch('/api/setup/status')
-      .then(r => r.json() as Promise<{ steps: Record<string, { status: string; values: Record<string, string>; instances?: { key: string; value: string; enabled: boolean; label: string }[] }> }>)
-      .then(({ steps }) => {
+      .then(r => r.json() as Promise<{ steps: Record<string, { status: string; values: Record<string, string>; instances?: { key: string; value: string; enabled: boolean; label: string }[] }>; forgeMode?: boolean }>)
+      .then(({ steps, forgeMode: fm }) => {
+        if (fm != null) setForgeMode(fm)
         const next = makeDefaultStates()
         for (const [id, s] of Object.entries(steps)) {
           if (id in next) {
@@ -212,6 +214,7 @@ export function SetupView() {
           onRefresh={refreshStatus}
           selectedInstanceKey={selectedInstanceKey}
           instances={stepStates[activeStep]?.instances}
+          forgeMode={forgeMode}
         />
       </div>
     </div>

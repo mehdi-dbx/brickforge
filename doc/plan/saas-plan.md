@@ -1626,3 +1626,206 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 - `pip install -r requirements.txt` runs automatically in BUILD phase if the file exists. Conflicts with pre-installed packages. Use `uv sync` instead (isolated venv).
 - Always pull actual logs with `databricks apps logs <name> -p <profile>`. SDK status is misleading.
 - Never stop app compute (`w.apps.stop()`). Just create new deployments.
+
+### 2026-05-15 -- Deploy footprint optimization
+
+Every DBX App deployment snapshots the entire workspace source path file-by-file. 1000+ files = 6 min deploy. Fewer files = faster deploys.
+
+**Setup App -- node_modules tar.gz:**
+- Pruned devDependencies (nodemon): 1107 -> 785 files
+- Stripped docs, tests, .github, fsevents, source maps: 785 -> 473 files
+- Tar.gz'd: 3.4MB / 473 files -> 669KB / 1 file
+- Startup unzips in ~2s: `tar xzf node_modules.tar.gz`
+- Purged all other node_modules locally (935MB freed): app/, app/client/, app/server/, visual/frontend/ -- none needed at runtime (pre-built dist/ dirs)
+
+**Agent App -- dist tar.gz:**
+- `app/client/dist/` (React chat UI): 16MB / 471 files -> 4.1MB tar.gz
+- `app/server/dist/` (Express server): 2.2MB / ~30 files -> 526KB tar.gz
+- `deploy_agent_app.py` updated: uses pre-built tar.gz if present, falls back to on-the-fly compression
+- Startup script unpacks both before starting: `tar xzf dist.tar.gz` per dir (~2s)
+- `requirements.txt` removed from agent bundle (uv sync handles it)
+
+**Total footprint reduction:**
+
+| Component | Before | After |
+|-----------|--------|-------|
+| Setup App node_modules | 7.7MB / 1107 files | 669KB / 1 file |
+| Agent App dist dirs | 18.2MB / ~500 files | 4.6MB / 2 files |
+| Combined | 25.9MB / ~1600 files | 5.3MB / 3 files |
+
+Expected deploy time improvement: ~6 min -> ~1-2 min (snapshot of 3 files vs 1600).
+
+### Setup App UI -- Invocation Map (SDK / REST / CLI)
+
+Every backend action invoked by the Setup App UI, classified by what it calls under the hood and whether it works in deployed (DBX App) mode.
+
+**Legend:** SDK = Python `WorkspaceClient()`, REST = raw `urllib.request`, CLI = `databricks` Go binary, PY = Python script via subprocess
+
+#### Host step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| keep current | read config | Config | YES |
+| use existing CLI profile | `databricks auth profiles` | CLI | NO -- CLI not installed |
+| set up new workspace | `databricks auth login --host` (opens browser) | CLI | NO -- CLI not installed, no browser |
+| enter manually | save to config | Config | YES |
+
+#### Auth step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| keep current | read config | Config | YES |
+| generate 7-day PAT | Python script creates PAT via SDK | SDK | YES (if host configured) |
+| enter token manually | save to config | Config | YES |
+
+#### Warehouse step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| keep current | read config | Config | YES |
+| pick from workspace | `w.warehouses.list()` | SDK | YES |
+| enter id manually | save to config | Config | YES |
+
+#### Schema step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| pick existing catalog | `w.catalogs.list()` | SDK | YES |
+| keep current | read config | Config | YES |
+| enter manually | save to config | Config | YES |
+
+#### Tables step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| provision tables | `create_catalog_schema.py` + `run_sql.py` per table | PY+SDK | YES |
+| keep current | noop | Config | YES |
+
+#### Functions step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| create all | `create_all_functions.py` + `create_all_procedures.py` | PY+SDK | YES |
+| keep current | noop | Config | YES |
+
+#### Model endpoint step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| same workspace | comment out FM-specific keys | Config | YES |
+| use existing profile | `databricks auth profiles` + auto-PAT | CLI+SDK | NO -- CLI part fails |
+| set up new workspace | `databricks auth login` | CLI | NO |
+| keep current | read config | Config | YES |
+| enter manually | save to config | Config | YES |
+
+#### Prompt step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| generate from domain | `generate_prompts.py --mode=generate` | PY (LLM call) | YES |
+| view / edit prompts | read/write `conf/prompt/` files | Filesystem | YES |
+| keep current | noop | Config | YES |
+
+#### Genie step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| pick existing space | `w.genie.list_spaces()` | SDK | YES |
+| create new room | `create_genie_space.py` | PY+SDK | YES |
+| keep current | read config | Config | YES |
+| enter id manually | save to config | Config | YES |
+
+#### KA step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| provision from pdfs | volume upload + `create_kas_from_yml.py` | PY+SDK | YES |
+| keep current | read config | Config | YES |
+| enter id manually | save to config | Config | YES |
+
+#### Vector Search step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| keep current | read config | Config | YES |
+| enter index path | save to config | Config | YES |
+
+#### MCP / API / A2A steps
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| add server/connection/agent | save to config | Config | YES |
+| keep current | read config | Config | YES |
+
+#### Features step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| keep current | toggle config keys | Config | YES |
+
+#### Lakebase step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| pick existing | `w.database.list_database_instances()` | SDK | YES |
+| create instance | `create_lakebase.py` | PY+SDK | YES |
+| keep current | read config | Config | YES |
+| enter name manually | save to config | Config | YES |
+
+#### MLflow step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| create new experiment | `create_mlflow_experiment.py` | PY+SDK | YES |
+| keep current | read config | Config | YES |
+| enter id manually | save to config | Config | YES |
+
+#### Grants step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| run grant script | `run_all_grants.py` (7 steps) | PY+SDK | YES |
+| view issues | read config | Config | YES |
+
+#### Deploy step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| deploy now | `deploy.sh` (DAB bundle) | Bash+CLI | NO -- needs `databricks` CLI |
+| dry run | `deploy.sh --dry-run` | Bash+CLI | NO |
+| deploy agent (SDK) | `deploy_agent_app.py` | PY+SDK | YES |
+| set app name | save to config | Config | YES |
+
+#### Git step
+
+| UI Action | Backend | Method | Works deployed? |
+|-----------|---------|--------|-----------------|
+| push to GitHub/GitLab | `git_push.py` (Git Folders API) | PY+SDK | YES |
+| skip | noop | - | YES |
+
+#### Test endpoints (per step)
+
+| Step | Method | Works deployed? |
+|------|--------|-----------------|
+| host | REST (`/api/2.0/preview/scim/v2/Me`) | YES |
+| auth | REST (SCIM with token) | YES |
+| warehouse | SDK (`w.warehouses.get()`) | YES |
+| schema | SDK (`w.schemas.get()`) | YES |
+| model | REST (POST to endpoint) | YES |
+| genie | SDK (`w.genie.get_space()`) | YES |
+| ka | SDK (`w.serving_endpoints.get()`) | YES |
+| mlflow | SDK (`w.experiments.get_experiment()`) | YES |
+| lakebase | SDK (`w.database.get_database_instance()`) | YES |
+| deploy | SDK (`w.apps.get()`) | YES |
+
+#### Summary -- what breaks on deployed
+
+| Step | Broken action | Method | Fix |
+|------|--------------|--------|-----|
+| host | "use existing CLI profile" | CLI (`databricks auth profiles`) | Hide in FORGE_MODE, or replace with SDK workspace discovery |
+| host | "set up new workspace" | CLI (`databricks auth login`) | Hide in FORGE_MODE, use manual entry |
+| model | "use existing profile" | CLI | Same -- hide or replace |
+| model | "set up new workspace" | CLI | Same |
+| deploy | "deploy now" / "dry run" | Bash + CLI (`deploy.sh`) | Hide in FORGE_MODE, use SDK deploy (`deploy_agent_app.py`) |
+
+**5 broken actions out of ~50 total. All caused by CLI dependency. All fixable by hiding in FORGE_MODE or replacing with SDK equivalents.**

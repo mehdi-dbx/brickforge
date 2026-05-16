@@ -495,7 +495,7 @@ app.get('/api/setup/status', (_req, res) => {
       steps[step] = { status, values }
     }
 
-    res.json({ steps, env })
+    res.json({ steps, env, forgeMode: FORGE_MODE })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }

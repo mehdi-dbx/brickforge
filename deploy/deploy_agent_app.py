@@ -18,6 +18,7 @@ import io
 import json
 import os
 import sys
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -30,8 +31,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 AGENT_APP_DIRS = [
     "agent",
-    "app/client/dist",
-    "app/server/dist",
     "tools",
     "data/default",
     "data/init",
@@ -41,9 +40,14 @@ AGENT_APP_DIRS = [
     "eval",
 ]
 
+# Dirs to pre-compress as tar.gz (faster snapshot, unzipped at startup)
+AGENT_APP_TARBALL_DIRS = [
+    "app/client/dist",
+    "app/server/dist",
+]
+
 AGENT_APP_FILES = [
     "pyproject.toml",
-    "requirements.txt",
 ]
 
 EXCLUDE_PATTERNS = {
@@ -172,6 +176,14 @@ def generate_databricks_yml(config: dict) -> str:
 
 # ── Bundle zip ───────────────────────────────────────────────────────────────
 
+def _make_tarball(dir_path: Path, arcname: str) -> bytes:
+    """Create a tar.gz of a directory, returning the bytes."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        tf.add(str(dir_path), arcname=arcname)
+    return buf.getvalue()
+
+
 def build_agent_bundle(config: dict) -> bytes:
     """Build a zip of the Agent App source + generated configs."""
     buf = io.BytesIO()
@@ -188,6 +200,24 @@ def build_agent_bundle(config: dict) -> bytes:
                 if _should_exclude(rel):
                     continue
                 zf.write(file_path, str(rel))
+
+        # Add pre-compressed dist dirs as tar.gz (faster snapshot)
+        for dir_name in AGENT_APP_TARBALL_DIRS:
+            parent = str(Path(dir_name).parent)  # "app/client"
+            leaf = Path(dir_name).name            # "dist"
+            tar_name = f"{parent}/{leaf}.tar.gz"   # "app/client/dist.tar.gz"
+            pre_built = ROOT / tar_name
+            if pre_built.exists():
+                # Use pre-built tar.gz
+                tar_bytes = pre_built.read_bytes()
+            else:
+                # Compress on-the-fly
+                dir_path = ROOT / dir_name
+                if not dir_path.exists():
+                    continue
+                tar_bytes = _make_tarball(dir_path, leaf)
+            zf.writestr(tar_name, tar_bytes)
+            print(f"  [+] {dir_name}/ -> {tar_name} ({len(tar_bytes)//1024}KB)")
 
         # Add individual files
         for fname in AGENT_APP_FILES:
@@ -240,13 +270,24 @@ def deploy(config: dict) -> dict:
 set -e
 cd /app/python/source_code
 if [ -f _bundle.zip ]; then
-    echo "[~] Extracting bundle..."
+    echo "[1/4] Extracting bundle..."
     unzip -o _bundle.zip -d .
     rm _bundle.zip
-    echo "[+] Bundle extracted"
+    echo "[1/4] done"
 fi
-uv sync
-python -c "from agent.start_server import main; main()"
+echo "[2/4] Unpacking dist archives..."
+for tgz in app/client/dist.tar.gz app/server/dist.tar.gz; do
+    if [ -f "$tgz" ]; then
+        tar xzf "$tgz" -C "$(dirname "$tgz")"
+        rm "$tgz"
+    fi
+done
+echo "[2/4] done"
+echo "[3/4] uv sync..."
+uv sync 2>&1
+echo "[3/4] done"
+echo "[4/4] starting agent..."
+exec python -c "from agent.start_server import main; main()"
 """
     b64_startup = base64.b64encode(startup_script.encode()).decode()
     w.workspace.import_(
