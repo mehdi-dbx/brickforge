@@ -4,10 +4,15 @@
 # No Databricks CLI needed. Just Python 3 + a browser.
 
 # --- Config (replaced by Setup App when served as download) ---
-APP_URL="${1:?Usage: bash connect.sh <setup-app-url> <nonce>}"
-NONCE="${2:?Usage: bash connect.sh <setup-app-url> <nonce>}"
-NONCE_ID="${NONCE}"
-WS_DEFAULT=""
+APP_URL="${APP_URL:-${1:-}}"
+NONCE="${NONCE:-${2:-}}"
+NONCE_ID="${NONCE_ID:-$NONCE}"
+WS_DEFAULT="${WS_DEFAULT:-}"
+if [ -z "$APP_URL" ] || [ -z "$NONCE" ]; then
+  echo "Usage: bash connect.sh <setup-app-url> <nonce>"
+  echo "   or: APP_URL=... NONCE=... bash <(curl -sL <script-url>)"
+  exit 1
+fi
 
 # Find python3
 PY=""
@@ -93,6 +98,11 @@ if not ws:
 if not ws.startswith('http'):
     ws = 'https://' + ws
 print(f'{OK} Target: {C}{ws}{W}')
+print()
+print(f'  {BOLD}{Y}A 7-day Personal Access Token (PAT) will be created{W}')
+print(f'  {DIM}on {ws}{W}')
+print(f'  {DIM}Your browser will open for authentication.{W}')
+print()
 
 # ── Step 2: Discover OAuth endpoints ───────────────────────────────────────
 section('OAuth discovery')
@@ -179,12 +189,38 @@ def do_token_exchange(code):
         BRIDGE_USER = 'unknown'
     print(f'{OK} User: {C}{BRIDGE_USER}{W}')
 
+    # Try to create a PAT (7 days) -- preferred over JWT
+    import datetime
+    PAT = ''
+    today = datetime.date.today().strftime('%Y%m%d')
+    pat_name = f'brickforge-7days-{today}'
+    print(f'{RUN} Creating PAT ({pat_name})...')
+    try:
+        pat_req = urllib.request.Request(
+            f'{ws}/api/2.0/token/create',
+            data=json.dumps({'lifetime_seconds': 604800, 'comment': pat_name}).encode(),
+            headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'},
+            method='POST'
+        )
+        with urllib.request.urlopen(pat_req, timeout=10, context=ctx) as r:
+            pat_resp = json.loads(r.read())
+        PAT = pat_resp.get('token_value', '')
+        if PAT:
+            print(f'{OK} PAT created: {DIM}{PAT[:12]}... (7 days){W}')
+        else:
+            print(f'{WARN} PAT response empty -- falling back to JWT')
+    except Exception as e:
+        print(f'{WARN} PAT creation failed: {DIM}{str(e)[:80]}{W}')
+        print(f'{INFO} Falling back to JWT + refresh token')
+
     # Encrypt
     section('Encryption')
     print(f'{RUN} Encrypting token...')
-    # Bundle access + refresh token as JSON
     import subprocess
-    token_bundle = json.dumps({'access_token': TOKEN, 'refresh_token': REFRESH_TOKEN, 'token_endpoint': token_endpoint})
+    if PAT:
+        token_bundle = json.dumps({'pat': PAT})
+    else:
+        token_bundle = json.dumps({'access_token': TOKEN, 'refresh_token': REFRESH_TOKEN, 'token_endpoint': token_endpoint})
     try:
         proc = subprocess.run(
             ['openssl', 'enc', '-aes-256-cbc', '-a', '-A', '-pass', f'pass:{NONCE}', '-pbkdf2'],
