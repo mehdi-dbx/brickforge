@@ -215,7 +215,7 @@ export function SetupView() {
           phase={phase}
           selectedChoice={selectedChoice}
           execLines={execLines}
-          currentValues={{ ...stepStates.schema.values, ...stepStates[activeStep].values }}
+          currentValues={{ ...stepStates.host.values, ...stepStates.auth.values, ...stepStates.schema.values, ...stepStates[activeStep].values }}
           testCache={testCache}
           onTestResult={handleTestResult}
           onSelectChoice={setSelectedChoice}

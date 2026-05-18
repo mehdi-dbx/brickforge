@@ -196,6 +196,23 @@ console.log(`[config] mode: ${FORGE_MODE ? 'FORGE (SaaS)' : 'LOCAL (.env.local)'
 // Python command abstraction: 'uv run python' locally, 'python' in Forge/DBX App mode
 const PY = FORGE_MODE ? { cmd: 'python', pre: [] } : { cmd: 'uv', pre: ['run', 'python'] }
 
+// Build a clean subprocess env: config values + process.env, minus auth conflicts
+function buildSubEnv(extraEnv = {}) {
+  const env = { ...process.env }
+  // Overlay config values
+  for (const { key, value } of config.list()) env[key] = value
+  // Apply extras
+  Object.assign(env, extraEnv)
+  // If PAT token is set, remove SP OAuth vars to avoid SDK "more than one auth method" conflict
+  if (env.DATABRICKS_TOKEN && env.DATABRICKS_CLIENT_ID) {
+    delete env.DATABRICKS_CLIENT_ID
+    delete env.DATABRICKS_CLIENT_SECRET
+  }
+  // Remove CLI profile in deployed mode
+  if (FORGE_MODE) delete env.DATABRICKS_CONFIG_PROFILE
+  return env
+}
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS')
@@ -432,14 +449,17 @@ app.post('/api/auth/bridge-receive', (req, res) => {
 
     bridgeNonces.delete(nonce_id)  // single use
 
-    // Store in config -- clear profile to avoid conflicts with new host+token
+    // Store in config -- clear conflicting auth methods
     const updates = {}
     if (host) updates.DATABRICKS_HOST = host
     updates.DATABRICKS_TOKEN = token
     config.setMany(updates)
-    // Remove profile from config AND process.env so SDK uses token auth
-    config.disable('DATABRICKS_CONFIG_PROFILE')
-    delete process.env.DATABRICKS_CONFIG_PROFILE
+    // Remove profile + SP OAuth vars so SDK uses PAT auth only
+    for (const k of ['DATABRICKS_CONFIG_PROFILE', 'DATABRICKS_CLIENT_ID', 'DATABRICKS_CLIENT_SECRET']) {
+      config.disable(k)
+      delete process.env[k]
+    }
+    console.log('[bridge] cleared profile + SP OAuth vars from env')
     console.log(`[bridge] config saved: host=${host || '(none)'}, token_len=${token.length}`)
 
     bridgeState = { status: 'connected', host: host || '', user: user || '', time: Date.now() }
@@ -476,12 +496,14 @@ app.get('/api/auth/bridge-script', (req, res) => {
   const appUrl = `${proto}://${host}`
   console.log(`[bridge] script download: nonce=${nonceId.substring(0, 8)}... appUrl=${appUrl}`)
 
-  // Build script from scripts/connect.sh template, injecting only the 3 config vars
+  // Build script from scripts/connect.sh template, injecting config vars
+  const currentHost = config.get('DATABRICKS_HOST') || ''
   const scriptTemplate = fs.readFileSync(path.join(PROJECT_ROOT, 'scripts', 'connect.sh'), 'utf8')
   const script = scriptTemplate
     .replace(/^APP_URL=.*$/m, `APP_URL="${appUrl}"`)
     .replace(/^NONCE=.*$/m, `NONCE="${nonce.value}"`)
     .replace(/^NONCE_ID=.*$/m, `NONCE_ID="${nonceId}"`)
+    .replace(/^WS_DEFAULT=.*$/m, `WS_DEFAULT="${currentHost}"`)
     // Remove the arg parsing lines (they're for standalone use)
     .replace(/^APP_URL="\$\{1:.*$/m, `APP_URL="${appUrl}"`)
     .replace(/^NONCE="\$\{2:.*$/m, `NONCE="${nonce.value}"`)
@@ -515,6 +537,36 @@ const STEP_ENV_KEYS = {
   deploy:    ['DBX_APP_NAME'],
   git:       [],  // optional, no env key required
 }
+
+// POST /api/setup/clear-step — clear env keys for a step
+app.post('/api/setup/clear-step', (req, res) => {
+  const { step } = req.body
+  if (!step || !STEP_ENV_KEYS[step]) return res.status(400).json({ error: 'invalid step' })
+
+  const keys = STEP_ENV_KEYS[step]
+  if (keys.length > 0) {
+    // Disable (comment out) each key
+    config.disableMany(keys)
+    // Also remove from process.env so subprocesses don't see stale values
+    for (const k of keys) delete process.env[k]
+    console.log(`[setup] cleared step "${step}": ${keys.join(', ')}`)
+  }
+
+  // For multi-instance steps (genie, ka, mcp, etc.), disable all matching keys
+  const prefixes = { genie: 'PROJECT_GENIE_', ka: 'PROJECT_KA_', vs: 'PROJECT_VS_', mcp: 'PROJECT_MCP_', a2a: 'PROJECT_A2A_', api: 'PROJECT_API_', features: 'PROJECT_TOOL_' }
+  const prefix = prefixes[step]
+  if (prefix) {
+    const instances = config.listByPrefix(prefix)
+    const instanceKeys = instances.map(i => i.key)
+    if (instanceKeys.length > 0) {
+      config.disableMany(instanceKeys)
+      for (const k of instanceKeys) delete process.env[k]
+      console.log(`[setup] cleared ${instanceKeys.length} ${step} instances`)
+    }
+  }
+
+  res.json({ ok: true })
+})
 
 // GET /api/setup/status — parse .env.local, return per-step status
 app.get('/api/setup/status', (_req, res) => {
@@ -733,6 +785,7 @@ except Exception:
   execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 20000,
+    env: buildSubEnv(),
   }, (err, stdout, stderr) => {
     if (err) {
       return res.json({ items: [], error: stderr || String(err) })
@@ -853,10 +906,8 @@ app.post('/api/setup/exec', (req, res) => {
     if (!res.writableEnded) res.end()
   }
 
-  // Load .env.local vars into subprocess environment
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  // Build subprocess environment with clean auth
+  const subEnv = buildSubEnv()
 
   function runCommand(cmd, args, extraEnv = {}) {
     let finished = false
@@ -1171,6 +1222,19 @@ print('[+] Knowledge Assistant provisioned')
       break
     }
 
+    case 'save-manual': {
+      let { key, value } = params
+      if (!key || !value) { write('line', { text: '[x] key and value required\n', stream: 'err' }); done(false); break }
+      // Auto-prepend https:// for host URLs
+      if (key === 'DATABRICKS_HOST' && !value.startsWith('http')) value = 'https://' + value
+      // Strip trailing slash
+      if (key === 'DATABRICKS_HOST') value = value.replace(/\/+$/, '')
+      config.setMany({ [key]: value })
+      process.env[key] = value
+      synthetic([`[+] ${key} = ${key.includes('TOKEN') ? value.substring(0, 8) + '...' : value}`])
+      break
+    }
+
     case 'save-deploy-name': {
       const appName = params.name
       if (!appName) { write('line', { text: '[x] no app name provided\n', stream: 'err' }); done(false); break }
@@ -1254,6 +1318,11 @@ for line in additions: print('[+] ' + line)
       break
     }
 
+    case 'forge-bridge':
+      // Self-contained in frontend -- if it reaches here, just mark done
+      done(true)
+      break
+
     default:
       write('line', { text: '[x] unknown action: ' + action + '\n', stream: 'err' })
       done(false)
@@ -1266,17 +1335,16 @@ const TEST_SCRIPTS = {
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import os, urllib.request, json, ssl
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
-token = os.environ.get('DATABRICKS_TOKEN','').strip()
 if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
 ctx = ssl.create_default_context()
-req = urllib.request.Request(host + '/api/2.0/preview/scim/v2/Me')
-if token: req.add_header('Authorization', 'Bearer ' + token)
+# Check host reachability only (no auth) -- hit public OIDC discovery endpoint
 try:
+    req = urllib.request.Request(host + '/oidc/.well-known/oauth-authorization-server')
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
         d = json.loads(r.read())
-        print('[+] reachable — ' + d.get('userName', '?'))
+        print('[+] reachable — ' + host.replace('https://',''))
 except urllib.error.HTTPError as e:
-    if e.code in (401, 403): print('[+] host reachable — proceed to auth')
+    if e.code < 500: print('[+] reachable — ' + host.replace('https://',''))
     else: print('[x] HTTP ' + str(e.code)); exit(1)
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
@@ -1660,6 +1728,7 @@ except Exception as e:
   execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 25000,
+    env: buildSubEnv(),
   }, (err, stdout, stderr) => {
     const raw = (stdout || '').trim() || (stderr || '').trim()
     const ok = !err && raw.startsWith('[+]')
@@ -1728,7 +1797,7 @@ except Exception as e:
   execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 30000,
-    env: { ...process.env, ...config.toEnvDict() },
+    env: buildSubEnv(),
   }, (err, stdout) => {
     try {
       const data = JSON.parse((stdout || '').trim())
@@ -1949,9 +2018,7 @@ function sseGenRunner(res, cmd, args, stdinData = null) {
     if (!res.writableEnded) res.end()
   }
 
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   let finished = false
   const proc = spawn(cmd, args, { cwd: PROJECT_ROOT, env: subEnv })
@@ -2188,9 +2255,7 @@ const upload = multer({ dest: path.join(PROJECT_ROOT, 'data', '.tmp-uploads') })
 
 // GET /api/ka/documents — list files in the KA volume
 app.get('/api/ka/documents', (_req, res) => {
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=list'], {
     cwd: PROJECT_ROOT,
@@ -2208,9 +2273,7 @@ app.post('/api/ka/upload', upload.array('files'), (req, res) => {
   const files = req.files || []
   if (files.length === 0) return res.status(400).json({ ok: false, error: 'no files provided' })
 
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   const results = []
   let pending = files.length
@@ -2248,9 +2311,7 @@ app.post('/api/ka/upload-url', (req, res) => {
   const { url } = req.body || {}
   if (!url) return res.status(400).json({ ok: false, error: 'url is required' })
 
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   const cleanEnv = { ...subEnv, UPLOAD_URL: url }
   console.log('[upload-url] starting for:', url.slice(0, 80))
@@ -2274,9 +2335,7 @@ app.delete('/api/ka/documents/:name', (req, res) => {
   const name = req.params.name
   if (!name) return res.status(400).json({ ok: false, error: 'name is required' })
 
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=delete', `--name=${name}`], {
     cwd: PROJECT_ROOT,
@@ -2398,6 +2457,7 @@ print(json.dumps(resources))
   execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 60000,
+    env: buildSubEnv(),
   }, (err, stdout, stderr) => {
     if (err) return res.json({ items: [], error: stderr || String(err) })
     try { res.json({ items: JSON.parse(stdout.trim()) }) }
@@ -2509,9 +2569,7 @@ if errors: out(f'[~] completed with {errors} error(s)')
 else: out('[+] cleanup complete')
 `.trim()
 
-  const envEntries = config.list()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   let finished = false
   const proc = spawn(PY.cmd, [...PY.pre, '-c', script], {

@@ -940,6 +940,75 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
   }
 }
 
+// ─── Step key map (step -> primary env key for inline edit) ─────────────────
+
+const STEP_KEY_MAP: Record<string, string> = {
+  host: 'DATABRICKS_HOST',
+  auth: 'DATABRICKS_TOKEN',
+  warehouse: 'DATABRICKS_WAREHOUSE_ID',
+  schema: 'PROJECT_UNITY_CATALOG_SCHEMA',
+  model: 'AGENT_MODEL_ENDPOINT',
+  vs: 'PROJECT_VS_INDEX',
+  lakebase: 'LAKEBASE_INSTANCE_NAME',
+  mlflow: 'MLFLOW_EXPERIMENT_ID',
+  deploy: 'DBX_APP_NAME',
+}
+
+// ─── Inline editable value ──────────────────────────────────────────────────
+
+function InlineEditable({ value, stepId, onSave, onClear }: {
+  value: string
+  stepId: string
+  onSave: (val: string) => void
+  onClear: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus() }, [editing])
+  useEffect(() => { setDraft(value) }, [value])
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && draft.trim()) { onSave(draft.trim()); setEditing(false) }
+            if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+          }}
+          onBlur={() => { setDraft(value); setEditing(false) }}
+          className="flex-1 text-[13px] font-mono px-1.5 py-0.5 rounded border border-dbx-blue/40 dark:border-dbx-green/40 bg-transparent text-dbx-blue dark:text-dbx-green outline-none"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      {stepId === 'host' && value ? (
+        <a href={value.startsWith('http') ? value : `https://${value}`} target="_blank" rel="noopener noreferrer"
+          className="text-[13px] font-mono text-dbx-blue truncate hover:underline">
+          {value}
+        </a>
+      ) : (
+        <span className="text-[13px] font-mono text-dbx-blue truncate">{value}</span>
+      )}
+      {STEP_KEY_MAP[stepId] && (
+        <button onClick={() => setEditing(true)} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="edit">
+          <Pencil className="w-3 h-3" />
+        </button>
+      )}
+      <button onClick={onClear} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-red transition-colors" title="clear">
+        <Trash2 className="w-3 h-3" />
+      </button>
+    </div>
+  )
+}
+
 // ─── Bridge auth panel ──────────────────────────────────────────────────────
 
 function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
@@ -1228,6 +1297,14 @@ export function SetupDrawer({
     if (action === 'cfg-profile' && activeStep === 'model' && selProfile) { action = 'save-model-profile'; Object.assign(params, { profile: selProfile }) }
     // cfg-new: run databricks auth login with provided host/profile
     if (action === 'cfg-new' && manualVal) { action = 'exec-auth-login'; Object.assign(params, { host: manualVal, profile: genieName || '' }) }
+    // Manual: save typed value directly to env for the current step
+    if (action === 'manual' && manualVal && activeStep !== 'mcp' && activeStep !== 'a2a') {
+      const envKey = STEP_KEY_MAP[activeStep]
+      if (envKey) {
+        action = 'save-manual'
+        Object.assign(params, { key: envKey, value: manualVal.trim() })
+      }
+    }
     // Deploy: cfg-deploy-name saves app name to .env.local
     if (action === 'cfg-deploy-name' && manualVal) { action = 'save-deploy-name'; Object.assign(params, { name: manualVal.trim() }) }
     // API: cfg-api-uc or cfg-api-direct saves API config to .env.local
@@ -1301,7 +1378,21 @@ export function SetupDrawer({
   const phaseIdx = PHASES.indexOf(phase)
 
   // ── Choose ─────────────────────────────────────────────────────────────────
+  // Steps that require host to be configured first
+  const NEEDS_HOST = new Set(['auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'grants', 'deploy', 'git'])
+  const hostMissing = NEEDS_HOST.has(activeStep) && !currentValues.DATABRICKS_HOST
+
   function renderChoose() {
+    if (hostMissing) {
+      return (
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center">
+            <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">configure databricks host first</div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <>
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
@@ -1621,12 +1712,25 @@ export function SetupDrawer({
                 : testState.status === 'fail'
                   ? <div className="text-[13px] font-mono text-dbx-amber truncate flex-1">please configure {step.label}</div>
                   : keepLabel
-                    ? <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <span className="text-[13px] font-mono text-dbx-blue truncate">{keepLabel}</span>
-                        <button onClick={onReconfigure} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="edit">
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      </div>
+                    ? <InlineEditable
+                        value={keepLabel}
+                        stepId={activeStep}
+                        onSave={async (val) => {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ [STEP_KEY_MAP[activeStep] || '']: val }),
+                          })
+                          onRefresh()
+                        }}
+                        onClear={() => {
+                          fetch('/api/setup/clear-step', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ step: activeStep }),
+                          }).then(() => { onRefresh(); onReconfigure() })
+                        }}
+                      />
                     : <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">not configured</div>
               }
               {TESTABLE_STEPS.includes(activeStep) && testState.status !== 'loading' && (
