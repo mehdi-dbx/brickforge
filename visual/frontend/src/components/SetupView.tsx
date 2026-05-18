@@ -89,7 +89,7 @@ export function SetupView() {
     }
 
     // Actions that go straight to execute (no configure phase)
-    const DIRECT_EXEC = new Set(['exec-pat', 'exec-assets', 'exec-tables', 'exec-functions',
+    const DIRECT_EXEC = new Set(['exec-assets', 'exec-tables', 'exec-functions',
       'exec-lakebase', 'exec-mlflow', 'exec-grants', 'exec-deploy', 'exec-deploy-dry',
       'exec-deploy-agent', 'exec-same', 'exec-git-push'])
     if (DIRECT_EXEC.has(action)) {
@@ -215,7 +215,7 @@ export function SetupView() {
           phase={phase}
           selectedChoice={selectedChoice}
           execLines={execLines}
-          currentValues={{ ...stepStates.host.values, ...stepStates.auth.values, ...stepStates.schema.values, ...stepStates[activeStep].values }}
+          currentValues={{ ...stepStates.host.values, ...stepStates.schema.values, ...stepStates[activeStep].values }}
           testCache={testCache}
           onTestResult={handleTestResult}
           onSelectChoice={setSelectedChoice}

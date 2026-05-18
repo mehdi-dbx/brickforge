@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Globe, KeyRound, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, type LucideIcon } from 'lucide-react'
+import { Globe, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, type LucideIcon } from 'lucide-react'
 import type { StepId, StepStatus, StepState, StepInstance } from '../types'
 import { SETUP_STEPS } from '../setupSteps'
 
@@ -7,7 +7,6 @@ const STEP_LABEL: Record<StepId, string> = Object.fromEntries(SETUP_STEPS.map(s 
 
 const STEP_ICON: Record<StepId, LucideIcon> = {
   host:      Globe,
-  auth:      KeyRound,
   warehouse: Database,
   schema:    LayoutGrid,
   tables:    Table2,
@@ -61,7 +60,6 @@ function subLabel(id: StepId, state: StepState): string {
   if (state.status === 'missing') return 'not configured'
   switch (id) {
     case 'host':      return v.DATABRICKS_HOST?.replace('https://', '') || 'set'
-    case 'auth':      return v.DATABRICKS_TOKEN ? v.DATABRICKS_TOKEN.slice(0, 4) + '*'.repeat(Math.max(0, v.DATABRICKS_TOKEN.length - 4)) : 'not set'
     case 'warehouse': return v.DATABRICKS_WAREHOUSE_ID || 'set'
     case 'schema':    return v.PROJECT_UNITY_CATALOG_SCHEMA || 'set'
     case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || 'not set'
@@ -394,6 +392,22 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
             )
           })}
         </div>
+      </div>
+
+      {/* Minimap -- fixed bottom-right, vertical strip of status dots */}
+      <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1 bg-white/90 dark:bg-dbx-gray-800/90 backdrop-blur-sm border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-full px-1.5 py-2 shadow-node">
+        {ALL_STEPS.map(id => {
+          const s = stepStates[id]
+          const isActive = activeStep === id
+          return (
+            <button
+              key={id}
+              onClick={() => onActivate(id)}
+              className={`w-2.5 h-2.5 rounded-full transition-all ${ORB_CLASS[s.status]} ${isActive ? 'ring-2 ring-dbx-red ring-offset-1 dark:ring-offset-dbx-gray-800 scale-125' : 'hover:scale-125'}`}
+              title={STEP_LABEL[id]}
+            />
+          )
+        })}
       </div>
     </div>
   )

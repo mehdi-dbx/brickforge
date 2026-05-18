@@ -1048,7 +1048,7 @@ function InlineEditable({ value, stepId, onSave, onClear }: {
 function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   const [nonce, setNonce] = useState<{ nonce_id: string; nonce: string; ws_default?: string } | null>(null)
   const [status, setStatus] = useState<'loading' | 'waiting' | 'connected' | 'error'>('loading')
-  const [connInfo, setConnInfo] = useState<{ host: string; user: string } | null>(null)
+  const [connInfo, setConnInfo] = useState<{ host: string; user: string; warning?: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -1069,10 +1069,10 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
     pollRef.current = setInterval(() => {
       fetch('/api/auth/bridge-status')
         .then(r => r.json())
-        .then((data: { status: string; host?: string; user?: string }) => {
+        .then((data: { status: string; host?: string; user?: string; warning?: string }) => {
           if (data.status === 'connected') {
             setStatus('connected')
-            setConnInfo({ host: data.host || '', user: data.user || '' })
+            setConnInfo({ host: data.host || '', user: data.user || '', warning: data.warning || '' })
             if (pollRef.current) clearInterval(pollRef.current)
             setTimeout(onDone, 1500)
           }
@@ -1175,9 +1175,12 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
               )}
             </div>
 
-            <div className="mt-4 text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 leading-relaxed">
-              The script authenticates via Databricks CLI (installs it if needed), then sends credentials securely to this app. Your token is encrypted before transmission.
-            </div>
+            {connInfo?.warning && (
+              <div className="mt-3 rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2">
+                <div className="text-[11px] text-dbx-amber font-medium">Cross-cloud detected</div>
+                <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">{connInfo.warning}</div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1232,7 +1235,7 @@ export function SetupDrawer({
     wrappedExecDone(false)
   }, [wrappedExecDone])
 
-  const TESTABLE_STEPS: StepId[] = ['host', 'auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'deploy']
+  const TESTABLE_STEPS: StepId[] = ['host', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'deploy']
   const testState: TestResult = testCache[activeStep] ?? { status: 'idle', message: '' }
   const setTestState = useCallback((r: TestResult) => onTestResult(activeStep, r), [activeStep, onTestResult])
 
@@ -1621,6 +1624,11 @@ export function SetupDrawer({
     else if (action === 'manual' && activeStep === 'host') {
       const wsHost = currentValues.DATABRICKS_HOST || ''
       const hostValid = /^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(wsHost)
+      const detectCl = (h: string) => h.includes('.azuredatabricks.net') ? 'Azure' : h.includes('.gcp.databricks.com') || h.includes('.gcp.databricksapps.com') ? 'GCP' : h.includes('.cloud.databricks.com') || h.includes('.aws.databricksapps.com') ? 'AWS' : null
+      const appHost = typeof window !== 'undefined' ? window.location.hostname : ''
+      const appCloud = detectCl(appHost)
+      const targetCloud = detectCl(wsHost)
+      const crossCloud = appCloud && targetCloud && appCloud !== targetCloud
       const patValid = /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
       const patStarted = manualVal.trim().length > 0
       body = (<>
@@ -1674,6 +1682,14 @@ export function SetupDrawer({
         {!hostValid && (
           <div className="mt-2 text-[11px] text-dbx-amber font-mono">
             Set a valid workspace URL first (use the pencil icon above)
+          </div>
+        )}
+        {crossCloud && (
+          <div className="mt-3 rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2">
+            <div className="text-[11px] text-dbx-amber font-medium">Cross-cloud detected</div>
+            <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">
+              Target workspace ({targetCloud}) is on a different cloud than this Setup App ({appCloud}). API calls may be blocked by IP Access Lists. For best results, use the Setup App locally or deploy it on the same cloud.
+            </div>
           </div>
         )}
       </>)
@@ -1888,10 +1904,15 @@ export function SetupDrawer({
                 </button>
               )}
             </div>
-            {/* Line 2: test result message (only when ok) */}
+            {/* Line 2: test result message */}
             {testState.status === 'ok' && testState.message && (
               <div className="text-[11px] font-mono text-dbx-green mt-0.5 truncate animate-fade-in">
                 [+] {testState.message}
+              </div>
+            )}
+            {testState.status === 'fail' && testState.message && (
+              <div className="text-[11px] font-mono text-dbx-red mt-0.5 truncate animate-fade-in">
+                [x] {testState.message}
               </div>
             )}
           </>

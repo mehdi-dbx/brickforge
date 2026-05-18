@@ -36,7 +36,7 @@ export interface GraphResponse {
 
 // ─── Setup types ──────────────────────────────────────────────────────────────
 
-export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mcp' | 'api' | 'a2a' | 'features' | 'lakebase' | 'mlflow' | 'grants' | 'deploy' | 'git'
+export type StepId = 'host' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mcp' | 'api' | 'a2a' | 'features' | 'lakebase' | 'mlflow' | 'grants' | 'deploy' | 'git'
 export type StepStatus = 'done' | 'warning' | 'error' | 'missing' | 'unknown'
 export type SetupPhase = 'choose' | 'configure' | 'execute' | 'done'
 

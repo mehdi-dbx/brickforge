@@ -214,6 +214,16 @@ function buildSubEnv(extraEnv = {}) {
 }
 
 // Check if the current OAuth JWT token is expired. Returns error message or null.
+// Detect cloud provider from a Databricks hostname
+function detectCloud(host) {
+  if (!host) return null
+  if (host.includes('.azuredatabricks.net')) return 'azure'
+  if (host.includes('.gcp.databricks.com')) return 'gcp'
+  if (host.includes('.cloud.databricks.com')) return 'aws'
+  return null
+}
+const APP_CLOUD = detectCloud(process.env.DATABRICKS_HOST || '')
+
 // Check if the current OAuth JWT token is expired. If a refresh token is available,
 // silently refresh and return null. Otherwise return an error message.
 function checkTokenExpiry() {
@@ -451,6 +461,11 @@ function cleanExpiredNonces() {
   }
 }
 
+// GET /api/setup/cloud -- return the cloud the Setup App is running on
+app.get('/api/setup/cloud', (_req, res) => {
+  res.json({ cloud: APP_CLOUD })
+})
+
 // GET /api/auth/bridge-nonce -- generate a one-time nonce (5 min TTL)
 app.get('/api/auth/bridge-nonce', (_req, res) => {
   cleanExpiredNonces()
@@ -550,9 +565,17 @@ app.post('/api/auth/bridge-receive', (req, res) => {
     console.log('[bridge] cleared profile + SP OAuth vars from env')
     console.log(`[bridge] config saved: host=${host || '(none)'}, token_len=${token.length}`)
 
-    bridgeState = { status: 'connected', host: host || '', user: user || '', time: Date.now() }
+    // Cross-cloud detection
+    const targetCloud = detectCloud(host || '')
+    let crossCloudWarning = ''
+    if (APP_CLOUD && targetCloud && APP_CLOUD !== targetCloud) {
+      crossCloudWarning = `The target workspace (${targetCloud}) is on a different cloud than this Setup App (${APP_CLOUD}). API calls may be blocked by IP Access Lists. For best results, use the Setup App locally or deploy it on the same cloud.`
+      console.log(`[bridge] CROSS-CLOUD WARNING: app=${APP_CLOUD}, target=${targetCloud}`)
+    }
+
+    bridgeState = { status: 'connected', host: host || '', user: user || '', time: Date.now(), warning: crossCloudWarning }
     console.log(`[bridge] state -> connected (host=${host}, user=${user})`)
-    res.json({ ok: true })
+    res.json({ ok: true, warning: crossCloudWarning || undefined })
   } catch (err) {
     console.log(`[bridge] decryption FAILED: ${err.message || err}`)
     res.status(400).json({ error: 'decryption failed: ' + (err.message || err) })
@@ -1542,6 +1565,10 @@ try:
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
         d = json.loads(r.read())
         print('[+] reachable — ' + d.get('userName', '?'))
+except urllib.error.HTTPError as e:
+    if e.code == 401: print('[x] token invalid (401 Unauthorized)'); exit(1)
+    elif e.code == 403: print('[+] reachable — token valid (SCIM restricted)')
+    else: print('[x] host reachable but auth failed: HTTP ' + str(e.code)); exit(1)
 except Exception as e:
     print('[x] host reachable but auth failed: ' + str(e)[:100]); exit(1)
 `.trim(),
