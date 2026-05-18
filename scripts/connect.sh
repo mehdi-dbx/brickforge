@@ -6,11 +6,11 @@
 # --- Config (replaced by Setup App when served as download) ---
 APP_URL="${APP_URL:-${1:-}}"
 NONCE="${NONCE:-${2:-}}"
-NONCE_ID="${NONCE_ID:-$NONCE}"
-WS_DEFAULT="${WS_DEFAULT:-}"
+NONCE_ID="${NONCE_ID:-${3:-$NONCE}}"
+WS_DEFAULT="${WS_DEFAULT:-${4:-}}"
+APP_URL="${APP_URL%/}"
 if [ -z "$APP_URL" ] || [ -z "$NONCE" ]; then
-  echo "Usage: bash connect.sh <setup-app-url> <nonce>"
-  echo "   or: APP_URL=... NONCE=... bash <(curl -sL <script-url>)"
+  echo "Usage: bash connect.sh <app-url> <nonce> [nonce_id] [ws_default]"
   exit 1
 fi
 
@@ -73,7 +73,7 @@ def section(title):
     print(f'\n{BOLD}{B}═══ {title} ═══{W}')
 
 print(f'\n{BOLD}{M}╔══════════════════════════════════════════════╗{W}')
-print(f'{BOLD}{M}║       BrickForge  ·  bridge auth              ║{W}')
+print(f'{BOLD}{M}║       BrickForge  ·  bridge auth             ║{W}')
 print(f'{BOLD}{M}╚══════════════════════════════════════════════╝{W}\n')
 
 print(f'{INFO} App URL:  {DIM}{APP_URL}{W}')
@@ -88,8 +88,13 @@ section('Workspace')
 ws = WS_DEFAULT
 if not ws:
     try:
-        ws = input('  Target workspace URL: ').strip()
-    except EOFError:
+        # Read from /dev/tty to work with bash <(curl ...) where stdin is the pipe
+        import io
+        tty = io.open('/dev/tty')
+        print('  Target workspace URL: ', end='', flush=True)
+        ws = tty.readline().strip()
+        tty.close()
+    except Exception:
         ws = ''
 ws = ws.rstrip('/')
 if not ws:
