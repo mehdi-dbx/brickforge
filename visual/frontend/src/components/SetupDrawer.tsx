@@ -940,7 +940,6 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
   const v = values
   switch (stepId) {
     case 'host':      return v.DATABRICKS_HOST?.replace('https://', '') || ''
-    case 'auth':      return v.DATABRICKS_TOKEN ? v.DATABRICKS_TOKEN.slice(0, 4) + '*'.repeat(Math.max(0, v.DATABRICKS_TOKEN.length - 4)) : ''
     case 'warehouse': return v.DATABRICKS_WAREHOUSE_ID || ''
     case 'schema':    return v.PROJECT_UNITY_CATALOG_SCHEMA || ''
     case 'tables':    return v.TABLE_COUNT ? `${v.TABLE_COUNT} table(s)` : ''
@@ -994,12 +993,19 @@ function InlineEditable({ value, stepId, onSave, onClear }: {
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && draft.trim()) { onSave(draft.trim()); setEditing(false) }
+            if (e.key === 'Enter' && draft.trim()) {
+              // Validate host URL format for host step
+              if (stepId === 'host' && !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(draft.trim())) return
+              onSave(draft.trim()); setEditing(false)
+            }
             if (e.key === 'Escape') { setDraft(value); setEditing(false) }
           }}
           onBlur={() => { setDraft(value); setEditing(false) }}
           className="flex-1 text-[13px] font-mono px-1.5 py-0.5 rounded border border-dbx-blue/40 dark:border-dbx-green/40 bg-transparent text-dbx-blue dark:text-dbx-green outline-none"
         />
+        {stepId === 'host' && editing && !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(draft.trim()) && draft.trim().length > 5 && (
+          <span className="text-[10px] text-dbx-amber ml-1 flex-shrink-0">must be a valid Databricks URL</span>
+        )}
       </div>
     )
   }
@@ -1011,17 +1017,28 @@ function InlineEditable({ value, stepId, onSave, onClear }: {
           className="text-[13px] font-mono text-dbx-blue truncate hover:underline">
           {value}
         </a>
-      ) : (
+      ) : value ? (
         <span className="text-[13px] font-mono text-dbx-blue truncate">{value}</span>
+      ) : (
+        <button onClick={() => setEditing(true)} className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors">
+          enter workspace url
+        </button>
+      )}
+      {value && (
+        <button onClick={() => { navigator.clipboard.writeText(value) }} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="copy">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
       )}
       {STEP_KEY_MAP[stepId] && (
         <button onClick={() => setEditing(true)} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="edit">
           <Pencil className="w-3 h-3" />
         </button>
       )}
-      <button onClick={onClear} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-red transition-colors" title="clear">
-        <Trash2 className="w-3 h-3" />
-      </button>
+      {value && (
+        <button onClick={onClear} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-red transition-colors" title="clear">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      )}
     </div>
   )
 }
@@ -1029,7 +1046,7 @@ function InlineEditable({ value, stepId, onSave, onClear }: {
 // ─── Bridge auth panel ──────────────────────────────────────────────────────
 
 function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
-  const [nonce, setNonce] = useState<{ nonce_id: string; nonce: string } | null>(null)
+  const [nonce, setNonce] = useState<{ nonce_id: string; nonce: string; ws_default?: string } | null>(null)
   const [status, setStatus] = useState<'loading' | 'waiting' | 'connected' | 'error'>('loading')
   const [connInfo, setConnInfo] = useState<{ host: string; user: string } | null>(null)
   const [copied, setCopied] = useState(false)
@@ -1039,7 +1056,7 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
   useEffect(() => {
     fetch('/api/auth/bridge-nonce')
       .then(r => r.json())
-      .then((data: { nonce_id: string; nonce: string }) => {
+      .then((data: { nonce_id: string; nonce: string; ws_default?: string }) => {
         setNonce(data)
         setStatus('waiting')
       })
@@ -1088,40 +1105,55 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
 
         {(status === 'waiting' || status === 'connected') && nonce && (
           <>
-            <div className="text-[13px] font-semibold text-dbx-gray-700 dark:text-dbx-gray-200 mb-3">
-              Connect to external workspace
+            <div className="text-[13px] font-semibold text-dbx-gray-700 dark:text-dbx-gray-200 mb-2">
+              Connect to workspace
             </div>
 
-            {/* Option 1: Copy command */}
-            <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
-              Run this in your terminal:
-            </div>
-            <div className="relative group">
-              <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50">
-                {command}
-              </pre>
-              <button
-                onClick={copyCommand}
-                className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
-              >
-                {copied ? 'copied' : 'copy'}
-              </button>
+            <div className="rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2 mb-3">
+              <div className="text-[11px] text-dbx-amber font-medium">A 7-day PAT will be created on the target workspace</div>
+              <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">Your browser will open for SSO authentication.</div>
             </div>
 
-            {/* Option 2: Download script */}
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">or</span>
-              <a
-                href={`/api/auth/bridge-script?nonce=${nonce.nonce_id}`}
-                download="brickforge-connect.command"
-                className="text-[12px] text-dbx-blue hover:text-dbx-blue/80 font-medium underline"
-              >
-                download script
-              </a>
-              <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">
-                and double-click to run
-              </span>
-            </div>
+            {typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (
+              <>
+                {/* Local mode: curl | bash */}
+                <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
+                  Run this in your terminal:
+                </div>
+                <div className="relative group">
+                  <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50">
+                    {command}
+                  </pre>
+                  <button
+                    onClick={copyCommand}
+                    className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
+                  >
+                    {copied ? 'copied' : 'copy'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Deployed mode: curl from GitHub */}
+                <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
+                  Run this in your terminal:
+                </div>
+                <div className="relative group">
+                  <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50 whitespace-pre-wrap break-all">
+                    {`bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`}
+                  </pre>
+                  <button
+                    onClick={() => {
+                      const cmd = `bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`
+                      navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000)
+                    }}
+                    className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
+                  >
+                    {copied ? 'copied' : 'copy'}
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* Status */}
             <div className="mt-5 flex items-center gap-2">
@@ -1183,6 +1215,7 @@ export function SetupDrawer({
 
   const abortRef = useRef<AbortController | null>(null)
   const [lastExecOk, setLastExecOk] = useState(true)
+  const [showPat, setShowPat] = useState(false)
 
   // Reset exec status when step changes
   useEffect(() => { setLastExecOk(true) }, [activeStep])
@@ -1314,8 +1347,13 @@ export function SetupDrawer({
     if (action === 'cfg-profile' && activeStep === 'model' && selProfile) { action = 'save-model-profile'; Object.assign(params, { profile: selProfile }) }
     // cfg-new: run databricks auth login with provided host/profile
     if (action === 'cfg-new' && manualVal) { action = 'exec-auth-login'; Object.assign(params, { host: manualVal, profile: genieName || '' }) }
-    // Manual: save typed value directly to env for the current step
-    if (action === 'manual' && manualVal && activeStep !== 'mcp' && activeStep !== 'a2a') {
+    // Manual: host step saves token (host already set via pen icon)
+    if (action === 'manual' && activeStep === 'host' && manualVal) {
+      action = 'save-manual'
+      Object.assign(params, { key: 'DATABRICKS_TOKEN', value: manualVal.trim() })
+    }
+    // Manual: save typed value directly to env for other steps
+    else if (action === 'manual' && manualVal && activeStep !== 'mcp' && activeStep !== 'a2a') {
       const envKey = STEP_KEY_MAP[activeStep]
       if (envKey) {
         action = 'save-manual'
@@ -1396,7 +1434,7 @@ export function SetupDrawer({
 
   // ── Choose ─────────────────────────────────────────────────────────────────
   // Steps that require host to be configured first
-  const NEEDS_HOST = new Set(['auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'grants', 'deploy', 'git'])
+  const NEEDS_HOST = new Set(['warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'grants', 'deploy', 'git'])
   const hostMissing = NEEDS_HOST.has(activeStep) && !currentValues.DATABRICKS_HOST
 
   function renderChoose() {
@@ -1511,6 +1549,7 @@ export function SetupDrawer({
       if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'manual' && activeStep === 'host') return /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
       if (action === 'manual' && activeStep === 'schema') return /^\w+\.\w+$/.test(manualVal.trim())
       if (action === 'manual')        return !!manualVal.trim()
       return true
@@ -1579,6 +1618,66 @@ export function SetupDrawer({
           saves as {activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'}{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'} in .env.local
         </div>
       </>)
+    else if (action === 'manual' && activeStep === 'host') {
+      const wsHost = currentValues.DATABRICKS_HOST || ''
+      const hostValid = /^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(wsHost)
+      const patValid = /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
+      const patStarted = manualVal.trim().length > 0
+      body = (<>
+        <Label>token (PAT)</Label>
+        <div className="relative">
+          <input
+            type={showPat ? 'text' : 'password'}
+            value={manualVal}
+            onChange={e => setManualVal(e.target.value)}
+            placeholder="dapi..."
+            className="w-full text-[14px] font-mono bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg px-3 py-2.5 pr-10 outline-none focus:border-dbx-red focus:shadow-dbx dark:focus:border-[#FF6B5A] text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-300 dark:placeholder:text-dbx-gray-600 transition-all duration-150"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPat(!showPat)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dbx-gray-400 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 transition-colors"
+            title={showPat ? 'hide token' : 'show token'}
+          >
+            {showPat ? (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            )}
+          </button>
+        </div>
+        <div className="mt-1 text-[11px] font-mono">
+          {patStarted && patValid && <span className="text-dbx-green">valid PAT</span>}
+          {patStarted && !patValid && <span className="text-dbx-gray-500">token should start with <span className="text-dbx-blue dark:text-dbx-green">dapi</span> followed by 32+ hex characters</span>}
+        </div>
+        {hostValid && (
+          <div className="mt-3 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-dbx-menu dark:bg-dbx-gray-800/30 px-3 py-2.5">
+            <div className="text-[11px] font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-wider mb-1.5">how to generate a PAT</div>
+            <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 leading-relaxed">
+              1. Open{' '}
+              <a
+                href={`${wsHost.replace(/\/+$/, '')}/#setting/account/token`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-dbx-blue dark:text-dbx-green hover:underline font-medium"
+              >
+                {wsHost.replace('https://', '').replace(/\/+$/, '')} token settings
+              </a>
+              <br/>
+              2. Click <strong>Generate new token</strong><br/>
+              3. Name: <span className="font-mono text-dbx-blue dark:text-dbx-green">brickforge</span>, Lifetime: <strong>7 days</strong><br/>
+              4. Scope: select <strong>All APIs</strong><br/>
+              5. Copy the <span className="font-mono">dapi...</span> token and paste above
+            </div>
+          </div>
+        )}
+        {!hostValid && (
+          <div className="mt-2 text-[11px] text-dbx-amber font-mono">
+            Set a valid workspace URL first (use the pencil icon above)
+          </div>
+        )}
+      </>)
+    }
     else if (action === 'manual' && activeStep === 'schema')
       body = (<>
         <Label>catalog . schema</Label>
@@ -1748,7 +1847,7 @@ export function SetupDrawer({
           )}
         </div>
         <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">{step.title}</div>
-        {(keepLabel || TESTABLE_STEPS.includes(activeStep)) && (
+        {(keepLabel || TESTABLE_STEPS.includes(activeStep) || activeStep === 'host') && (
           <>
             {/* Line 1: current value — editable for schema step, read-only for others */}
             <div className="flex items-center gap-2 mt-1.5">
@@ -1758,7 +1857,7 @@ export function SetupDrawer({
                 ? <div className="text-[13px] font-mono text-dbx-blue dark:text-dbx-green truncate flex-1 animate-pulse">verifying…</div>
                 : testState.status === 'fail'
                   ? <div className="text-[13px] font-mono text-dbx-amber truncate flex-1">please configure {step.label}</div>
-                  : keepLabel
+                  : (keepLabel || activeStep === 'host')
                     ? <InlineEditable
                         value={keepLabel}
                         stepId={activeStep}

@@ -459,7 +459,8 @@ app.get('/api/auth/bridge-nonce', (_req, res) => {
   bridgeNonces.set(nonceId, { value: nonceValue, expires: Date.now() + 5 * 60 * 1000 })
   bridgeState = { status: 'waiting' }
   console.log(`[bridge] nonce generated: id=${nonceId.substring(0, 8)}... TTL=5min, active nonces=${bridgeNonces.size}`)
-  res.json({ nonce_id: nonceId, nonce: nonceValue })
+  const wsDefault = config.get('DATABRICKS_HOST') || ''
+  res.json({ nonce_id: nonceId, nonce: nonceValue, ws_default: wsDefault })
 })
 
 // POST /api/auth/bridge-receive -- receive encrypted token from local script
@@ -494,33 +495,52 @@ app.post('/api/auth/bridge-receive', (req, res) => {
 
     console.log(`[bridge] decrypted OK: payload_len=${token.length}, starts_with=${token.substring(0, 6)}...`)
 
-    // Parse decrypted payload -- may be JSON bundle (access + refresh) or plain token
-    let accessToken, refreshToken = '', tokenEndpoint = ''
+    // Parse decrypted payload -- PAT bundle or JWT bundle or plain token
+    let finalToken = '', refreshToken = '', tokenEndpoint = '', isPat = false
     try {
       const bundle = JSON.parse(token)
-      accessToken = bundle.access_token || ''
-      refreshToken = bundle.refresh_token || ''
-      tokenEndpoint = bundle.token_endpoint || ''
-      console.log(`[bridge] parsed bundle: access_len=${accessToken.length}, refresh_len=${refreshToken.length}`)
+      if (bundle.pat) {
+        // PAT path -- preferred, no refresh needed
+        finalToken = bundle.pat
+        isPat = true
+        console.log(`[bridge] PAT received: ${finalToken.substring(0, 12)}...`)
+      } else {
+        // JWT path -- fallback with refresh token
+        finalToken = bundle.access_token || ''
+        refreshToken = bundle.refresh_token || ''
+        tokenEndpoint = bundle.token_endpoint || ''
+        console.log(`[bridge] JWT bundle: access_len=${finalToken.length}, refresh_len=${refreshToken.length}`)
+      }
     } catch {
-      // Plain token (legacy or no refresh)
-      accessToken = token
-      console.log(`[bridge] plain token: len=${accessToken.length}`)
+      // Plain token (legacy)
+      finalToken = token
+      console.log(`[bridge] plain token: len=${finalToken.length}`)
     }
 
-    if (!accessToken || accessToken.length < 5) {
-      console.log(`[bridge] REJECTED: token is empty or too short (len=${(accessToken || '').length})`)
+    if (!finalToken || finalToken.length < 5) {
+      console.log(`[bridge] REJECTED: token is empty or too short (len=${(finalToken || '').length})`)
       return res.status(400).json({ error: 'received empty or invalid token' })
     }
 
     bridgeNonces.delete(nonce_id)  // single use
 
-    // Store in config -- clear conflicting auth methods
+    // Store in config -- EITHER PAT or JWT, never both
     const updates = {}
     if (host) updates.DATABRICKS_HOST = host
-    updates.DATABRICKS_TOKEN = accessToken
-    if (refreshToken) updates.DATABRICKS_REFRESH_TOKEN = refreshToken
-    if (tokenEndpoint) updates.DATABRICKS_TOKEN_ENDPOINT = tokenEndpoint
+    updates.DATABRICKS_TOKEN = finalToken
+
+    if (isPat) {
+      // PAT set -- clean out JWT refresh artifacts
+      config.disable('DATABRICKS_REFRESH_TOKEN')
+      config.disable('DATABRICKS_TOKEN_ENDPOINT')
+      delete process.env.DATABRICKS_REFRESH_TOKEN
+      delete process.env.DATABRICKS_TOKEN_ENDPOINT
+      console.log('[bridge] PAT mode -- cleared refresh token + token endpoint')
+    } else {
+      // JWT set -- store refresh token for auto-renewal
+      if (refreshToken) updates.DATABRICKS_REFRESH_TOKEN = refreshToken
+      if (tokenEndpoint) updates.DATABRICKS_TOKEN_ENDPOINT = tokenEndpoint
+    }
     config.setMany(updates)
     // Remove profile + SP OAuth vars so SDK uses PAT auth only
     for (const k of ['DATABRICKS_CONFIG_PROFILE', 'DATABRICKS_CLIENT_ID', 'DATABRICKS_CLIENT_SECRET']) {
@@ -584,8 +604,7 @@ app.get('/api/auth/bridge-script', (req, res) => {
 // ─── Setup endpoints ───────────────────────────────────────────────────────────
 
 const STEP_ENV_KEYS = {
-  host:      ['DATABRICKS_HOST'],
-  auth:      ['DATABRICKS_TOKEN'],
+  host:      ['DATABRICKS_HOST', 'DATABRICKS_TOKEN'],
   warehouse: ['DATABRICKS_WAREHOUSE_ID'],
   schema:    ['PROJECT_UNITY_CATALOG_SCHEMA'],
   tables:    [],  // depends on schema being set + assets created
@@ -873,15 +892,41 @@ except Exception:
 // POST /api/setup/exec — SSE stream, runs actual setup commands
 const PAT_SCRIPT = `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact, write_env_entry, ENV_FILE
-import os
-host = os.environ['DATABRICKS_HOST'].strip()
-profile = _profile_for_host(host)
-if not profile: print('[x] No matching CLI profile for', host); exit(1)
-w = _isolated_client(profile)
-t = w.tokens.create(comment='agent-forge-init', lifetime_seconds=604800)
-write_env_entry(ENV_FILE, 'DATABRICKS_TOKEN', t.token_value)
-print('[+] PAT generated (7d):', _redact(t.token_value))
+import os, urllib.request, json, ssl, datetime
+host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
+token = os.environ.get('DATABRICKS_TOKEN','').strip()
+if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
+if not token: print('[x] DATABRICKS_TOKEN not set -- authenticate first'); exit(1)
+today = datetime.date.today().strftime('%Y%m%d')
+comment = f'brickforge-7days-{today}'
+print(f'[~] Creating PAT "{comment}" on {host}...')
+ctx = ssl.create_default_context()
+try:
+    data = json.dumps({'lifetime_seconds': 604800, 'comment': comment}).encode()
+    req = urllib.request.Request(f'{host}/api/2.0/token/create', data=data, method='POST')
+    req.add_header('Authorization', f'Bearer {token}')
+    req.add_header('Content-Type', 'application/json')
+    with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+        resp = json.loads(r.read())
+    pat = resp.get('token_value','')
+    if not pat: print('[x] Empty PAT response'); exit(1)
+    from pathlib import Path
+    f = Path('.env.local')
+    lines = f.read_text().splitlines() if f.exists() else []
+    new = []; found = False
+    for line in lines:
+        import re
+        m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
+        if m and m.group(1) == 'DATABRICKS_TOKEN': new.append('DATABRICKS_TOKEN=' + pat); found = True
+        else: new.append(line)
+    if not found: new.append('DATABRICKS_TOKEN=' + pat)
+    f.write_text('\\n'.join(new) + '\\n')
+    print(f'[+] PAT created: {pat[:12]}... (7 days, expires {(datetime.date.today() + datetime.timedelta(days=7)).isoformat()})')
+except urllib.error.HTTPError as e:
+    body = e.read().decode()[:200] if hasattr(e, 'read') else ''
+    print(f'[x] HTTP {e.code}: {body}'); exit(1)
+except Exception as e:
+    print(f'[x] {str(e)[:150]}'); exit(1)
 `.trim()
 
 const SAVE_WAREHOUSE_SCRIPT = (id) => `
@@ -1338,6 +1383,23 @@ print('[+] Knowledge Assistant provisioned')
       break
     }
 
+    case 'save-workspace': {
+      let { host: wsHost, token: wsToken } = params
+      if (!wsHost || !wsToken) { write('line', { text: '[x] host and token required\n', stream: 'err' }); done(false); break }
+      if (!wsHost.startsWith('http')) wsHost = 'https://' + wsHost
+      wsHost = wsHost.replace(/\/+$/, '')
+      config.setMany({ DATABRICKS_HOST: wsHost, DATABRICKS_TOKEN: wsToken })
+      process.env.DATABRICKS_HOST = wsHost
+      process.env.DATABRICKS_TOKEN = wsToken
+      // Clean conflicting auth
+      for (const k of ['DATABRICKS_CONFIG_PROFILE', 'DATABRICKS_CLIENT_ID', 'DATABRICKS_CLIENT_SECRET', 'DATABRICKS_REFRESH_TOKEN', 'DATABRICKS_TOKEN_ENDPOINT']) {
+        config.disable(k)
+        delete process.env[k]
+      }
+      synthetic([`[+] DATABRICKS_HOST = ${wsHost}`, `[+] DATABRICKS_TOKEN = ${wsToken.substring(0, 8)}...`])
+      break
+    }
+
     case 'save-manual': {
       let { key, value } = params
       if (!key || !value) { write('line', { text: '[x] key and value required\n', stream: 'err' }); done(false); break }
@@ -1459,36 +1521,29 @@ const TEST_SCRIPTS = {
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import os, urllib.request, json, ssl
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
+token = os.environ.get('DATABRICKS_TOKEN','').strip()
 if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
 ctx = ssl.create_default_context()
-# Check host reachability only (no auth) -- hit public OIDC discovery endpoint
+# Step 1: check host reachability (no auth)
 try:
     req = urllib.request.Request(host + '/oidc/.well-known/oauth-authorization-server')
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-        d = json.loads(r.read())
-        print('[+] reachable — ' + host.replace('https://',''))
+        json.loads(r.read())
 except urllib.error.HTTPError as e:
-    if e.code < 500: print('[+] reachable — ' + host.replace('https://',''))
-    else: print('[x] HTTP ' + str(e.code)); exit(1)
+    if e.code >= 500: print('[x] host unreachable: HTTP ' + str(e.code)); exit(1)
 except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
-`.trim(),
-
-  auth: `
-from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-import os, urllib.request, json, ssl
-host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
-token = os.environ.get('DATABRICKS_TOKEN','').strip()
-if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
-if not token: print('[x] DATABRICKS_TOKEN not set'); exit(1)
-ctx = ssl.create_default_context()
+    print('[x] host unreachable: ' + str(e)[:100]); exit(1)
+# Step 2: if token set, verify auth
+if not token:
+    print('[+] reachable — ' + host.replace('https://','') + ' (no token set)')
+    exit(0)
 try:
     req = urllib.request.Request(host + '/api/2.0/preview/scim/v2/Me', headers={'Authorization': 'Bearer ' + token})
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
         d = json.loads(r.read())
-        print('[+] authenticated — ' + d.get('userName', '?'))
+        print('[+] reachable — ' + d.get('userName', '?'))
 except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
+    print('[x] host reachable but auth failed: ' + str(e)[:100]); exit(1)
 `.trim(),
 
   warehouse: `
@@ -1661,7 +1716,7 @@ app.get('/api/setup/test', (req, res) => {
   const step = req.query.step
   const envKey = req.query.key // optional: per-instance key for genie/ka
 
-  // Host test doesn't need auth -- skip expiry check
+  // Check token expiry (host test handles partial -- reachability works without token)
   if (step !== 'host') {
     const expiryErr = checkTokenExpiry()
     if (expiryErr) return res.json({ ok: false, message: expiryErr })
