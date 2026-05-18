@@ -159,8 +159,11 @@ def do_token_exchange(code):
         with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
             token_resp = json.loads(r.read())
         TOKEN = token_resp['access_token']
+        REFRESH_TOKEN = token_resp.get('refresh_token', '')
         print(f'{OK} Token acquired {DIM}({len(TOKEN)} chars, {TOKEN[:6]}...){W}')
         print(f'{OK} Expires in: {DIM}{token_resp.get("expires_in", "?")}s{W}')
+        if REFRESH_TOKEN:
+            print(f'{OK} Refresh token: {DIM}({len(REFRESH_TOKEN)} chars){W}')
     except Exception as e:
         print(f'{FAIL} Token exchange failed: {e}')
         return None
@@ -179,11 +182,13 @@ def do_token_exchange(code):
     # Encrypt
     section('Encryption')
     print(f'{RUN} Encrypting token...')
+    # Bundle access + refresh token as JSON
     import subprocess
+    token_bundle = json.dumps({'access_token': TOKEN, 'refresh_token': REFRESH_TOKEN, 'token_endpoint': token_endpoint})
     try:
         proc = subprocess.run(
             ['openssl', 'enc', '-aes-256-cbc', '-a', '-A', '-pass', f'pass:{NONCE}', '-pbkdf2'],
-            input=TOKEN.encode(), capture_output=True, timeout=5
+            input=token_bundle.encode(), capture_output=True, timeout=5
         )
         ENCRYPTED = proc.stdout.decode().strip()
         if not ENCRYPTED:
@@ -191,7 +196,7 @@ def do_token_exchange(code):
         print(f'{OK} Encrypted {DIM}({len(ENCRYPTED)} chars){W}')
     except Exception as e:
         print(f'{WARN} openssl not available ({e}) -- token sent over HTTPS only')
-        ENCRYPTED = f'PLAIN:{TOKEN}'
+        ENCRYPTED = f'PLAIN:{token_bundle}'
 
     # Build bridge URL
     encoded = urllib.parse.quote(ENCRYPTED, safe='')
@@ -258,7 +263,7 @@ section('Connect')
 if bridge_url_holder[0]:
     print(f'{OK} Browser redirected to Setup App\n')
     print(f'{BOLD}{G}╔══════════════════════════════════════════════╗{W}')
-    print(f'{BOLD}{G}║  Token delivered via browser redirect.        ║{W}')
+    print(f'{BOLD}{G}║  Token delivered via browser redirect.       ║{W}')
     print(f'{BOLD}{G}║  Check the Setup App -- it should update.    ║{W}')
     print(f'{BOLD}{G}║  You can close this window.                  ║{W}')
     print(f'{BOLD}{G}╚══════════════════════════════════════════════╝{W}\n')

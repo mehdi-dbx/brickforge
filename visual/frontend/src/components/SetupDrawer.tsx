@@ -894,8 +894,9 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (v: 
 
 // ─── Terminal ──────────────────────────────────────────────────────────────────
 
-function Terminal({ lines }: { lines: ExecLine[] }) {
+function Terminal({ lines, showCopy = true }: { lines: ExecLine[]; showCopy?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight }, [lines])
 
   function color(text: string, stream: string) {
@@ -906,13 +907,29 @@ function Terminal({ lines }: { lines: ExecLine[] }) {
     return 'text-dbx-gray-400'
   }
 
+  const copyAll = () => {
+    const text = lines.map(l => l.text.replace(/\x1b\[[0-9;]*m/g, '').trimEnd()).join('\n')
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+
   return (
-    <div ref={ref} className="bg-dbx-gray-950 rounded-lg p-3 font-mono text-[13px] leading-relaxed h-[280px] overflow-y-auto border border-dbx-gray-800/50 shadow-inner">
-      {lines.length === 0 && <div className="text-dbx-gray-600 animate-pulse">running…</div>}
-      {lines.map((l, i) => {
-        const clean = l.text.replace(/\x1b\[[0-9;]*m/g, '')
-        return <div key={i} className={`animate-fade-in ${color(clean.trim(), l.stream)}`}>{clean.trimEnd()}</div>
-      })}
+    <div className="relative">
+      {showCopy && lines.length > 0 && (
+        <button onClick={copyAll} className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-dbx-gray-800/80 hover:bg-dbx-gray-700 text-dbx-gray-500 hover:text-dbx-gray-300 transition-colors" title="Copy log">
+          {copied ? (
+            <svg className="w-3.5 h-3.5 text-dbx-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          )}
+        </button>
+      )}
+      <div ref={ref} className="bg-dbx-gray-950 rounded-lg p-3 font-mono text-[13px] leading-relaxed h-[280px] overflow-y-auto border border-dbx-gray-800/50 shadow-inner">
+        {lines.length === 0 && <div className="text-dbx-gray-600 animate-pulse">waiting for output...</div>}
+        {lines.map((l, i) => {
+          const clean = l.text.replace(/\x1b\[[0-9;]*m/g, '')
+          return <div key={i} className={`animate-fade-in ${color(clean.trim(), l.stream)}`}>{clean.trimEnd()}</div>
+        })}
+      </div>
     </div>
   )
 }
@@ -1400,6 +1417,7 @@ export function SetupDrawer({
               <button
                 key={i}
                 onClick={() => onSelectChoice(i)}
+                onDoubleClick={() => { onSelectChoice(i); setTimeout(onContinue, 0) }}
                 className={`
                   w-full flex items-start gap-3 px-3.5 py-3 rounded-lg border mb-2 text-left transition-all duration-150 animate-slide-up
                   ${selectedChoice === i
@@ -1493,6 +1511,7 @@ export function SetupDrawer({
       if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'manual' && activeStep === 'schema') return /^\w+\.\w+$/.test(manualVal.trim())
       if (action === 'manual')        return !!manualVal.trim()
       return true
     }
@@ -1558,6 +1577,34 @@ export function SetupDrawer({
         <Input value={mcpHeader} onChange={setMcpHeader} placeholder="Authorization:Bearer sk-..." />
         <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
           saves as {activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'}{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'} in .env.local
+        </div>
+      </>)
+    else if (action === 'manual' && activeStep === 'schema')
+      body = (<>
+        <Label>catalog . schema</Label>
+        <div className="flex items-center gap-0">
+          <input
+            value={manualVal.split('.')[0] || ''}
+            onChange={e => {
+              const schema = manualVal.split('.')[1] || ''
+              setManualVal(e.target.value + (schema ? '.' + schema : ''))
+            }}
+            placeholder="catalog"
+            className="flex-1 text-[13px] font-mono px-3 py-2 rounded-l-lg border border-r-0 border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-200 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+          />
+          <span className="text-[18px] font-bold text-dbx-gray-400 dark:text-dbx-gray-500 px-1.5 py-2 border-t border-b border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800">.</span>
+          <input
+            value={manualVal.split('.')[1] || ''}
+            onChange={e => {
+              const catalog = manualVal.split('.')[0] || ''
+              setManualVal(catalog + '.' + e.target.value)
+            }}
+            placeholder="schema"
+            className="flex-1 text-[13px] font-mono px-3 py-2 rounded-r-lg border border-l-0 border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-200 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+          />
+        </div>
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves as PROJECT_UNITY_CATALOG_SCHEMA={manualVal || 'catalog.schema'}
         </div>
       </>)
     else if (action === 'manual')
@@ -1645,25 +1692,25 @@ export function SetupDrawer({
 
     return (
       <>
-        <div className="flex-1 flex flex-col items-center justify-center px-4 pt-4 pb-2 animate-pop">
-          {failed ? (
-            <>
-              <div className="w-16 h-16 rounded-full bg-dbx-error/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(226,75,74,0.2)]">
-                <span className="text-[32px] text-dbx-error leading-none">✗</span>
-              </div>
-              <div className="text-[16px] font-semibold text-dbx-error mb-1">failed</div>
-              <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
-              <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 text-center max-w-[280px]">Check the terminal output above for details. Use "reconfigure" to try again.</div>
-            </>
-          ) : (
-            <>
-              <div className="w-16 h-16 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
-                <span className="text-[32px] text-dbx-blue dark:text-dbx-green leading-none">✓</span>
-              </div>
-              <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 mb-1">configured</div>
-              <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
-            </>
-          )}
+        <div className="flex-1 flex flex-col px-4 pt-4 pb-2 overflow-y-auto">
+          <div className="flex flex-col items-center mb-3 animate-pop">
+            {failed ? (
+              <>
+                <div className="w-12 h-12 rounded-full bg-dbx-error/10 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(226,75,74,0.2)]">
+                  <span className="text-[24px] text-dbx-error leading-none">&#10007;</span>
+                </div>
+                <div className="text-[14px] font-semibold text-dbx-error">failed</div>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
+                  <span className="text-[24px] text-dbx-blue dark:text-dbx-green leading-none">&#10003;</span>
+                </div>
+                <div className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100">configured</div>
+              </>
+            )}
+          </div>
+          {execLines.length > 0 && <Terminal lines={execLines} />}
         </div>
         <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-2">
           {onNext && (
@@ -1671,7 +1718,7 @@ export function SetupDrawer({
               onClick={onNext}
               className="w-full text-[14px] py-2.5 rounded-lg bg-dbx-blue dark:bg-dbx-green text-white font-mono font-medium hover:bg-dbx-blue-dk dark:hover:bg-dbx-green-dk shadow-[0_2px_8px_rgba(46,125,209,0.25)] dark:shadow-[0_2px_8px_rgba(0,169,114,0.25)] hover:shadow-[0_0_16px_rgba(46,125,209,0.3)] dark:hover:shadow-[0_0_16px_rgba(0,169,114,0.3)] transition-all duration-200 active:scale-[0.98]"
             >
-              next →
+              next &#8594;
             </button>
           )}
           <button

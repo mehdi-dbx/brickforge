@@ -213,6 +213,58 @@ function buildSubEnv(extraEnv = {}) {
   return env
 }
 
+// Check if the current OAuth JWT token is expired. Returns error message or null.
+// Check if the current OAuth JWT token is expired. If a refresh token is available,
+// silently refresh and return null. Otherwise return an error message.
+function checkTokenExpiry() {
+  const token = config.get('DATABRICKS_TOKEN') || process.env.DATABRICKS_TOKEN || ''
+  if (!token || !token.startsWith('eyJ')) return null  // PATs (dapi...) don't expire via JWT
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+    const exp = payload.exp
+    if (exp && Date.now() / 1000 > exp) {
+      // Token is expired -- try to refresh silently
+      const refreshToken = config.get('DATABRICKS_REFRESH_TOKEN') || ''
+      const tokenEndpoint = config.get('DATABRICKS_TOKEN_ENDPOINT') || ''
+      if (refreshToken && tokenEndpoint) {
+        try {
+          // Synchronous refresh using child_process (can't use async in this check)
+          const { execFileSync } = require('child_process')
+          const script = `
+import urllib.request, urllib.parse, json
+data = urllib.parse.urlencode({
+    'grant_type': 'refresh_token',
+    'refresh_token': '${refreshToken}',
+    'client_id': 'databricks-cli',
+}).encode()
+req = urllib.request.Request('${tokenEndpoint}', data=data, method='POST')
+req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+with urllib.request.urlopen(req, timeout=10) as r:
+    resp = json.loads(r.read())
+print(json.dumps(resp))
+`
+          const result = execFileSync(PY.cmd, [...PY.pre, '-c', script], { timeout: 15000, env: buildSubEnv() })
+          const resp = JSON.parse(result.toString().trim())
+          if (resp.access_token) {
+            config.setMany({ DATABRICKS_TOKEN: resp.access_token })
+            process.env.DATABRICKS_TOKEN = resp.access_token
+            if (resp.refresh_token) {
+              config.setMany({ DATABRICKS_REFRESH_TOKEN: resp.refresh_token })
+            }
+            console.log('[auth] Token auto-refreshed silently')
+            return null  // refreshed successfully
+          }
+        } catch (e) {
+          console.log(`[auth] Token refresh failed: ${e.message || e}`)
+        }
+      }
+      const ago = Math.round((Date.now() / 1000 - exp) / 60)
+      return `Token expired ${ago} minute${ago !== 1 ? 's' : ''} ago. Re-authenticate via "connect via terminal" or enter a new token.`
+    }
+  } catch { /* not a valid JWT, skip */ }
+  return null
+}
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS')
@@ -440,10 +492,24 @@ app.post('/api/auth/bridge-receive', (req, res) => {
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv)
     const token = decipher.update(ct, undefined, 'utf8') + decipher.final('utf8')
 
-    console.log(`[bridge] decrypted OK: token_len=${token.length}, starts_with=${token.substring(0, 6)}...`)
+    console.log(`[bridge] decrypted OK: payload_len=${token.length}, starts_with=${token.substring(0, 6)}...`)
 
-    if (!token || token.length < 5) {
-      console.log(`[bridge] REJECTED: decrypted token is empty or too short (len=${token.length})`)
+    // Parse decrypted payload -- may be JSON bundle (access + refresh) or plain token
+    let accessToken, refreshToken = '', tokenEndpoint = ''
+    try {
+      const bundle = JSON.parse(token)
+      accessToken = bundle.access_token || ''
+      refreshToken = bundle.refresh_token || ''
+      tokenEndpoint = bundle.token_endpoint || ''
+      console.log(`[bridge] parsed bundle: access_len=${accessToken.length}, refresh_len=${refreshToken.length}`)
+    } catch {
+      // Plain token (legacy or no refresh)
+      accessToken = token
+      console.log(`[bridge] plain token: len=${accessToken.length}`)
+    }
+
+    if (!accessToken || accessToken.length < 5) {
+      console.log(`[bridge] REJECTED: token is empty or too short (len=${(accessToken || '').length})`)
       return res.status(400).json({ error: 'received empty or invalid token' })
     }
 
@@ -452,7 +518,9 @@ app.post('/api/auth/bridge-receive', (req, res) => {
     // Store in config -- clear conflicting auth methods
     const updates = {}
     if (host) updates.DATABRICKS_HOST = host
-    updates.DATABRICKS_TOKEN = token
+    updates.DATABRICKS_TOKEN = accessToken
+    if (refreshToken) updates.DATABRICKS_REFRESH_TOKEN = refreshToken
+    if (tokenEndpoint) updates.DATABRICKS_TOKEN_ENDPOINT = tokenEndpoint
     config.setMany(updates)
     // Remove profile + SP OAuth vars so SDK uses PAT auth only
     for (const k of ['DATABRICKS_CONFIG_PROFILE', 'DATABRICKS_CLIENT_ID', 'DATABRICKS_CLIENT_SECRET']) {
@@ -738,6 +806,9 @@ app.get('/api/setup/profiles', (_req, res) => {
 app.get('/api/setup/resources', (req, res) => {
   const type = req.query.type
 
+  const expiryErr = checkTokenExpiry()
+  if (expiryErr) return res.json({ items: [], error: expiryErr })
+
   const SCRIPTS = {
     warehouses: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
@@ -887,6 +958,20 @@ f.write_text('\\n'.join(new) + '\\n')
 print(f'[+] {env_key} = ${id}  (${name})')
 `.trim().replace(/\$\{id\}/g, id).replace(/\$\{name\}/g, name)
 
+// GET /api/setup/exec-log?action=<name> -- retrieve latest exec log
+app.get('/api/setup/exec-log', (req, res) => {
+  const action = req.query.action
+  if (!action) return res.status(400).json({ error: 'action param required' })
+  const logDir = path.join(PROJECT_ROOT, 'logs', 'exec')
+  const latestLog = path.join(logDir, `${action}-latest.log`)
+  try {
+    const content = fs.readFileSync(latestLog, 'utf8')
+    res.json({ action, log: content, lines: content.split('\n').filter(Boolean) })
+  } catch {
+    res.json({ action, log: '', lines: [] })
+  }
+})
+
 app.post('/api/setup/exec', (req, res) => {
   const { action, params = {} } = req.body || {}
 
@@ -895,13 +980,44 @@ app.post('/api/setup/exec', (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no')
   res.setHeader('Connection', 'keep-alive')
 
+  // Check token expiry before any action that needs auth
+  const NO_AUTH_ACTIONS = new Set(['save-deploy-name', 'forge-bridge'])
+  if (!NO_AUTH_ACTIONS.has(action)) {
+    const expiryErr = checkTokenExpiry()
+    if (expiryErr) {
+      res.write(`event:line\ndata:${JSON.stringify({ text: `[x] ${expiryErr}\n`, stream: 'err' })}\n\n`)
+      res.write(`event:done\ndata:${JSON.stringify({ ok: false, code: 1 })}\n\n`)
+      res.end()
+      return
+    }
+  }
+
+  // Per-execution log file
+  const logDir = path.join(PROJECT_ROOT, 'logs', 'exec')
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+  const logFile = path.join(logDir, `${action}-${Date.now()}.log`)
+  const logStream = fs.createWriteStream(logFile, { flags: 'a' })
+  logStream.write(`=== ${action} ${new Date().toISOString()} ===\n`)
+
+  // Also maintain latest log path per step (for retrieval)
+  const latestLink = path.join(logDir, `${action}-latest.log`)
+
   const write = (type, data) => {
     if (!res.writableEnded) {
       res.write(`event:${type}\ndata:${JSON.stringify(data)}\n\n`)
     }
+    // Log every line to file
+    if (type === 'line' && data.text) {
+      logStream.write(data.text.endsWith('\n') ? data.text : data.text + '\n')
+    }
   }
 
   const done = (ok, code = ok ? 0 : 1) => {
+    logStream.write(`=== ${ok ? 'OK' : 'FAILED'} (exit ${code}) ===\n`)
+    logStream.end()
+    // Update latest symlink
+    try { fs.unlinkSync(latestLink) } catch {}
+    try { fs.copyFileSync(logFile, latestLink) } catch {}
     write('done', { ok, code })
     if (!res.writableEnded) res.end()
   }
@@ -1229,6 +1345,14 @@ print('[+] Knowledge Assistant provisioned')
       if (key === 'DATABRICKS_HOST' && !value.startsWith('http')) value = 'https://' + value
       // Strip trailing slash
       if (key === 'DATABRICKS_HOST') value = value.replace(/\/+$/, '')
+      // Schema: create catalog + schema on workspace (not just save string)
+      if (key === 'PROJECT_UNITY_CATALOG_SCHEMA' && value.includes('.')) {
+        const [catalog, schema] = value.split('.', 2)
+        config.setMany({ [key]: value })
+        process.env[key] = value
+        runCommand(PY.cmd, [...PY.pre, '-c', SAVE_SCHEMA_SCRIPT(catalog, schema)])
+        break
+      }
       config.setMany({ [key]: value })
       process.env[key] = value
       synthetic([`[+] ${key} = ${key.includes('TOKEN') ? value.substring(0, 8) + '...' : value}`])
@@ -1536,6 +1660,12 @@ except Exception as e:
 app.get('/api/setup/test', (req, res) => {
   const step = req.query.step
   const envKey = req.query.key // optional: per-instance key for genie/ka
+
+  // Host test doesn't need auth -- skip expiry check
+  if (step !== 'host') {
+    const expiryErr = checkTokenExpiry()
+    if (expiryErr) return res.json({ ok: false, message: expiryErr })
+  }
 
   // Dynamic test scripts for genie/ka per-instance testing
   let script = TEST_SCRIPTS[step]
