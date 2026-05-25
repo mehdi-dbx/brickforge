@@ -24,11 +24,19 @@ def detect_cloud(host: str) -> str | None:
 
 def build_sub_env(config: ConfigProvider, extra_env: dict[str, str] | None = None) -> dict[str, str]:
     """Build a clean subprocess environment: config values + os.environ, minus auth conflicts."""
+    from brickforge import PACKAGE_ROOT, PROJECT_ROOT
+
     env = dict(os.environ)
     for entry in config.list():
         env[entry["key"]] = entry["value"]
     if extra_env:
         env.update(extra_env)
+    # PYTHONPATH: ensure subprocess can import from brickforge/ (tools, data, agent, etc.)
+    env["PYTHONPATH"] = str(PACKAGE_ROOT)
+    # BRICKFORGE_ROOT: absolute path to brickforge/ for file I/O in scripts
+    env["BRICKFORGE_ROOT"] = str(PACKAGE_ROOT)
+    # ENV_FILE: absolute path to .env.local for scripts that need config
+    env["ENV_FILE"] = str(PROJECT_ROOT / ".env.local")
     # If PAT token is set, remove SP OAuth vars to avoid SDK auth conflict
     if env.get("DATABRICKS_TOKEN") and env.get("DATABRICKS_CLIENT_ID"):
         env.pop("DATABRICKS_CLIENT_ID", None)

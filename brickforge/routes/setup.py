@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 from brickforge.lib.sse import sse_line, sse_done, ExecLogger, stream_subprocess
 
 # Python executable -- use the same interpreter running the server
@@ -233,7 +233,7 @@ async def list_profiles():
         result = subprocess.run(
             ["databricks", "auth", "profiles"],
             capture_output=True, text=True, timeout=10,
-            cwd=str(PROJECT_ROOT),
+            cwd=str(PACKAGE_ROOT),
         )
         items = []
         for line in result.stdout.strip().split("\n"):
@@ -303,7 +303,7 @@ except Exception: print('[]')
         result = subprocess.run(
             [PYTHON,"-c", script.strip()],
             capture_output=True, text=True, timeout=20,
-            cwd=str(PROJECT_ROOT), env=env,
+            cwd=str(PACKAGE_ROOT), env=env,
         )
         if result.returncode != 0:
             return {"items": [], "error": result.stderr or result.stdout}
@@ -532,7 +532,7 @@ except Exception as e:
         result = subprocess.run(
             [PYTHON, "-c", script],
             capture_output=True, text=True, timeout=25,
-            cwd=str(PROJECT_ROOT), env=env,
+            cwd=str(PACKAGE_ROOT), env=env,
         )
         raw = (result.stdout or "").strip() or (result.stderr or "").strip()
         ok = result.returncode == 0 and raw.startswith("[+]")

@@ -33,13 +33,28 @@ dependencies = [
 
 [project.scripts]
 brickforge = "brickforge.cli:main"
-start-app = "agent.start_server:main"
+start-app = "brickforge.agent.start_server:main"
 
 [tool.setuptools.packages.find]
-include = ["brickforge*", "agent*", "tools*", "deploy*"]
+include = ["brickforge*"]
 
 [tool.setuptools.package-data]
-brickforge = ["static/**/*"]
+brickforge = [
+    "static/**/*",
+    "data/**/*.sql",
+    "data/**/*.csv",
+    "data/**/*.json",
+    "conf/**/*.prompt",
+    "conf/**/*.base",
+    "conf/**/*.yml",
+    "conf/**/*.yaml",
+    "stash/**/*",
+    "scripts/**/*.sh",
+    "scripts/**/*.py",
+    "eval/**/*.jsonl",
+    "eval/**/*.py",
+    "deploy/**/*.sh",
+]
 
 [tool.uv]
 native-tls = true

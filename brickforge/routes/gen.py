@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 from brickforge.lib.sse import stream_subprocess, sse_line, sse_done
 from brickforge.lib.env_utils import build_sub_env
 
@@ -213,7 +213,7 @@ def _sse_gen(cmd: list[str], stdin_data: str | None = None):
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(PROJECT_ROOT),
+                cwd=str(PACKAGE_ROOT),
                 env=env,
             )
             proc.stdin.write(stdin_data.encode())

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 from brickforge.lib.config_provider import LocalConfigProvider, ForgeConfigProvider, ConfigProvider
 from brickforge.routes.setup import router as setup_router
 from brickforge.routes.auth import router as auth_router
@@ -102,7 +102,7 @@ async def save_layout(request: Request):
 @app.get("/api/stash/health")
 async def stash_health():
     import re as _re
-    stash_dir = PROJECT_ROOT / "stash"
+    stash_dir = PACKAGE_ROOT / "stash"
     if not stash_dir.exists():
         return {"stashes": []}
     stashes = []

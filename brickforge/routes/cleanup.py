@@ -8,7 +8,7 @@ import sys
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 from brickforge.lib.sse import stream_subprocess
 from brickforge.lib.env_utils import build_sub_env
 
@@ -73,7 +73,7 @@ print(json.dumps({'items': items}))
         result = subprocess.run(
             [sys.executable, "-c", script],
             capture_output=True, text=True, timeout=60,
-            cwd=str(PROJECT_ROOT), env=env,
+            cwd=str(PACKAGE_ROOT), env=env,
         )
         if result.returncode == 0 and result.stdout.strip():
             return json.loads(result.stdout.strip())

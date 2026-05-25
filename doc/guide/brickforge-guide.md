@@ -353,6 +353,74 @@ The Setup App loads a stash, provisions its data to Unity Catalog, configures th
 
 ---
 
+## Testing features from the UI
+
+### Chat with the agent
+1. Start the local dev stack: `bash scripts/sh/start_local.sh`
+2. Open `http://localhost:3000`
+3. Type a question and hit enter -- the agent streams a response in real time
+4. Ask a data question ("show me flights at risk") -- the agent calls SQL tools and returns structured results
+
+### Chart visualization
+1. Ensure `PROJECT_TOOL_CHART=true` in `.env.local`
+2. In the chat, ask: "Show me a bar chart of flights by terminal"
+3. The agent calls `generate_chart` and an interactive Recharts chart renders inline
+4. Click the area/line/bar/pie buttons to switch chart type
+5. Hover for tooltips
+
+### Voice input (speech-to-text)
+1. Set `PROJECT_TOOL_VOICE=true` and `OPENAI_API_KEY=sk-...` in `.env.local`
+2. Restart the chat app
+3. A microphone icon appears next to the send button
+4. Click mic -- animated bars appear, browser requests microphone permission
+5. Speak your question, click mic again to stop
+6. Audio is transcribed via OpenAI Whisper and auto-submitted as a text message
+7. If `PROJECT_TOOL_VOICE` is toggled off or `OPENAI_API_KEY` is missing, the mic button is hidden
+
+### Chat history (persistent conversations)
+1. Configure Lakebase in the visual app (Setup > lakebase step > create instance)
+2. Restart the chat app -- sidebar shows "Your conversations will appear here"
+3. Start chatting -- conversations are saved to Lakebase
+4. Refresh the page or return later -- previous conversations appear in the sidebar grouped by date
+5. Click a past conversation to resume it
+6. Right-click or hover for rename/delete
+7. Without Lakebase, sidebar shows "Chat history is disabled" and conversations are ephemeral
+
+### Genie space (natural language SQL)
+1. Configure at least one Genie space in the visual app (Setup > genie step)
+2. In the chat, ask a free-form data question: "What are total check-ins by airline?"
+3. The agent routes to Genie MCP, which translates to SQL and returns results
+4. Generated SQL is captured in `data/genie-capture-sql/` for audit
+
+### Knowledge Assistant (document Q&A)
+1. Upload PDFs in the visual app (Setup > KA step > provision from PDFs)
+2. Wait for the KA endpoint to become ACTIVE
+3. In the chat, ask a question about the uploaded documents
+4. The agent calls the KA tool and returns an answer with source citations
+
+### Feature toggles (visual app)
+1. Start the visual app: `node visual/backend/index.js`
+2. Open `http://localhost:9000`, go to the Setup tab
+3. Scroll to the **features** block -- shows chart, voice, and any future toggles
+4. Click the Power icon on an instance to toggle it on/off (writes to `.env.local`)
+5. Click the instance row to see details + test button
+6. For voice: paste an OpenAI API key, click "Save & Test" -- validates against OpenAI API
+
+### Multi-instance resources
+1. Genie, KA, Vector Search, MCP, API, and A2A blocks all support multiple instances
+2. Click "+" on any block to add a new instance
+3. Each instance has its own Power toggle (enable/disable individually)
+4. The main block has a global Power toggle (enable/disable all at once)
+5. Changes are written to `.env.local` as `PROJECT_<TYPE>_<SLUG>=<value>`
+
+### Evaluation pipeline
+1. Ensure MLflow experiment is configured (Setup > mlflow step)
+2. Run: `uv run python eval/run_eval.py`
+3. Two runs execute: baseline vs with-guideline
+4. Open MLflow UI to compare results side by side
+
+---
+
 ## Command reference
 
 | Command | What it does |

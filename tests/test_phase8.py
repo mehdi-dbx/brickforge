@@ -15,7 +15,7 @@ def test_static_files_found():
 
 
 def test_version_set():
-    assert __version__ == "0.1.1"
+    assert __version__ == "0.1.0a1"
 
 
 def test_cli_importable():

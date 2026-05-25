@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 from brickforge.lib.env_utils import build_sub_env
 
 router = APIRouter()
@@ -29,7 +29,7 @@ async def list_documents():
         result = subprocess.run(
             [sys.executable, "scripts/py/ka/volume_ops.py", "--mode=list"],
             capture_output=True, text=True, timeout=30,
-            cwd=str(PROJECT_ROOT), env=env,
+            cwd=str(PACKAGE_ROOT), env=env,
         )
         if result.returncode == 0:
             data = json.loads(result.stdout.strip())
@@ -55,7 +55,7 @@ async def upload_documents(files: list[UploadFile] = File(...)):
             result = subprocess.run(
                 [sys.executable, "scripts/py/ka/volume_ops.py", "--mode=upload", f"--file={tmp_path}"],
                 capture_output=True, text=True, timeout=60,
-                cwd=str(PROJECT_ROOT), env=env,
+                cwd=str(PACKAGE_ROOT), env=env,
             )
             uploaded.append({"name": f.filename, "ok": result.returncode == 0, "error": result.stderr if result.returncode != 0 else None})
         except Exception as e:
@@ -82,7 +82,7 @@ async def upload_url(request: Request):
         result = subprocess.run(
             [sys.executable, "scripts/py/ka/volume_ops.py", "--mode=upload-url"],
             capture_output=True, text=True, timeout=60,
-            cwd=str(PROJECT_ROOT), env=env,
+            cwd=str(PACKAGE_ROOT), env=env,
         )
         if result.returncode == 0:
             return json.loads(result.stdout.strip()) if result.stdout.strip() else {"ok": True}
@@ -98,7 +98,7 @@ async def delete_document(name: str):
         result = subprocess.run(
             [sys.executable, "scripts/py/ka/volume_ops.py", "--mode=delete", f"--name={name}"],
             capture_output=True, text=True, timeout=30,
-            cwd=str(PROJECT_ROOT), env=env,
+            cwd=str(PACKAGE_ROOT), env=env,
         )
         return {"ok": result.returncode == 0, "error": result.stderr if result.returncode != 0 else None}
     except Exception as e:

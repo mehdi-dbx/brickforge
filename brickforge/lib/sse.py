@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import AsyncGenerator
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 
 
 def sse_event(event_type: str, data: dict) -> str:
@@ -64,7 +64,7 @@ async def stream_subprocess(
 
     If detect_result=True, lines starting with __RESULT__: are emitted as event:result.
     """
-    cwd = str(cwd or PROJECT_ROOT)
+    cwd = str(cwd or PACKAGE_ROOT)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,

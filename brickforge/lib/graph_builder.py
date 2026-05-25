@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from brickforge import PROJECT_ROOT
+from brickforge import PACKAGE_ROOT
 
 
 def _scan_dir(directory: Path, ext: str) -> list[str]:
@@ -19,7 +19,7 @@ def _scan_dir(directory: Path, ext: str) -> list[str]:
 
 def _read_app_yaml() -> dict:
     try:
-        return yaml.safe_load((PROJECT_ROOT / "app.yaml").read_text()) or {}
+        return yaml.safe_load((PACKAGE_ROOT / "app.yaml").read_text()) or {}
     except (FileNotFoundError, yaml.YAMLError):
         return {}
 
@@ -46,10 +46,10 @@ def build_graph() -> dict:
     catalog, schema_name = parts[0], parts[1] if len(parts) > 1 else ""
 
     FRAMEWORK_TOOLS = {"sql_executor", "ka_factory", "get_current_time", "__init__"}
-    tools = [t for t in _scan_dir(PROJECT_ROOT / "tools", ".py") if t not in FRAMEWORK_TOOLS]
-    funcs = _scan_dir(PROJECT_ROOT / "data" / "default" / "func", ".sql")
-    procs = _scan_dir(PROJECT_ROOT / "data" / "default" / "proc", ".sql")
-    tables = _scan_dir(PROJECT_ROOT / "data" / "default" / "csv", ".csv")
+    tools = [t for t in _scan_dir(PACKAGE_ROOT / "tools", ".py") if t not in FRAMEWORK_TOOLS]
+    funcs = _scan_dir(PACKAGE_ROOT / "data" / "default" / "func", ".sql")
+    procs = _scan_dir(PACKAGE_ROOT / "data" / "default" / "proc", ".sql")
+    tables = _scan_dir(PACKAGE_ROOT / "data" / "default" / "csv", ".csv")
 
     nodes = []
     edges = []
@@ -135,7 +135,7 @@ def build_graph() -> dict:
         "nodes": nodes,
         "edges": edges,
         "meta": {
-            "projectRoot": str(PROJECT_ROOT),
+            "projectRoot": str(PACKAGE_ROOT),
             "generatedAt": datetime.now(timezone.utc).isoformat(),
         },
     }
