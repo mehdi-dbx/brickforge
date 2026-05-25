@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env.local")
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
 
 
 def _get_sp_client_id(app_name: str) -> str | None:

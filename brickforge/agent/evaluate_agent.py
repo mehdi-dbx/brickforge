@@ -7,7 +7,7 @@ from mlflow.genai.scorers import RelevanceToQuery, Safety
 from mlflow.types.responses import ResponsesAgentRequest, ResponsesAgentResponse
 
 # Load environment variables from .env if it exists
-load_dotenv(dotenv_path=".env.local", override=True)
+load_dotenv(dotenv_path=os.environ.get("ENV_FILE", ".env.local"), override=True)
 
 # need to import agent for our @invoke-registered function to be found
 from agent import agent  # noqa: F401

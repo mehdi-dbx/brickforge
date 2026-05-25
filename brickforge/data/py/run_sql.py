@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env.local", override=True)
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 if __name__ == "__main__":
     from databricks.sdk import WorkspaceClient

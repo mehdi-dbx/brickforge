@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env.local", override=True)
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 # ── ANSI ──────────────────────────────────────────────────────────────────────
 R, G, Y, B, M, C, W = "\033[31m", "\033[32m", "\033[33m", "\033[34m", "\033[35m", "\033[36m", "\033[0m"

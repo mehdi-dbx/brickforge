@@ -157,7 +157,7 @@ def _connect():
 
 def cmd_save(args) -> int:
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env.local", override=True)
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
     base_path = os.environ.get("ENV_STORE_CATALOG_VOLUME_PATH", "").strip().rstrip("/")
     if not base_path:
@@ -235,7 +235,7 @@ def cmd_save(args) -> int:
 
 def cmd_load(args) -> int:
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env.local", override=True)
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
     base_path = os.environ.get("ENV_STORE_CATALOG_VOLUME_PATH", "").strip().rstrip("/")
     if not base_path:

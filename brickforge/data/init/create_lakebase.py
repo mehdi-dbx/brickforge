@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
-load_dotenv(ROOT / ".env.local", override=True)
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 DEFAULT_INSTANCE_NAME = "agent-forge-lakebase"
 

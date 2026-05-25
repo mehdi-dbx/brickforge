@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env.local", override=True)
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 import os
 import mlflow

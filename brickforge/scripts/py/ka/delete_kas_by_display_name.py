@@ -32,7 +32,7 @@ INFO = f"{B}→{W}"
 
 def _workspace_client():
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env.local", override=True)
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
     from databricks.sdk import WorkspaceClient
 

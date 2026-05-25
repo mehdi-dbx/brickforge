@@ -12,7 +12,7 @@ YML = ROOT / "databricks.yml"
 
 def main() -> int:
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env.local")
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
 
     # Try databricks.yml first, then first PROJECT_GENIE_* env var
     space_id = None

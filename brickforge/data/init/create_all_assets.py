@@ -136,7 +136,7 @@ def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> boo
     _log_plain(f"OK {name}")
     # Reload env after each step so subsequent steps and verification pick up freshly written values
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env.local", override=True)
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
     return True
 
 
@@ -144,7 +144,7 @@ def verify_assets() -> bool:
     """Verify catalog, schema, tables, Genie space exist. Returns True if all ok."""
     from dotenv import load_dotenv
 
-    load_dotenv(ROOT / ".env.local", override=True)
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
     spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
     if "." not in spec:
         print(f"  {FAIL} PROJECT_UNITY_CATALOG_SCHEMA not set{W}")

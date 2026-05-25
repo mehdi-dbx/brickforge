@@ -11,7 +11,7 @@ os.chdir(ROOT)
 
 from dotenv import load_dotenv
 
-load_dotenv(ROOT / ".env.local", override=True)
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "CANCELED", "CLOSED"})
 

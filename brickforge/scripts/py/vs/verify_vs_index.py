@@ -16,7 +16,7 @@ from databricks.sdk import WorkspaceClient
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[4]
-load_dotenv(ROOT / ".env.local", override=True)
+load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 # ANSI
 R, G, Y, B, C, W = "\033[31m", "\033[32m", "\033[33m", "\033[34m", "\033[36m", "\033[0m"

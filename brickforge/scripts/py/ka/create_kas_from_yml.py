@@ -320,7 +320,7 @@ Examples:
     args = parser.parse_args()
 
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env.local", override=True)
+    load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
     vol_path = _derive_volume_path()
     if not vol_path:
