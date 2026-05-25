@@ -197,7 +197,7 @@ async def bridge_script(request: Request, nonce: str = ""):
     current_host = config.get("DATABRICKS_HOST") or ""
 
     # Look for connect.sh: first in repo (editable), then in package (pip installed)
-    script_path = PROJECT_ROOT / "scripts" / "connect.sh"
+    script_path = PACKAGE_ROOT / "scripts" / "connect.sh"
     if not script_path.exists():
         script_path = Path(__file__).resolve().parent.parent / "static" / "connect.sh"
     try:

@@ -43,7 +43,7 @@ async def list_documents():
 async def upload_documents(files: list[UploadFile] = File(...)):
     env = build_sub_env(_get_config())
     uploaded = []
-    tmp_dir = PROJECT_ROOT / "data" / ".tmp-uploads"
+    tmp_dir = PACKAGE_ROOT / "data" / ".tmp-uploads"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     for f in files:

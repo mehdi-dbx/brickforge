@@ -34,7 +34,7 @@ async def gen_status():
     env = config.to_env_dict()
     model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") or env.get("DATABRICKS_HOST"))
     manifest = None
-    manifest_path = PROJECT_ROOT / "data" / "gen" / "manifest.json"
+    manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -55,9 +55,9 @@ async def gen_tables():
     tables = []
     sources = []
     if use_default in ("true", "1", "yes"):
-        sources.append(("default", PROJECT_ROOT / "data" / "default"))
+        sources.append(("default", PACKAGE_ROOT / "data" / "default"))
     if use_gen in ("true", "1", "yes"):
-        sources.append(("generated", PROJECT_ROOT / "data" / "gen"))
+        sources.append(("generated", PACKAGE_ROOT / "data" / "gen"))
 
     for source, base in sources:
         csv_dir = base / "csv"
@@ -85,9 +85,9 @@ async def gen_routines():
     routines = []
     sources = []
     if use_default in ("true", "1", "yes"):
-        sources.append(("default", PROJECT_ROOT / "data" / "default"))
+        sources.append(("default", PACKAGE_ROOT / "data" / "default"))
     if use_gen in ("true", "1", "yes"):
-        sources.append(("generated", PROJECT_ROOT / "data" / "gen"))
+        sources.append(("generated", PACKAGE_ROOT / "data" / "gen"))
 
     for source, base in sources:
         for sub, kind in [("func", "function"), ("proc", "procedure")]:
@@ -104,8 +104,8 @@ async def gen_routines():
 
 def _state_path(kind: str = "data") -> Path:
     if kind == "routine":
-        return PROJECT_ROOT / "data" / "gen" / "routine-wizard-state.json"
-    return PROJECT_ROOT / "data" / "gen" / "wizard-state.json"
+        return PACKAGE_ROOT / "data" / "gen" / "routine-wizard-state.json"
+    return PACKAGE_ROOT / "data" / "gen" / "wizard-state.json"
 
 
 @router.get("/api/gen/wizard-state")
@@ -162,7 +162,7 @@ async def delete_routine_wizard_state():
 
 @router.delete("/api/gen/clear")
 async def clear_gen():
-    gen_dir = PROJECT_ROOT / "data" / "gen"
+    gen_dir = PACKAGE_ROOT / "data" / "gen"
     deleted = 0
     for sub in ["csv", "init"]:
         d = gen_dir / sub
@@ -182,7 +182,7 @@ async def clear_gen():
 
 @router.delete("/api/gen/clear-routines")
 async def clear_routines():
-    gen_dir = PROJECT_ROOT / "data" / "gen"
+    gen_dir = PACKAGE_ROOT / "data" / "gen"
     deleted = 0
     for sub in ["func", "proc"]:
         d = gen_dir / sub
@@ -315,7 +315,7 @@ async def routine_status():
     model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") or env.get("DATABRICKS_HOST"))
     # Load table schemas for context
     table_schemas = None
-    manifest_path = PROJECT_ROOT / "data" / "gen" / "manifest.json"
+    manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text())
         table_schemas = manifest.get("tables")

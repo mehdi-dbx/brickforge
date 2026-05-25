@@ -89,7 +89,7 @@ async def setup_status():
             # Tables: count CSVs
             if step == "tables":
                 csv_count = 0
-                for d in [PROJECT_ROOT / "data" / "default" / "csv", PROJECT_ROOT / "data" / "gen" / "csv"]:
+                for d in [PACKAGE_ROOT / "data" / "default" / "csv", PACKAGE_ROOT / "data" / "gen" / "csv"]:
                     try:
                         csv_count += len([f for f in d.iterdir() if f.suffix == ".csv"])
                     except FileNotFoundError:
@@ -112,7 +112,7 @@ async def setup_status():
 
             # Prompt: file-based
             if step == "prompt":
-                prompt_dir = PROJECT_ROOT / "conf" / "prompt"
+                prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
                 main_exists = (prompt_dir / "main.prompt").exists()
                 status = "configured" if main_exists else "missing"
                 try:
@@ -923,7 +923,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
 
 @router.get("/api/setup/prompts")
 async def list_prompts():
-    prompt_dir = PROJECT_ROOT / "conf" / "prompt"
+    prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
     try:
         files = []
         for f in sorted(prompt_dir.iterdir()):
@@ -942,7 +942,7 @@ async def save_prompt(request: Request):
     content = body.get("content", "")
     if not name or "/" in name or ".." in name:
         return JSONResponse({"error": "invalid filename"}, status_code=400)
-    prompt_dir = PROJECT_ROOT / "conf" / "prompt"
+    prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
     prompt_dir.mkdir(parents=True, exist_ok=True)
     (prompt_dir / name).write_text(content)
     return {"ok": True}
