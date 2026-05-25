@@ -409,6 +409,7 @@
   <a href="#roadmap"><span class="toc-num">17.</span> Execution Roadmap</a>
   <a href="#invocation-map"><span class="toc-num">20.</span> UI Invocation Map</a>
   <a href="#current-state"><span class="toc-num">21.</span> Current State</a>
+  <a href="#runtime-modes"><span class="toc-num">22.</span> Runtime Modes (Part 12)</a>
 </div>
 
 <!-- ============================================================ -->
@@ -2638,6 +2639,131 @@ Inch 3: First Deploy Test         |
   <li>F3: Dashboard config end-to-end test -- not yet run</li>
   <li>E1: <code>tool_factory.py</code> (SQL read + action patterns) -- still to build</li>
 </ul>
+
+<!-- ============================================================ -->
+<h2 id="runtime-modes" class="purple">22. Runtime Modes - Comprehensive Reference (Part 12)</h2>
+
+<p>BrickForge runs in 5 distinct modes. Each has different prerequisites, config mechanisms, and capabilities.</p>
+
+<!-- MODE 1 -->
+<h3>MODE 1: LOCAL (git clone)</h3>
+<p><strong>How:</strong> <code>git clone</code> + <code>./start.sh</code></p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Python 3.11+, Node.js, uv, git</td></tr>
+<tr><td>Build tools needed</td><td>npm (first run: <code>npm ci</code>), uv (<code>uv sync</code>)</td></tr>
+<tr><td>Code location</td><td>Cloned repo on user's disk</td></tr>
+<tr><td>Entry point</td><td><code>node visual/backend/index.js</code></td></tr>
+<tr><td>FORGE_MODE</td><td><code>false</code></td></tr>
+<tr><td>ConfigProvider</td><td>LocalConfigProvider</td></tr>
+<tr><td>Config storage</td><td><code>.env.local</code> file in repo root</td></tr>
+<tr><td>Stash storage</td><td><code>stash/</code> directory in repo</td></tr>
+<tr><td>Python subprocess</td><td><code>uv run python</code></td></tr>
+<tr><td>Auth</td><td>CLI profile, PAT, or bridge-forge</td></tr>
+<tr><td>IP for API calls</td><td>User's machine IP (typically whitelisted)</td></tr>
+<tr><td>Cross-cloud</td><td>Works</td></tr>
+<tr><td>Updates</td><td><code>git pull</code></td></tr>
+</table>
+
+<!-- MODE 2 -->
+<h3>MODE 2: LOCAL (installable) - FUTURE</h3>
+<p><strong>How:</strong> <code>curl -sL https://brickforge.dev/install | bash</code> then <code>brickforge</code></p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Python 3.11+, Node.js (eliminable via SEA compilation)</td></tr>
+<tr><td>Build tools needed</td><td>None. Everything pre-built and bundled.</td></tr>
+<tr><td>Code location</td><td><code>~/.brickforge/app/</code></td></tr>
+<tr><td>Entry point</td><td><code>brickforge</code> CLI &rarr; <code>node ~/.brickforge/app/visual/backend/index.js</code></td></tr>
+<tr><td>FORGE_MODE</td><td><code>false</code> (hybrid mode)</td></tr>
+<tr><td>ConfigProvider</td><td>LocalForgeConfigProvider (NEW - reads <code>.forge</code> zip from disk)</td></tr>
+<tr><td>Config storage</td><td><code>~/.brickforge/stashes/active.forge.zip</code></td></tr>
+<tr><td>Stash storage</td><td><code>~/.brickforge/stashes/</code></td></tr>
+<tr><td>Python subprocess</td><td><code>python</code> (deps pre-installed via <code>pip install -r</code> on first launch)</td></tr>
+<tr><td>Auth</td><td>PAT or bridge-forge</td></tr>
+<tr><td>IP for API calls</td><td>User's machine IP (typically whitelisted)</td></tr>
+<tr><td>Cross-cloud</td><td>Works</td></tr>
+<tr><td>Updates</td><td><code>brickforge update</code> (NEW)</td></tr>
+</table>
+<p><strong>Eliminates:</strong> git, uv, npm. User never sees source code.</p>
+
+<!-- MODE 3 -->
+<h3>MODE 3: LOCAL (Git or Installable) + REMOTE STASH - FUTURE</h3>
+<p><strong>How:</strong> Same as MODE 1 or MODE 2, with "sync to UC Volume" toggle enabled</p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Same as MODE 1 or 2</td></tr>
+<tr><td>ConfigProvider</td><td>LocalForgeConfigProvider + UC Volume sync on write</td></tr>
+<tr><td>Config storage</td><td>Local <code>.forge</code> zip + flushed to <code>/Volumes/{catalog}/{schema}/brickforge/stash/</code></td></tr>
+<tr><td>Stash storage</td><td>Local disk + UC Volume (bidirectional)</td></tr>
+<tr><td>Cross-cloud</td><td>Works</td></tr>
+<tr><td>Offline</td><td>Partial (local stash works, Volume sync queued)</td></tr>
+</table>
+<p><strong>Adds over MODE 2:</strong> Stash portability. Switch machines, pick up where you left off. Prerequisite: workspace step configured (host + token + schema).</p>
+
+<!-- MODE 4 -->
+<h3>MODE 4: DEPLOYED (DBX App)</h3>
+<p><strong>How:</strong> Pre-deployed by admin, or <code>databricks apps deploy</code>. User opens browser URL.</p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Nothing. Browser only.</td></tr>
+<tr><td>Build tools needed</td><td>None for user. <code>uv sync</code> + tar extract at app startup.</td></tr>
+<tr><td>Code location</td><td><code>/app/python/source_code/</code> on DBX compute</td></tr>
+<tr><td>FORGE_MODE</td><td><code>true</code></td></tr>
+<tr><td>ConfigProvider</td><td>ForgeConfigProvider</td></tr>
+<tr><td>Config storage</td><td>In-memory zip, flushed to UC Volume</td></tr>
+<tr><td>Stash storage</td><td>UC Volume only</td></tr>
+<tr><td>Python subprocess</td><td><code>python</code> (venv from <code>uv sync</code> at startup)</td></tr>
+<tr><td>Auth</td><td>SP OAuth (platform-injected) + bridge-forge for target workspace</td></tr>
+<tr><td>IP for API calls</td><td>DBX App egress IP (dynamic, serverless pool)</td></tr>
+<tr><td>Cross-cloud</td><td>Same-cloud only. Cross-cloud blocked by IP ACL unless NCC configured.</td></tr>
+<tr><td>Updates</td><td>Redeploy</td></tr>
+</table>
+<p><strong>Startup command</strong> (<code>app.yaml</code>):</p>
+<pre>uv sync && cd visual/backend && tar xzf node_modules.tar.gz && cd ../.. && node visual/backend/index.js</pre>
+
+<!-- AGENT APP -->
+<h3>AGENT APP (deployed by any Setup App mode)</h3>
+<p>Not a mode of the Setup App. This is the output - the agent application deployed to Databricks by any of the 4 modes above.</p>
+<p><strong>How:</strong> User clicks "Deploy" in Setup App. Bundles stash + framework into zip, uploads, deploys.</p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>Runs on</td><td>Databricks App compute</td></tr>
+<tr><td>Entry point</td><td><code>python agent.start_server:main</code></td></tr>
+<tr><td>Config source</td><td><code>app.yaml</code> env vars (baked at deploy time from stash)</td></tr>
+<tr><td>Stash at runtime</td><td>Not needed. Config = env vars. Domain files = in zip.</td></tr>
+<tr><td>Python deps</td><td><code>uv sync</code> at startup</td></tr>
+<tr><td>Node.js</td><td>Yes (runs <code>node app/server/dist/index.mjs</code> for chat UI)</td></tr>
+<tr><td>Bundle size</td><td>~13MB / ~150 files</td></tr>
+</table>
+<p><strong>Key point:</strong> The stash is a build-time artifact. At runtime the agent reads env vars and bundled files. No stash dependency at runtime.</p>
+
+<!-- DEPS MATRIX -->
+<h3>Dependencies by Mode</h3>
+<table>
+<tr><th>Dependency</th><th>MODE 1 (clone)</th><th>MODE 2 (install)</th><th>MODE 3 (install+sync)</th><th>MODE 4 (deployed)</th><th>AGENT APP</th></tr>
+<tr><td>Python 3.11+</td><td>USER</td><td>USER</td><td>USER</td><td>PLATFORM</td><td>PLATFORM</td></tr>
+<tr><td>Node.js</td><td>USER</td><td>USER*</td><td>USER*</td><td>PLATFORM</td><td>PLATFORM</td></tr>
+<tr><td>npm</td><td>USER</td><td>-</td><td>-</td><td>STARTUP</td><td>FALLBACK</td></tr>
+<tr><td>uv</td><td>USER</td><td>-</td><td>-</td><td>STARTUP</td><td>STARTUP</td></tr>
+<tr><td>git</td><td>USER</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>Databricks CLI</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>Browser</td><td>USER</td><td>USER</td><td>USER</td><td>USER</td><td>USER</td></tr>
+</table>
+<p style="font-size:0.85rem; color:var(--text3);">
+  <strong>USER</strong> = user must install. <strong>PLATFORM</strong> = pre-installed on DBX compute. <strong>STARTUP</strong> = used at app startup, pre-installed. <strong>*</strong> = eliminable via Node SEA compilation. <strong>-</strong> = not needed.
+</p>
+
+<!-- KEY INSIGHTS -->
+<h3>Key Insights</h3>
+<ol>
+  <li><strong>Stash is build-time only.</strong> Agent app never reads it. Clean separation.</li>
+  <li><strong>Installable eliminates git, uv, npm.</strong> Only Python + Node.js remain. Node.js eliminable via SEA.</li>
+  <li><strong>LocalForgeConfigProvider is the missing piece.</strong> Sync disk-based <code>.forge</code> zip reader. Bridges local and deployed.</li>
+  <li><strong>Remote stash sync is additive.</strong> Local-only first, UC Volume toggle second, GitHub third.</li>
+  <li><strong>Cross-cloud is network, not auth.</strong> Local modes bypass it. Deployed needs same-cloud or NCC.</li>
+  <li><strong>One Setup App per cloud for deployed coverage.</strong> AWS instance + Azure instance.</li>
+  <li><strong><code>.env.local</code> is a legacy artifact.</strong> Installable mode replaces it with <code>.forge</code> zip everywhere.</li>
+</ol>
 
 <hr>
 <p style="text-align:center; color:var(--text3); font-size:0.85rem; padding: 2rem 0;">

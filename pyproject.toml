@@ -1,15 +1,17 @@
 [project]
-name = "agent-forge"
-version = "0.1.0"
-requires-python = ">=3.11"
+name = "brickforge"
+version = "0.1.0a1"
+description = "Build and deploy Databricks AI agents from a visual Setup App"
+requires-python = ">=3.9"
 dependencies = [
-    "databricks-sdk>=0.102.0",        # >=0.102.0 required for knowledge_assistants API
+    "databricks-sdk>=0.102.0",
     "databricks-langchain",
     "mlflow>=2.0",
     "python-dotenv",
     "pyyaml",
     "fastapi",
     "uvicorn",
+    "python-multipart",
     "openai",
     "langchain-community",
     "langchain-openai",
@@ -30,7 +32,21 @@ dependencies = [
 ]
 
 [project.scripts]
+brickforge = "brickforge.cli:main"
 start-app = "agent.start_server:main"
+
+[tool.setuptools.packages.find]
+include = ["brickforge*", "agent*", "tools*", "deploy*"]
+
+[tool.setuptools.package-data]
+brickforge = ["static/**/*"]
 
 [tool.uv]
 native-tls = true
+
+[dependency-groups]
+dev = [
+    "build>=1.5.0",
+    "httpx>=0.28.1",
+    "pytest>=9.0.3",
+]

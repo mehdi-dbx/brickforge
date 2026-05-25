@@ -55,17 +55,17 @@ The visual Setup App (currently `visual/`) IS the product. It:
 
 | Question | Answer |
 |----------|--------|
-| Hosted mode auth | Databricks SSO -- user authenticates via SSO to their workspace |
-| Can DBX App deploy another DBX App? | Yes -- it's just Python code executing from App, calls Apps REST API |
-| Local mode | Still supported -- `node visual/backend/index.js`, uses `.env.local` |
-| dbc/ courseware | Separated to `forge-dbc` branch -- different project entirely |
+| Hosted mode auth | Databricks SSO - user authenticates via SSO to their workspace |
+| Can DBX App deploy another DBX App? | Yes - it's just Python code executing from App, calls Apps REST API |
+| Local mode | Still supported - `node visual/backend/index.js`, uses `.env.local` |
+| dbc/ courseware | Separated to `forge-dbc` branch - different project entirely |
 | `.forge` storage | UC Volume on user's workspace |
-| User writes YAML? | NEVER -- wizard generates it, user only sees UI |
-| Tools need custom Python? | NO -- 7 declarative patterns, framework generates code at runtime via factories |
-| Notebooks? | STRICTLY PROHIBITED -- code-first only |
-| `.env.local` in SaaS? | DOES NOT EXIST -- `.forge` is the config. ConfigProvider abstraction handles both modes. |
-| User owns code? | YES -- Setup App generates a project the user can download, edit, CI/CD |
-| DAB / Asset Bundles | PRESERVED -- `databricks.yml` + `app.yaml` are Databricks standards, part of every project stash |
+| User writes YAML? | NEVER - wizard generates it, user only sees UI |
+| Tools need custom Python? | NO - 7 declarative patterns, framework generates code at runtime via factories |
+| Notebooks? | STRICTLY PROHIBITED - code-first only |
+| `.env.local` in SaaS? | DOES NOT EXIST - `.forge` is the config. ConfigProvider abstraction handles both modes. |
+| User owns code? | YES - Setup App generates a project the user can download, edit, CI/CD |
+| DAB / Asset Bundles | PRESERVED - `databricks.yml` + `app.yaml` are Databricks standards, part of every project stash |
 | Resource creation vs deployment | Resources (tables, functions, genie, KA) via SDK. Deployment via DAB. Two separate steps. |
 
 ---
@@ -92,19 +92,19 @@ This project needs to be validated by Databricks internal authorities. It must a
 
 ### What We Do NOT Do
 
-- No custom auth mechanisms -- use Databricks SSO / SP / CLI profiles
-- No custom deployment pipelines -- use DAB
-- No custom resource management -- use UC + SDK
-- No notebooks -- code-first, but all code follows Databricks SDK patterns
+- No custom auth mechanisms - use Databricks SSO / SP / CLI profiles
+- No custom deployment pipelines - use DAB
+- No custom resource management - use UC + SDK
+- No notebooks - code-first, but all code follows Databricks SDK patterns
 
 ---
 
 ## PART 3: .forge YAML
 
 ### What It Is
-- Internal serialization format -- machine-generated, machine-consumed
+- Internal serialization format - machine-generated, machine-consumed
 - One `.forge` file per project
-- User NEVER writes YAML by hand -- the Setup App wizard generates it
+- User NEVER writes YAML by hand - the Setup App wizard generates it
 - Contains BOTH domain content (tables, SQL, prompts) AND infrastructure config (schema, warehouse, genie IDs)
 
 ### What It Contains
@@ -171,27 +171,27 @@ config:
 | SaaS (A/B) | `/Volumes/{catalog}/{schema}/brickforge/stash/airops.forge.zip` | Zip archive |
 | Local (C) | `stash/airops/` on filesystem (unzipped for dev convenience) | Directory |
 
-**What's IN the archive:** `.forge` YAML, SQL files, prompts, tool specs, KA configs, `app.yaml`, `databricks.yml` -- all small text files. Typically under 1MB compressed.
+**What's IN the archive:** `.forge` YAML, SQL files, prompts, tool specs, KA configs, `app.yaml`, `databricks.yml` - all small text files. Typically under 1MB compressed.
 
 **What's NOT in the archive:** PDFs (stay in UC Volume, referenced by path in the manifest), large datasets (already in UC tables as Delta).
 
 **How it works:**
 1. Download one zip from UC Volume (single API call: `w.files.download()`)
 2. Open in memory (`zipfile.ZipFile(io.BytesIO(bytes))` in Python, `AdmZip(buffer)` in Node)
-3. Read any file on demand -- no disk extraction
+3. Read any file on demand - no disk extraction
 4. When saving: update entries in memory, upload zip back (single API call: `w.files.upload()`)
 
 **Why zip over scattered files:**
 - One file = one project. Dead simple to copy, share, backup, version
 - Atomic: it's there or it's not (no partial uploads)
 - Single API call to load, single call to save
-- Under 1MB -- trivially fast
+- Under 1MB - trivially fast
 - In-memory access: zero disk I/O, zero temp files
 
 **Implementation:** Python `zipfile` (stdlib, zero deps, 20+ years battle-tested). Node.js `adm-zip` (50KB, zero transitive deps). Rock solid, dead simple.
 
 ### First Example
-`stash/airops/airops.forge` -- extracted from the original airops domain. Currently a directory; will be archived to `airops.forge.zip` for UC Volume storage.
+`stash/airops/airops.forge` - extracted from the original airops domain. Currently a directory; will be archived to `airops.forge.zip` for UC Volume storage.
 
 ---
 
@@ -217,12 +217,12 @@ stash/airops/
 `app.yaml` and `databricks.yml` are part of the stash because they are Databricks platform deployment artifacts. The Setup App generates project-specific versions by injecting `.forge` config values into these templates at deploy time.
 
 ### How Stashes Are Created
-1. **By extraction** -- airops was extracted from the original codebase (already done)
-2. **By the wizard** -- Setup App's LLM-assisted wizard generates new stashes
+1. **By extraction** - airops was extracted from the original codebase (already done)
+2. **By the wizard** - Setup App's LLM-assisted wizard generates new stashes
 
 The airops extraction defined the `.forge` schema by example.
 
-### Loading a Stash -- Verification & Integrity Check
+### Loading a Stash - Verification & Integrity Check
 
 When a `.forge` bundle is loaded (from UC Volume, local stash, or wizard output), the system MUST verify every piece before proceeding.
 
@@ -252,12 +252,12 @@ For each reference in the manifest, check the file is actually there:
 **Step 3: Report status**
 Output a clear report:
 ```
-[+] airops.forge -- valid YAML, version 1.0
-[+] data/csv/flights.csv -- found (5 rows)
-[+] data/init/create_flights.sql -- found (CREATE TABLE)
-[x] data/func/missing_function.sql -- NOT FOUND
-[+] conf/prompt/main.prompt -- found (211 lines)
-[!] eval/data/dataset.jsonl -- not found (optional, eval won't work)
+[+] airops.forge - valid YAML, version 1.0
+[+] data/csv/flights.csv - found (5 rows)
+[+] data/init/create_flights.sql - found (CREATE TABLE)
+[x] data/func/missing_function.sql - NOT FOUND
+[+] conf/prompt/main.prompt - found (211 lines)
+[!] eval/data/dataset.jsonl - not found (optional, eval won't work)
 ```
 
 **Step 4: Suggest fixes for missing assets**
@@ -279,7 +279,7 @@ This turns the load process into a guided setup: load -> verify -> fix gaps -> r
 
 ### UI: Visual Stash Health Report
 
-The Setup App displays the verification results as a visual checklist in the UI -- same pattern as the Setup DAG with [+]/[x]/[!] orbs.
+The Setup App displays the verification results as a visual checklist in the UI - same pattern as the Setup DAG with [+]/[x]/[!] orbs.
 
 **Stash Health panel (new tab or section in Setup):**
 
@@ -322,11 +322,11 @@ WORKSPACE (live)
 ```
 
 **UI implementation:**
-- Backend: new endpoint `GET /api/stash/health?name=airops` -- runs the 5-step verification, returns structured JSON
-- Frontend: new component `StashHealthView` -- renders the checklist with orbs, action buttons
+- Backend: new endpoint `GET /api/stash/health?name=airops` - runs the 5-step verification, returns structured JSON
+- Frontend: new component `StashHealthView` - renders the checklist with orbs, action buttons
 - Each [x] item has a contextual action button (Generate, Provision, Create) that triggers the relevant wizard step
 - [Fix All] button runs all missing provisions in sequence
-- Reusable for any stash -- not airops-specific
+- Reusable for any stash - not airops-specific
 
 ---
 
@@ -338,7 +338,7 @@ WORKSPACE (live)
 **Target:** Setup App carries agent bundle. On deploy, generates domain files from `.forge`, uploads to workspace files, calls Apps API.
 
 The agent bundle = `agent/`, `app/`, framework `tools/`, `pyproject.toml`, `requirements.txt`.
-Domain files = tools, SQL, prompts, KA configs -- generated from `.forge`.
+Domain files = tools, SQL, prompts, KA configs - generated from `.forge`.
 Everything else (visual/, stash/, deploy/, scripts/) stays on Setup App side.
 
 ### Challenge 2: Setup App Backend Shift
@@ -361,13 +361,13 @@ Backend subprocess categories:
 **Solution: ConfigProvider pattern.**
 ```
 ConfigProvider
-  ├── LocalConfigProvider (reads .env.local -- local mode C)
-  └── ForgeConfigProvider (reads .forge -- SaaS modes A & B)
+  ├── LocalConfigProvider (reads .env.local - local mode C)
+  └── ForgeConfigProvider (reads .forge - SaaS modes A & B)
 ```
 
 Both implement: `get(key)`, `set(key, value)`, `list()`, `toggle(key)`, `to_env_dict()`.
 
-**Python side needs ZERO changes** -- subprocess env injection already works.
+**Python side needs ZERO changes** - subprocess env injection already works.
 **Node.js side: 36 call sites** to refactor from direct file ops to ConfigProvider.
 
 Migration: pure refactor first (LocalConfigProvider wraps existing functions), then add ForgeConfigProvider.
@@ -389,35 +389,35 @@ Tools defined as declarative specs in `.forge`. Factory modules generate `@tool`
 | 7 | **Chart** | `generate_chart.py` | EXISTS | Generates inline chart visualizations (framework tool) |
 
 **Plus MCP-based integrations (not tool factories, wired as MCP servers in `agent.py`):**
-- **Genie** -- NL-to-SQL via Databricks Genie MCP (`PROJECT_GENIE_*`)
-- **Vector Search** -- semantic doc retrieval via VS MCP (`PROJECT_VS_*`)
+- **Genie** - NL-to-SQL via Databricks Genie MCP (`PROJECT_GENIE_*`)
+- **Vector Search** - semantic doc retrieval via VS MCP (`PROJECT_VS_*`)
 
 ### Challenge 5: Data Provisioning Without Local Scripts
 
 `create_all_assets.py` currently scans local directories.
 In SaaS: reads SQL content from `.forge` sidecar files in UC Volume.
 Setup App copies from UC Volume to workspace files at deploy time.
-Python scripts get env vars via subprocess injection -- they work without `.env.local`.
+Python scripts get env vars via subprocess injection - they work without `.env.local`.
 
-### Challenge 6: Agent App Deployment -- DAB Preserved
+### Challenge 6: Agent App Deployment - DAB Preserved
 
 **DAB (Databricks Asset Bundles) and `app.yaml` are Databricks platform standards. They MUST be preserved.**
 
-This project needs to be validated by Databricks internal authorities and must align with corporate guidelines. Going "DAB-less" would be going against the platform -- wrong move.
+This project needs to be validated by Databricks internal authorities and must align with corporate guidelines. Going "DAB-less" would be going against the platform - wrong move.
 
-**What changes:** The Setup App generates `databricks.yml` + `app.yaml` per project from `.forge` config, then deploys via the Databricks Python SDK (which has bundle/apps API support -- no Go binary needed).
+**What changes:** The Setup App generates `databricks.yml` + `app.yaml` per project from `.forge` config, then deploys via the Databricks Python SDK (which has bundle/apps API support - no Go binary needed).
 
 **What stays:**
-- `app.yaml` -- runtime manifest (startup command, env vars). Generated per project from `.forge`.
-- `databricks.yml` -- bundle config (resources: experiments, warehouses, genie spaces, endpoints, apps). Generated per project from `.forge`.
-- DAB resource binding -- experiments, warehouses, genie spaces, serving endpoints bound to the app SP.
+- `app.yaml` - runtime manifest (startup command, env vars). Generated per project from `.forge`.
+- `databricks.yml` - bundle config (resources: experiments, warehouses, genie spaces, endpoints, apps). Generated per project from `.forge`.
+- DAB resource binding - experiments, warehouses, genie spaces, serving endpoints bound to the app SP.
 
 **Two layers:**
-1. **Resource creation** (tables, functions, genie spaces, KA endpoints, experiments) -- done via REST API / SDK calls during the setup wizard. This is the provisioning step.
-2. **Deployment** (packaging the agent code + config and deploying it as a Databricks App) -- done via DAB (Databricks Asset Bundles). `databricks.yml` defines the bundle, `app.yaml` defines the runtime. DAB handles resource binding, SP grants, and code upload.
+1. **Resource creation** (tables, functions, genie spaces, KA endpoints, experiments) - done via REST API / SDK calls during the setup wizard. This is the provisioning step.
+2. **Deployment** (packaging the agent code + config and deploying it as a Databricks App) - done via DAB (Databricks Asset Bundles). `databricks.yml` defines the bundle, `app.yaml` defines the runtime. DAB handles resource binding, SP grants, and code upload.
 
 **Deploy flow:**
-1. Setup App provisions resources via SDK (tables, functions, genie, KA, experiment) -- already done during wizard steps
+1. Setup App provisions resources via SDK (tables, functions, genie, KA, experiment) - already done during wizard steps
 2. Setup App generates `databricks.yml` from `.forge` config (resources, targets, app name, bindings)
 3. Setup App generates `app.yaml` from `.forge` config (startup command, env vars)
 4. DAB deploys the bundle: `databricks bundle deploy` (or SDK equivalent)
@@ -425,58 +425,58 @@ This project needs to be validated by Databricks internal authorities and must a
 6. Post-deploy grants via SDK
 
 **Why DAB for deployment:**
-- Databricks platform standard -- required for internal validation
+- Databricks platform standard - required for internal validation
 - Resource binding (experiment, warehouse, genie, endpoint) is declarative in `databricks.yml`
 - SP permissions auto-applied via resource bindings
 - Workspace state tracking (`.databricks/bundle/` state)
 - Reproducible: same `databricks.yml` = same deployment
 
 **Why SDK for resource creation:**
-- Interactive wizard flow -- user creates resources step by step
+- Interactive wizard flow - user creates resources step by step
 - Resources exist BEFORE deployment (tables must exist for genie space to query them)
 - SDK provides immediate feedback (success/failure per resource)
 
 **The `.forge` stash includes:**
-- `app.yaml` template -- populated from `.forge` config at deploy time
-- `databricks.yml` template -- populated from `.forge` config at deploy time
+- `app.yaml` template - populated from `.forge` config at deploy time
+- `databricks.yml` template - populated from `.forge` config at deploy time
 - Both are project artifacts, part of the stash, versioned with the project
 
 **DAB CLI Go binary vs Python SDK:**
 - For local mode (C): user can use `databricks bundle deploy` CLI directly
 - For DBX App modes (A/B): Setup App uses Python SDK `databricks.sdk.service.apps` API or shells out to `databricks` CLI if available in runtime
-- Both paths produce the same result -- DAB bundle deployed
+- Both paths produce the same result - DAB bundle deployed
 
 ### Challenge 7: Prompts / Knowledge Base
 
 System prompt in `.forge` (inline or sidecar file).
 On deploy, written to agent's `conf/prompt/` in workspace files.
-Agent reads from relative paths at startup -- doesn't care where file came from.
+Agent reads from relative paths at startup - doesn't care where file came from.
 
 ---
 
-## PART 6: Setup Blocks -- Stashability Classification
+## PART 6: Setup Blocks - Stashability Classification
 
 | Block | ID | Classification | In .forge? |
 |-------|-----|---------------|-----------|
-| Databricks Host | `host` | INFRA | NO -- from DBX App auth context |
-| Authentication | `auth` | INFRA | NO -- from DBX App SP |
-| SQL Warehouse | `warehouse` | HYBRID | YES -- `config.warehouse_id` |
-| Unity Catalog | `schema` | PROJECT | YES -- `config.schema` |
-| Data Tables | `tables` | PROJECT | YES -- `data.tables[]` |
-| Functions | `functions` | PROJECT | YES -- `data.functions[]` |
-| Model Endpoint | `model` | HYBRID | YES -- `config.model.endpoint` |
-| Agent Prompt | `prompt` | PROJECT | YES -- `prompt.system` |
-| Genie Space | `genie` | PROJECT | YES -- `config.genie[]` |
-| Knowledge Assistant | `ka` | PROJECT | YES -- `config.ka[]` |
-| Vector Search | `vs` | PROJECT | YES -- `config.vs[]` |
-| External MCP | `mcp` | PROJECT | YES -- `config.mcp[]` |
-| External API | `api` | PROJECT | YES -- `config.api[]` |
-| A2A Agents | `a2a` | PROJECT | YES -- `config.a2a[]` |
-| Features | `features` | PROJECT | YES -- `config.features` |
-| Lakebase | `lakebase` | HYBRID | YES -- `config.lakebase` |
-| MLflow | `mlflow` | PROJECT | YES -- `config.mlflow` |
-| Grants | `grants` | PROJECT | N/A -- action, not config |
-| Deploy | `deploy` | PROJECT | YES -- `config.app_name` |
+| Databricks Host | `host` | INFRA | NO - from DBX App auth context |
+| Authentication | `auth` | INFRA | NO - from DBX App SP |
+| SQL Warehouse | `warehouse` | HYBRID | YES - `config.warehouse_id` |
+| Unity Catalog | `schema` | PROJECT | YES - `config.schema` |
+| Data Tables | `tables` | PROJECT | YES - `data.tables[]` |
+| Functions | `functions` | PROJECT | YES - `data.functions[]` |
+| Model Endpoint | `model` | HYBRID | YES - `config.model.endpoint` |
+| Agent Prompt | `prompt` | PROJECT | YES - `prompt.system` |
+| Genie Space | `genie` | PROJECT | YES - `config.genie[]` |
+| Knowledge Assistant | `ka` | PROJECT | YES - `config.ka[]` |
+| Vector Search | `vs` | PROJECT | YES - `config.vs[]` |
+| External MCP | `mcp` | PROJECT | YES - `config.mcp[]` |
+| External API | `api` | PROJECT | YES - `config.api[]` |
+| A2A Agents | `a2a` | PROJECT | YES - `config.a2a[]` |
+| Features | `features` | PROJECT | YES - `config.features` |
+| Lakebase | `lakebase` | HYBRID | YES - `config.lakebase` |
+| MLflow | `mlflow` | PROJECT | YES - `config.mlflow` |
+| Grants | `grants` | PROJECT | N/A - action, not config |
+| Deploy | `deploy` | PROJECT | YES - `config.app_name` |
 
 ---
 
@@ -503,7 +503,7 @@ Start from where we are. Take one step. Hit the wall. Solve the wall. Next step.
 
 Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, CORS, etc.).
 
-### Inch 4: Config Persistence -- Stateful Backend
+### Inch 4: Config Persistence - Stateful Backend
 
 **In SaaS mode, the Node.js backend is stateful.** It holds the project zip in process memory.
 
@@ -525,9 +525,9 @@ Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, C
 **What survives app restart:** Everything that was flushed. Risk window = only during mid-request crash (same as today).
 
 **What is NOT persisted (same as today):**
-- UI position (active step, wizard phase) -- resets on refresh
-- Test cache results -- re-fetched on step activation
-- Terminal output lines -- ephemeral
+- UI position (active step, wizard phase) - resets on refresh
+- Test cache results - re-fetched on step activation
+- Terminal output lines - ephemeral
 
 **Design shift from today:** Current backend is stateless (reads `.env.local` from disk on every request). SaaS backend is stateful (holds zip in memory, flushes on write). The ConfigProvider abstraction handles both: `LocalConfigProvider` reads disk, `ForgeConfigProvider` reads/writes the in-memory zip.
 
@@ -535,7 +535,7 @@ Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, C
 
 ### Inch 5: Agent Deploy via Python SDK (DAB-compatible)
 
-Setup App generates `databricks.yml` + `app.yaml` from `.forge` config, uploads source files, deploys via Databricks Python SDK (`w.apps.create()`, `w.apps.deploy()`). DAB resource bindings preserved. No Go binary needed -- SDK handles it.
+Setup App generates `databricks.yml` + `app.yaml` from `.forge` config, uploads source files, deploys via Databricks Python SDK (`w.apps.create()`, `w.apps.deploy()`). DAB resource bindings preserved. No Go binary needed - SDK handles it.
 
 ### Inch 6: Agent App File Manifest
 
@@ -554,7 +554,7 @@ Position: after deploy. User configures, deploys, tests, THEN pushes to git.
 
 **Key insight: NO PAT entry needed.** Databricks already has Git Credentials configured per user (Settings > Developer > Git integration). The Setup App uses those stored credentials. User only provides the repo URL.
 
-**UI -- Setup step choices:**
+**UI - Setup step choices:**
 ```
 source control
   [1] push to GitHub
@@ -562,17 +562,17 @@ source control
   [3] skip
 ```
 
-**Configure phase -- user provides ONE field:**
+**Configure phase - user provides ONE field:**
 1. Repo URL: `https://github.com/user/my-agent.git`
 
 That's it. No PAT. No token. No OAuth. Databricks handles git auth via stored credentials.
 
 **Pre-check:** Setup App calls `w.git_credentials.list()`:
 - Credentials exist -> proceed (zero friction)
-- No credentials -> show: "Connect GitHub in Databricks Settings > Developer > Git integration" OR offer one-time PAT entry via `w.git_credentials.create(git_provider, git_username, personal_access_token)` -- stored by Databricks forever, never asked again.
+- No credentials -> show: "Connect GitHub in Databricks Settings > Developer > Git integration" OR offer one-time PAT entry via `w.git_credentials.create(git_provider, git_username, personal_access_token)` - stored by Databricks forever, never asked again.
 
-**Execute phase -- fully automated, SSE stream:**
-1. Create Databricks Git Folder linked to repo: `w.repos.create(url, provider="github")` -- uses stored git credentials
+**Execute phase - fully automated, SSE stream:**
+1. Create Databricks Git Folder linked to repo: `w.repos.create(url, provider="github")` - uses stored git credentials
 2. Write ALL generated project files into the Git Folder: `w.workspace.import_(path="/Repos/user/repo/file.py", content, format)` per file
 3. Submit one-shot Databricks job to commit + push:
    ```python
@@ -621,7 +621,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 ---
 
-## PART 8: Open Questions -- All Answered
+## PART 8: Open Questions - All Answered
 
 ### A. Setup App Deployment
 
@@ -639,7 +639,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 | # | Question | Answer | Status |
 |---|----------|--------|--------|
 | B1 | Config persistence strategy? | Zip archive in UC Volume. Backend holds zip in memory, flushes on every meaningful write (~200ms). Event-driven, not periodic. No `.env.local` in SaaS. | DECIDED |
-| B2 | Can DBX App set its own env vars at runtime? | Irrelevant -- `.forge` on UC Volume is the persistence, not app env vars. | N/A |
+| B2 | Can DBX App set its own env vars at runtime? | Irrelevant - `.forge` on UC Volume is the persistence, not app env vars. | N/A |
 | B3 | How to restore on restart? | Re-download zip from UC Volume into memory. Last flushed state restored. UI position resets (same as today). | DECIDED |
 | B4 | Mode A (hosted): user workspace credentials? | Databricks SSO. | DECIDED |
 
@@ -701,7 +701,7 @@ Save/load/switch `.forge` projects on UC Volume. Per-project schema isolation.
 
 ---
 
-## PART 8b: Local Runtime Dependencies -- The Hidden Inch
+## PART 8b: Local Runtime Dependencies - The Hidden Inch
 
 ### The Problem
 
@@ -719,20 +719,20 @@ This is not trivial. Let me trace every dependency.
 4. `databricks-sdk`, `mlflow`, `langchain`, `pyyaml`, `python-dotenv`, etc.
 
 **5 calls to `databricks` CLI** (the Go binary, NOT the Python package):
-- `databricks auth profiles` -- list CLI profiles
-- `databricks auth login` -- interactive OAuth login
-- `databricks database list-database-instances` -- list Lakebase instances
-- `databricks database get-database-instance` -- get Lakebase instance
-- `databricks apps get` -- check app status
+- `databricks auth profiles` - list CLI profiles
+- `databricks auth login` - interactive OAuth login
+- `databricks database list-database-instances` - list Lakebase instances
+- `databricks database get-database-instance` - get Lakebase instance
+- `databricks apps get` - check app status
 
 **2 calls to `bash`:**
-- `bash deploy/run_all_grants.sh` -- runs grant scripts
-- `bash deploy/deploy.sh` -- full deploy pipeline (which itself calls `databricks bundle deploy`)
+- `bash deploy/run_all_grants.sh` - runs grant scripts
+- `bash deploy/deploy.sh` - full deploy pipeline (which itself calls `databricks bundle deploy`)
 
 **Agent App startup (app.yaml) calls:**
-- `uv run python -c "from agent.start_server import main; main()"` -- needs uv + Python
-- Startup hook runs `npm install && npm run build:client` -- needs npm + Node.js
-- Then spawns `node app/server/dist/index.mjs` -- needs Node.js
+- `uv run python -c "from agent.start_server import main; main()"` - needs uv + Python
+- Startup hook runs `npm install && npm run build:client` - needs npm + Node.js
+- Then spawns `node app/server/dist/index.mjs` - needs Node.js
 
 ### What's Available in a Databricks App Runtime?
 
@@ -760,7 +760,7 @@ DBX Apps run in a container. What's in it?
 - Option A is cleanest. `uv` is pip-installable. `uv sync` creates the venv from `pyproject.toml`.
 - **BUT:** `uv sync` needs network access to download packages. DBX Apps have internet access? Usually yes.
 - **BUT:** `uv sync` takes time (30-60s). This happens on EVERY app restart. Not just first deploy.
-- Alternative: run `uv sync` once at deploy time, commit the `.venv/` to workspace files. Then `uv run` just uses the existing venv -- fast.
+- Alternative: run `uv sync` once at deploy time, commit the `.venv/` to workspace files. Then `uv run` just uses the existing venv - fast.
 
 **mm R.2: Python packages not installed**
 - Even if `uv` is installed, the venv needs to be created and populated
@@ -771,16 +771,16 @@ DBX Apps run in a container. What's in it?
 
 **mm R.3: Databricks CLI (Go binary) not available**
 - 5 direct calls to `databricks` CLI
-- `databricks auth profiles` -- used for listing CLI profiles in the Setup wizard
-- `databricks auth login` -- used for interactive OAuth
-- `databricks database *` -- Lakebase management
-- `databricks apps get` -- deploy status check
+- `databricks auth profiles` - used for listing CLI profiles in the Setup wizard
+- `databricks auth login` - used for interactive OAuth
+- `databricks database *` - Lakebase management
+- `databricks apps get` - deploy status check
 - The Go binary is NOT pip-installable. It's a standalone binary.
 - **In DBX App mode, do we even need the CLI?**
-  - `auth profiles` -- NO. In DBX App mode, auth comes from the SP. No CLI profiles.
-  - `auth login` -- NO. In DBX App mode, no interactive login needed.
-  - `database *` -- YES. But can be replaced with REST API calls.
-  - `apps get` -- YES. But can be replaced with REST API calls.
+  - `auth profiles` - NO. In DBX App mode, auth comes from the SP. No CLI profiles.
+  - `auth login` - NO. In DBX App mode, no interactive login needed.
+  - `database *` - YES. But can be replaced with REST API calls.
+  - `apps get` - YES. But can be replaced with REST API calls.
 - **Decision:** Replace all `databricks` CLI calls with REST API equivalents. This removes the Go binary dependency entirely.
 - Impact: 5 call sites in the backend. Each is a simple SDK/REST call.
 
@@ -790,7 +790,7 @@ DBX Apps run in a container. What's in it?
 - The Agent App is a SEPARATE DBX App from the Setup App
 - DBX Apps can be configured for Node.js OR Python. The Agent App needs BOTH.
 - Current `app.yaml` starts with `uv run python` which then spawns Node as a subprocess
-- **This already works today** -- the Agent App is already deployed as a DBX App this way
+- **This already works today** - the Agent App is already deployed as a DBX App this way
 - So Node.js IS available in the DBX App runtime (at least for the Agent App)
 - **Question:** Is it available for the Setup App too?
 - The Setup App is Node.js native. Its `app.yaml` would say `node visual/backend/index.js`. So the runtime must have Node.js. YES.
@@ -815,8 +815,8 @@ This means npm must be available at runtime. But the startup hook ALREADY SKIPS 
 **Solution: pre-build and include `dist/` in the deployment bundle.**
 
 Both dist directories already exist locally:
-- `app/client/dist/index.html` -- React chat frontend (pre-built)
-- `app/server/dist/index.mjs` -- Express server (pre-built)
+- `app/client/dist/index.html` - React chat frontend (pre-built)
+- `app/server/dist/index.mjs` - Express server (pre-built)
 
 **What must change:**
 1. Include `app/client/dist/` and `app/server/dist/` in the deployment bundle
@@ -827,15 +827,15 @@ Both dist directories already exist locally:
 
 **Result: both Setup App and Agent App need only Node.js + Python + pip. Zero build tools at runtime.**
 
-### Pre-built vs Built at Runtime -- Complete Picture
+### Pre-built vs Built at Runtime - Complete Picture
 
 | Piece | Pre-built? | Included in bundle? | Needs at runtime |
 |-------|-----------|-------------------|-----------------|
-| **Setup App frontend** (React) | YES -- `visual/frontend/dist/` | YES (committed) | Nothing |
-| **Setup App backend** (Node.js) | YES -- `node_modules/` committed | YES | Node.js only |
+| **Setup App frontend** (React) | YES - `visual/frontend/dist/` | YES (committed) | Nothing |
+| **Setup App backend** (Node.js) | YES - `node_modules/` committed | YES | Node.js only |
 | **Setup App Python scripts** | Source, no build | YES | Python + packages |
-| **Agent App frontend** (React chat) | YES -- `app/client/dist/` | **MUST INCLUDE** (change `.databricksignore`) | Nothing |
-| **Agent App server** (Express) | YES -- `app/server/dist/` | **MUST INCLUDE** | Node.js only |
+| **Agent App frontend** (React chat) | YES - `app/client/dist/` | **MUST INCLUDE** (change `.databricksignore`) | Nothing |
+| **Agent App server** (Express) | YES - `app/server/dist/` | **MUST INCLUDE** | Node.js only |
 | **Agent App agent** (Python) | Source, no build | YES | Python + packages |
 
 ### Lightest Runtime Footprint
@@ -843,13 +843,13 @@ Both dist directories already exist locally:
 | Dependency | Setup App | Agent App | Action |
 |------------|-----------|-----------|--------|
 | Node.js | YES (runs server) | YES (runs Express) | Available in DBX runtime |
-| npm | **NO** | **NO** (dist pre-built) | Not needed -- eliminate from runtime |
+| npm | **NO** | **NO** (dist pre-built) | Not needed - eliminate from runtime |
 | Python 3.x | YES (subprocess) | YES (main) | Available in DBX runtime |
 | uv | YES (41 calls) | YES (startup) | Available in DBX App runtime (confirmed by docs) |
 | Python packages | YES (via uv sync) | YES (via uv sync) | Install once at deploy/startup |
 | Node.js | YES (main process) | YES (subprocess) | Available in DBX runtime |
 | npm | NO (pre-built) | YES (build:client) | Available with Node.js |
-| databricks CLI (Go) | YES (5 calls) | NO | **REPLACE with REST API** -- removes dependency |
+| databricks CLI (Go) | YES (5 calls) | NO | **REPLACE with REST API** - removes dependency |
 | bash | YES (2 calls) | NO | Available in Linux container |
 | git | NO | NO | Not needed |
 
@@ -857,13 +857,13 @@ Both dist directories already exist locally:
 
 | Current Call | Where | REST API Replacement |
 |-------------|-------|---------------------|
-| `databricks auth profiles` | Backend: list profiles for host/model setup | **REMOVE** -- not needed in DBX App mode (no CLI profiles) |
-| `databricks auth login` | Backend: interactive OAuth | **REMOVE** -- not needed in DBX App mode (SP auth) |
+| `databricks auth profiles` | Backend: list profiles for host/model setup | **REMOVE** - not needed in DBX App mode (no CLI profiles) |
+| `databricks auth login` | Backend: interactive OAuth | **REMOVE** - not needed in DBX App mode (SP auth) |
 | `databricks database list-database-instances` | Backend: list Lakebase instances | `GET /api/2.0/database/instances` via SDK |
 | `databricks database get-database-instance` | Backend: test Lakebase | `GET /api/2.0/database/instances/{name}` via SDK |
 | `databricks apps get` | Backend: test deploy status | `GET /api/2.0/apps/{name}` via SDK |
 
-These 5 calls become Python SDK calls (WorkspaceClient). The backend already spawns Python for everything else -- same pattern.
+These 5 calls become Python SDK calls (WorkspaceClient). The backend already spawns Python for everything else - same pattern.
 
 **For local mode (C):** The CLI calls still work if the user has the CLI installed. The backend can try the REST API first, fall back to CLI. Or: just always use REST API in the backend, since it works in all modes.
 
@@ -877,8 +877,8 @@ command: ["bash", "-c", "uv sync && node visual/backend/index.js"]
 ```
 
 This:
-1. `uv sync` -- creates venv and installs Python deps (uv is pre-installed in DBX runtime). Slow first time (~2-3 min), fast on restart if `.venv` persisted.
-2. `node visual/backend/index.js` -- starts the Setup App server
+1. `uv sync` - creates venv and installs Python deps (uv is pre-installed in DBX runtime). Slow first time (~2-3 min), fast on restart if `.venv` persisted.
+2. `node visual/backend/index.js` - starts the Setup App server
 
 **Port:** Use `DATABRICKS_APP_PORT` (not `PORT`). Backend must respect: `const PORT = process.env.DATABRICKS_APP_PORT || process.env.VISUAL_PORT || 9000`
 
@@ -886,7 +886,7 @@ This:
 
 `uv sync` is slow on first run. Options to speed up:
 - **Option A:** Run `uv sync` at deploy time (before starting the app), persist `.venv/` in workspace files
-- **Option B:** Use `pip install -r requirements.txt` instead (no uv needed at all for Setup App -- only Python scripts need packages, not the Node server)
+- **Option B:** Use `pip install -r requirements.txt` instead (no uv needed at all for Setup App - only Python scripts need packages, not the Node server)
 
 
 Option B is simplest: `pip install -r requirements.txt && node visual/backend/index.js`
@@ -901,11 +901,11 @@ But then the backend still calls `uv run python` for subprocess spawning...
 - **Drop uv for DBX App mode:** Use system `pip install` + bare `python`. Simpler startup but different behavior between local and DBX App modes.
 - **Abstract it:** Backend calls a helper function `pythonCmd()` that returns `['uv', 'run', 'python']` locally or `['python']` in DBX App mode.
 
-The abstraction is the right answer. Same pattern as ConfigProvider -- detect mode, use appropriate command.
+The abstraction is the right answer. Same pattern as ConfigProvider - detect mode, use appropriate command.
 
 ---
 
-## PART 8c: Packaging & Distribution -- Millimeter Detail
+## PART 8c: Packaging & Distribution - Millimeter Detail
 
 ### Current State: What We're Shipping
 
@@ -921,12 +921,12 @@ Bloat to exclude from any distribution:
 | `.venv/` | 662MB | Python virtual environment. | Rebuilt at startup: `pip install -r requirements.txt` or `uv sync` (1-2 min first time). |
 | `app/client/node_modules/` | 100MB | Only needed to BUILD the React frontend. | Never. Pre-built `app/client/dist/` included in bundle instead. |
 | `app/server/node_modules/` | 18MB | Only needed to BUILD the Express server. | Never. Pre-built `app/server/dist/` included in bundle instead. |
-| `visual/frontend/node_modules/` | -- | Already gitignored. Only needed to dev the Setup App frontend. | Never. Pre-built `visual/frontend/dist/` included in bundle. |
+| `visual/frontend/node_modules/` | - | Already gitignored. Only needed to dev the Setup App frontend. | Never. Pre-built `visual/frontend/dist/` included in bundle. |
 | `__pycache__/` | ~1MB | Python bytecode cache. | Auto-created by Python on first import. Zero action needed. |
 | `.git/` | varies | Version control history. | Not needed at runtime. User can init git if they want CI/CD. |
 | `.DS_Store` | tiny | macOS filesystem metadata. | Never. Platform artifact. |
 
-**Key: `visual/backend/node_modules/` (8MB) is NOT excluded.** It IS included in the bundle -- the Setup App backend needs it to run.
+**Key: `visual/backend/node_modules/` (8MB) is NOT excluded.** It IS included in the bundle - the Setup App backend needs it to run.
 
 ### The Two-Runtime Problem
 
@@ -1089,7 +1089,7 @@ echo Starting BrickForge at http://localhost:9000
 node visual\backend\index.js
 ```
 
-**mm D1.6: BUT WAIT -- the backend calls `uv run python`, not `python`**
+**mm D1.6: BUT WAIT - the backend calls `uv run python`, not `python`**
 
 The `start.sh` installs deps with `pip`. But 41 subprocess calls in the backend use `uv run python`.
 If uv isn't installed, those fail.
@@ -1121,8 +1121,8 @@ cd brickforge-*
 ### Distribution Path 2: pip install brickforge + deploy-setup
 
 **Two capabilities in one package:**
-- `brickforge` -- run Setup App locally (needs Node.js)
-- `brickforge deploy-setup` -- deploy Setup App to user's DBX workspace
+- `brickforge` - run Setup App locally (needs Node.js)
+- `brickforge deploy-setup` - deploy Setup App to user's DBX workspace
 
 **mm D2.1: What would the pip package look like?**
 
@@ -1151,7 +1151,7 @@ brickforge = [
 **mm D2.2: Node.js prereq**
 
 pip can't install Node.js. The user needs it installed separately for `brickforge` (local mode).
-For `brickforge deploy-setup` (deploys to DBX), Node.js is NOT needed on the user's machine -- it's in the DBX App runtime.
+For `brickforge deploy-setup` (deploys to DBX), Node.js is NOT needed on the user's machine - it's in the DBX App runtime.
 
 So: `pip install brickforge && brickforge deploy-setup` works with ONLY Python. No Node.js needed for SaaS deploy.
 `pip install brickforge && brickforge` (local mode) needs Node.js. `start.sh` checks and errors clearly.
@@ -1164,12 +1164,12 @@ So: `pip install brickforge && brickforge deploy-setup` works with ONLY Python. 
 2. Create account at pypi.org, get API token
 3. Build: `python -m build` (creates `dist/brickforge-1.0.0.tar.gz`)
 4. Upload: `twine upload dist/*`
-5. No approval process -- upload and it's live immediately
+5. No approval process - upload and it's live immediately
 6. Then anyone can: `pip install brickforge`
 
 **mm D2.4: deploy-setup without pip install**
 
-Also works standalone -- no pip needed:
+Also works standalone - no pip needed:
 ```bash
 python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/scripts/deploy-setup.py)"
 ```
@@ -1183,7 +1183,7 @@ python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main
 5. Wait for app to start
 6. Print URL
 
-**Decision:** pip install is a STRETCH GOAL. GitHub Release first. If demand exists, add pip later. deploy-setup works standalone regardless.
+**Decision:** pip install is a PRIMARY DISTRIBUTION PATH alongside GitHub Release. Both supported.
 
 ### Windows Compatibility
 
@@ -1191,15 +1191,15 @@ python -c "$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main
 
 | Script | What it does | Python replacement |
 |--------|-------------|-------------------|
-| `deploy/deploy.sh` | Full DAB deploy pipeline | Being replaced with REST API (`deploy_via_api.py`) -- Part 8b |
+| `deploy/deploy.sh` | Full DAB deploy pipeline | Being replaced with REST API (`deploy_via_api.py`) - Part 8b |
 | `deploy/run_all_grants.sh` | Calls 5 Python grant scripts | Trivial: `run_all_grants.py` that calls them in sequence |
 
 After these two replacements, ZERO bash dependency. Works on Windows natively.
 
 **mm W.2: Path separators**
 
-All Python code uses `pathlib.Path` or `os.path` -- cross-platform by default.
-The Node.js backend uses `path.resolve()` -- cross-platform.
+All Python code uses `pathlib.Path` or `os.path` - cross-platform by default.
+The Node.js backend uses `path.resolve()` - cross-platform.
 No hardcoded `/` path separators in critical code.
 
 **mm W.3: The uv question on Windows**
@@ -1209,8 +1209,8 @@ No hardcoded `/` path separators in critical code.
 ### What NOT to Do
 
 - Don't publish to npm (Python bundling nightmare)
-- Don't build Electron/Tauri (desktop wrapper for a web server -- wrong paradigm)
-- Don't build platform installers (MSI, DMG, deb -- maintenance hell)
+- Don't build Electron/Tauri (desktop wrapper for a web server - wrong paradigm)
+- Don't build platform installers (MSI, DMG, deb - maintenance hell)
 - Don't build Homebrew formula (Mac-only, another package to maintain)
 - Don't build snap/flatpak (Linux-only, containerization overhead)
 - Don't build a custom update mechanism (just release new versions on GitHub)
@@ -1236,7 +1236,7 @@ No hardcoded `/` path separators in critical code.
 
 ---
 
-## PART 10: Execution Plan -- Parallelization
+## PART 10: Execution Plan - Parallelization
 
 ### Dependency Graph
 
@@ -1289,17 +1289,17 @@ After A+B+C converge:
 
 ### Recommended Execution
 
-**Wave 1 -- sequenced to avoid merge conflicts in `index.js`:**
+**Wave 1 - sequenced to avoid merge conflicts in `index.js`:**
 
 **Step 1 (2 min, do first):**
-- [ ] Track A: Inch 1+2 -- Setup App `app.yaml` (new file), port fix (1 line in `index.js`)
+- [ ] Track A: Inch 1+2 - Setup App `app.yaml` (new file), port fix (1 line in `index.js`)
 - Commit. Tiny change, no conflict risk.
 
 **Step 2 (parallel, via `isolation: "worktree"`):**
-- [ ] Track B: Inch 4 -- ConfigProvider + 36 call sites in `index.js` (starts from Track A's commit, no overlap -- A changed PORT line, B changes function calls)
-- [ ] Track C: Inch 6 + `tool_factory.py` -- file manifest doc + new Python file (touches zero of B's files)
+- [ ] Track B: Inch 4 - ConfigProvider + 36 call sites in `index.js` (starts from Track A's commit, no overlap - A changed PORT line, B changes function calls)
+- [ ] Track C: Inch 6 + `tool_factory.py` - file manifest doc + new Python file (touches zero of B's files)
 
-**Why this order:** A and B both touch `index.js`. A is 1 line (PORT). B is 36 call site replacements. Do A first (trivial), commit. Then B and C in parallel via worktrees -- B edits `index.js` call sites, C writes new Python files. Zero overlap.
+**Why this order:** A and B both touch `index.js`. A is 1 line (PORT). B is 36 call site replacements. Do A first (trivial), commit. Then B and C in parallel via worktrees - B edits `index.js` call sites, C writes new Python files. Zero overlap.
 
 **Wave 1 checkpoint:** Deploy Setup App (Inch 3). Test everything works.
 
@@ -1318,10 +1318,10 @@ After A+B+C converge:
 
 | Track | Inches | Scope | Key Files | Effort |
 |-------|--------|-------|-----------|--------|
-| A | 1-3 | Setup App app.yaml, port, first deploy | `visual/app.yaml` (new), `index.js` (1 line), `.databricksignore` | Small -- mostly config |
-| B | 4 | ConfigProvider + 36 call site refactor | `config-provider.js` (new), `index.js` (36 edits) | Medium -- refactor |
-| C | 6 + tool_factory | Manifest + SQL/action tool generation | `tool_factory.py` (new), doc | Medium -- new code |
-| Merge | 5+7 | Agent deploy + config injection | `deploy_via_sdk.py` (new), template generation | Large -- core SaaS logic |
+| A | 1-3 | Setup App app.yaml, port, first deploy | `visual/app.yaml` (new), `index.js` (1 line), `.databricksignore` | Small - mostly config |
+| B | 4 | ConfigProvider + 36 call site refactor | `config-provider.js` (new), `index.js` (36 edits) | Medium - refactor |
+| C | 6 + tool_factory | Manifest + SQL/action tool generation | `tool_factory.py` (new), doc | Medium - new code |
+| Merge | 5+7 | Agent deploy + config injection | `deploy_via_sdk.py` (new), template generation | Large - core SaaS logic |
 | Post | 8+9 | Git + multi-project | Git API integration, project manager UI | Medium each |
 
 ### Session Planning
@@ -1376,456 +1376,171 @@ Parallelization within a session uses Claude Code's Agent tool with `isolation: 
 
 ---
 
-## IMPLEMENTATION LOGBOOK (append-only, never rewrite)
-
-### 2026-05-15 16:20 -- Wave 1 Track A
-- Created `setup-app.yaml`: `command: ["bash", "-c", "uv sync && node visual/backend/index.js"]`
-- Fixed port in `visual/backend/index.js`: `DATABRICKS_APP_PORT || VISUAL_PORT || 9000`
-- Committed: `c867dfc`
-
-### 2026-05-15 16:22 -- Wave 1 Tracks B+C launched in parallel worktrees
-- Track B (worktree `agent-ab9e1e22`): ConfigProvider + 20 call site refactor in `index.js`
-- Track C (worktree `agent-ade58701`): `tools/tool_factory.py` + `doc/plan/agent-app-manifest.md`
-
-### 2026-05-15 16:25 -- Track C completed
-- `tools/tool_factory.py` created: `create_sql_read_tool()`, `create_action_tool()`, `discover_forge_tools()`
-- `doc/plan/agent-app-manifest.md` created: Agent App vs Setup App file split
-- Committed on worktree: `0f032a8`
-
-### 2026-05-15 16:28 -- Track B completed
-- `visual/backend/lib/config-provider.js` created: ConfigProvider interface + LocalConfigProvider
-- 20 call sites in `index.js` refactored to use `config.xxx()`
-- Committed on worktree: `b60c9b3`
-
-### 2026-05-15 16:30 -- Worktree merge
-- Cherry-picked `b60c9b3` (Track B) onto `forge-saas-databricks`: `e65cb27`
-- Cherry-picked `0f032a8` (Track C) onto `forge-saas-databricks`: `c739e4e`
-- Auto-merged `index.js` (Track A port fix + Track B ConfigProvider) -- no conflicts
-- Cleaned up worktrees and branches
-
-### 2026-05-15 16:32 -- Inch 3: First deploy attempt
-- Generated fresh PAT from CLI profile `fevm-agent-forge`: `dapie983a64c73c...`
-- Updated `.env.local` with new token
-- Created app: `POST /api/2.0/apps` -> `brickforge-setup` created
-- URL assigned: `https://brickforge-setup-7474654358736177.aws.databricksapps.com`
-
-### 2026-05-15 16:34 -- Upload source to workspace
-- Created upload script `/tmp/upload_setup_app_v2.py`
-- Created 79 directories via `w.workspace.mkdirs()`
-- Uploaded 787 files via `w.workspace.import_()`, 0 errors
-- Destination: `/Workspace/Users/mehdi.lamrani@databricks.com/brickforge-setup`
-
-### 2026-05-15 16:36 -- Deploy triggered
-- `POST /api/2.0/apps/brickforge-setup/deployments` -> `01f1506adbd314baa4b8fb45c22736fd`
-- Status: IN_PROGRESS -> Installing packages -> Starting app
-
-### 2026-05-15 16:39 -- Deploy SUCCEEDED then CRASHED
-- Deployment status: SUCCEEDED at 14:39:07
-- App status: CRASHED at 14:39:09 (2 seconds later)
-- Startup command executed: `bash -c uv sync && node visual/backend/index.js`
-- `uv sync` succeeded (packages installed)
-- Node.js started then crashed immediately
-
-### 2026-05-15 16:40 -- Crash diagnosis
-- Checked logs via `databricks apps logs brickforge-setup`
-- **Root cause: `Error: Cannot find module 'dotenv'`**
-- The upload script excluded ALL `node_modules/` directories
-- `visual/backend/node_modules/` (8MB, committed, required by the Setup App) was excluded
-- Node.js v22.16.0 confirmed available in DBX App runtime
-
-### 2026-05-15 16:41 -- Root cause identified
-- **Bug location:** Upload script `/tmp/upload_setup_app_v2.py` line: `EXCLUDE = {"node_modules", ...}`
-- **Fix needed:** Exclude `node_modules` EXCEPT `visual/backend/node_modules/` which must be uploaded
-- **Principle:** Fix the automated process, not the instance. Re-run after fix.
-
-### 2026-05-15 16:50 -- Size analysis before fix
-- Uploaded 787 files, ~175MB. Actual need: ~150 files, ~13MB.
-- **156MB trash:** `app/client/node_modules/` (100MB), `app/server/node_modules/` (18MB), `app/packages/` (38MB)
-- None of these are needed: pre-built `dist/` is included for both client and server.
-
-### 2026-05-15 17:00 -- Upload script v3 (fixed exclusions)
-- Fixed to include `visual/backend/node_modules/` (8MB required)
-- Result: 1687 files uploaded. WORSE than before (787). node_modules alone = 1088 files.
-- The "10x reduction" was wrong. Removed 156MB of trash but added 1088 node_modules files.
-
-### 2026-05-15 17:10 -- Rethink: why upload file by file at all?
-- The upload script calls `w.workspace.import_()` per file. 594 files = 594 API calls. Slow.
-- `visual/backend/node_modules/` = 1088 files for 4 actual deps (dotenv, express, multer, js-yaml).
-- **Better: `npm ci` at startup** instead of uploading node_modules. 2 files (package.json + lock) instead of 1088.
-- **Even better: zip the whole app** (594 files -> 5.3MB zip, 1 upload, unzip at startup).
-
-### 2026-05-15 17:15 -- Reality check: USE THE CLI
-- `databricks apps deploy brickforge-setup --source-code-path .` does everything in one command.
-- CLI handles file upload, deployment creation, waiting. No custom upload script needed.
-- **I reinvented the wheel** with a 100-line upload script doing 594 individual API calls.
-- **Fix: use the CLI for Setup App deployment. It's installed, the profile works.**
-
-### Decision split:
-- **Setup App deploy (from terminal):** `databricks apps deploy` CLI. One command.
-- **Agent App deploy (from Setup App, Inch 5):** SDK + zip upload. One API call + unzip at startup. No CLI available inside DBX App.
-- **Startup command:** `npm ci` for backend deps instead of uploading node_modules.
-
-### 2026-05-15 17:50 -- Second deploy via CLI
-- CLI deploy succeeded. App status: RUNNING. Logs show `uv sync` + `node` started.
-- BUT: "App Not Available" in browser.
-- **Root cause:** `setup-app.yaml` hardcoded `DATABRICKS_APP_PORT=9000`, overriding platform-injected port.
-- **Fix:** removed hardcoded env var. Let platform inject `DATABRICKS_APP_PORT`. Backend reads it.
-- Redeploying with fix.
-
-### 2026-05-15 18:00 -- Strategy correction
-- Deploying early was wrong. Build and test locally first, deploy when ready.
-- Everything except 3 trivial DBX-runtime checks works locally.
-- Proceeding with local development: ForgeConfigProvider, agent deploy, .forge injection.
-- Will deploy once when all code is ready.
-
-### 2026-05-15 18:10 -- Inch 4b: ForgeConfigProvider implemented
-- Added `adm-zip` dep to `visual/backend/` (zero transitive deps)
-- Wrote `ForgeConfigProvider` class (~200 lines):
-  - In-memory zip with `config.env` (same key=value format as .env.local)
-  - Event-driven flush to UC Volume via Files API (`PUT /api/2.0/fs/files/...`)
-  - Bootstrap phase (before schema set): config in memory only
-  - Persisted phase (after schema set): derives Volume path, flushes on every write
-  - File management: `getFile()`, `setFile()`, `deleteFile()`, `listFiles()` for non-config zip entries
-  - Auto-creates UC Volume if needed (`CREATE VOLUME IF NOT EXISTS`)
-- All in-memory tests passing: list, get, set, toggle, disable, listByPrefix, deleteKey, file ops
-- Flush errors expected in local test (no real DATABRICKS_HOST) -- will work in DBX App runtime
-- Committed: `dd6e713`
-
-### 2026-05-15 18:15 -- Setup App verified locally with ConfigProvider refactor
-- `node visual/backend/index.js` starts, health OK, all 19 setup steps reporting correctly
-- LocalConfigProvider wraps existing functions identically -- zero behavior change confirmed
-
-### 2026-05-15 18:30 -- Inch 5+7: Agent deploy script
-- Created `deploy/deploy_agent_app.py`:
-  - `generate_app_yaml(config)` -- injects all PROJECT_* env vars from config dict
-  - `generate_databricks_yml(config)` -- warehouse, genie resources, endpoint resources
-  - `build_agent_bundle(config)` -- 4.7MB zip, 547 files (agent, app/dist, tools, data, conf + generated configs)
-  - `deploy(config)` -- upload zip to workspace, unzip at startup via start.sh, create/deploy app via SDK
-- Backend wired: `exec-deploy-agent` action in index.js writes config JSON, calls deploy script
-- Local test: bundle generates correctly, app.yaml has all env vars, databricks.yml has resources
-- Committed: `587e3da`
-
-### 2026-05-15 18:45 -- Inch 8: Git push script
-- Created `deploy/git_push.py`:
-  - `check_git_credentials()` -- verify Databricks has GitHub connected
-  - `create_git_folder()` -- create Git Folder linked to user's repo via `w.repos.create()`
-  - `upload_files_to_git_folder()` -- extract bundle zip, write files into Git Folder via workspace API
-  - `commit_and_push()` -- submit one-shot Databricks job for `git add . && git commit && git push`
-  - Uses Databricks-stored git credentials, zero PAT from user
-- Backend wired: `exec-git-push` action with `repo_url` param
-- Committed: `8db1e27`
-
-### 2026-05-15 19:00 -- Packaging scripts
-- Created `build-release.sh`: include-only rsync, 7.1MB / 1767 files. First attempt was 160MB (copied everything).
-- Created `start.sh`: checks Node.js + Python, installs deps (uv or pip), starts server.
-- Committed: `0bf61c9`, fixed: `b453e86`
-
-### 2026-05-15 19:20 -- Inch 9: Multi-project
-- Created `visual/backend/lib/project-manager.js`:
-  - `listProjects(schema)` -- scan UC Volume for `.forge.zip` files via Files API
-  - `loadProject(schema, name)` -- download zip from Volume
-  - `saveProject(schema, name, zipBuffer)` -- upload zip to Volume
-  - `deleteProject(schema, name)` -- remove zip from Volume
-  - `_ensureVolume(schema)` -- create stash directory if needed
-- Backend endpoints wired: `GET/POST/DELETE /api/projects`
-- Local test: endpoints respond correctly
-- Committed: `9e317ca`
-
-### 2026-05-15 19:35 -- Project selector frontend UI
-- Added project selector dropdown in title bar (next to BrickForge logo)
-- FolderOpen icon + current project name as button
-- Dropdown shows: project list from UC Volume, size, delete button (hover)
-- Create new project: inline input + Create button
-- Local mode fallback shown at bottom
-- Click-outside-to-close behavior
-- Frontend rebuilt
-- Committed: `b9e1178`
-
-### 2026-05-15 20:00 -- Plan review + gap closure
-- Reviewed full plan vs implementation. Found 12 gaps.
-- Fixed 5 gaps in one commit (`4acd595`):
-  - Gap 1 (HIGH): ForgeConfigProvider wired at startup with mode detection (FORGE_MODE or DATABRICKS_APP_PORT)
-  - Gap 2 (MEDIUM): tool_factory.py integrated into agent.py (discover_forge_tools() in init_agent)
-  - Gap 4 (LOW): Git setup step added to frontend (StepId, setupSteps, icon, subLabel, STEP_ENV_KEYS)
-  - Gap 5 (MEDIUM): 3 Databricks CLI calls replaced with Python SDK (lakebase list/test, deploy test)
-- Remaining gaps: pythonCmd() abstraction (LOW), stash verification UI (MEDIUM), start.bat (LOW), deploy-setup.py (MEDIUM), 16 remaining direct call sites (LOW), app.yaml/databricks.yml templates in stash (LOW)
-
-### 2026-05-15 -- Gap closure wave 2 (all except #9 start.bat)
-- **Gap 11 (16 direct call sites):** Replaced all 9 remaining `parseEnvFile()`, `writeEnvValues()`, `parseMultiInstanceKeys()` calls in `index.js` with `config.list()`, `config.setMany()`, `config.listByPrefix()`, `config.toEnvDict()`. Zero direct calls remain outside function definitions and LocalConfigProvider constructor.
-- **Gap 6 (pythonCmd abstraction):** Added `const PY = { cmd, pre }` helper after FORGE_MODE detection. Replaced all 40+ JS-level `'uv', ['run', 'python', ...]` calls with `PY.cmd, [...PY.pre, ...]` across `runCommand()`, `execFile()`, `spawn()`, `sseGenRunner()`. Python-internal subprocess calls unchanged (uv available in both modes).
-- **Gap 12 (bundle templates in stash):** Created `stash/airops/app.yaml` and `stash/airops/databricks.yml` reference templates with placeholder vars.
-- **Gap 3 (stash health endpoint):** Added `GET /api/stash/health` -- scans `stash/` directory, parses each `.forge` manifest, verifies all referenced files (DDL, seed CSV, tools, prompts, configs) exist, checks expected dirs (tools/, data/, conf/) and optional bundle templates.
-- **Gap 10 (deploy-setup.py):** Created `deploy/deploy_setup_app.py` -- one-command Setup App deployment via Databricks CLI. Pre-flight checks (CLI auth, frontend built, app.yaml present), create-or-update app, deploy source, retrieve URL.
-- **Gap 8 (data provisioning from .forge):** Added `FORGE_STASH_DIR` env var support to `create_all_assets.py`, `create_all_functions.py`, `create_all_procedures.py`, and inline `exec-tables` script. When set, data paths resolve to stash directory instead of `data/default/`.
-- All changes syntax-verified: `node -c visual/backend/index.js` passes clean.
-
-### 2026-05-15 -- Full plan audit + last gap
-- Scanned all 11 parts of saas-plan.md against codebase. All items verified: tool_factory, agent.py integration, deploy scripts, project-manager, frontend project selector, ConfigProvider, setup-app.yaml, start scripts, git step, stash completeness, ForgeConfigProvider methods.
-- **One gap found:** `deploy/grant/run_all_grants.py` (Python replacement for bash script) was missing.
-- Created `deploy/grant/run_all_grants.py`: runs all 7 grant steps (tables, functions, warehouse, endpoints, genie, lakebase, secrets) via subprocess. Step 7 uses SDK (`w.secrets.put_acl`) instead of CLI (`databricks secrets put-acl`).
-- Updated `index.js` exec-grants action: `bash deploy/run_all_grants.sh` -> `PY.cmd [...PY.pre, 'deploy/grant/run_all_grants.py']`. One fewer bash dependency.
-- Remaining bash calls in backend: `deploy/deploy.sh` (exec-deploy, exec-deploy-dry) -- kept as local-mode fallback, SDK deploy (`exec-deploy-agent`) exists alongside.
-
-### 2026-05-15 -- The npm/pip Deploy Saga (chronological)
-
-**Context:** App was working. Redeploying with new code (gap closures, stash health UI, PY abstraction).
-
-**Deploy 1 -- `01f1508205551f7e` (17:17)**
-- Uploaded 188 files to workspace via SDK. Upload script had `node_modules` in EXCLUDE_PATTERNS.
-- SDK reported SUCCEEDED + ACTIVE. But browser showed "App Not Available".
-- **Cause:** `npm ci` ran without local `node_modules` (excluded from upload), tried to download from `npm-proxy.dev.databricks.com`. Timed out after 8 minutes (ETIMEDOUT on `util-deprecate-1.0.2.tgz`). Node never started. The `&&` chain stopped silently.
-- **Misleading signal:** SDK said SUCCEEDED because deployment = "source code copied". The app command crash happened AFTER the deployment was marked successful.
-
-**Deploy 2 -- `.npmrc` with cloud proxy (18:22)**
-- Created `visual/backend/.npmrc` with `registry=https://npm-proxy.cloud.databricks.com/`.
-- SDK reported SUCCEEDED. But `npm ci` returned corrupted tarballs: `npm warn tarball data for supports-color ... seems to be corrupted. Trying again.` Retried for minutes, never recovered.
-- **Lesson:** Both Databricks npm proxies are unreliable:
-  - `npm-proxy.dev.databricks.com` -- times out (ETIMEDOUT)
-  - `npm-proxy.cloud.databricks.com` -- returns corrupted tarballs
-
-**Deploy 3 -- `.npmrc` with public registry (19:09)**
-- Changed `.npmrc` to `registry=https://registry.npmjs.org/`.
-- **But:** `.npmrc` dotfile was NOT included in the workspace snapshot. npm still hit `npm-proxy.dev.databricks.com`. Same ETIMEDOUT.
-- **Lesson:** Databricks workspace snapshots skip dotfiles.
-
-**Deploy 4 -- `--registry` CLI flag (19:38)**
-- Changed `app.yaml` command to `npm ci --registry https://registry.npmjs.org/`.
-- **But:** npm IGNORED the `--registry` flag. Still hit `npm-proxy.dev.databricks.com`. Same ETIMEDOUT.
-- **Lesson:** Databricks App runtime has a system-level npm proxy config (likely `~/.npmrc` or env var) that overrides both `.npmrc` project files and `--registry` CLI flags. Cannot be bypassed.
-
-**pip ERROR discovered in parallel**
-- Platform BUILD phase auto-ran `pip install -r requirements.txt` (because file existed in source).
-- 12 dependency conflicts with pre-installed runtime packages (databricks-sql-connector, dash, streamlit, gradio need older versions of pandas, pyarrow, flask, pillow, protobuf, etc.).
-- pip printed `ERROR:` -- initially dismissed as "just a warning". Wrong. It broke the environment.
-- Then `uv sync` ran and **uninstalled 86 packages** trying to reconcile.
-- **Fix:** Deleted `requirements.txt` from workspace AND from git. `uv sync` from `pyproject.toml` handles all Python deps in an isolated `.venv/`. No conflict with pre-installed packages.
-- **Lesson:** When the log says ERROR, it's an error. Don't dismiss.
-
-**Deploy 5 -- instrumented command, no npm ci (20:02)**
-- Added step markers `[1/2] uv sync...`, `[2/2] starting node...` to `app.yaml` for visibility.
-- Removed `npm ci` entirely (deps are all pure JS, no native binaries needed).
-- Node crashed: `Error: Cannot find module 'adm-zip'`.
-- **Cause:** `adm-zip` was added to `package.json` for ForgeConfigProvider but never committed to git. Previous deploys installed it via `npm ci`. Without `npm ci`, it's missing.
-
-**Deploy 6 -- adm-zip uploaded manually (20:24)**
-- Uploaded 19 `adm-zip` files to workspace via SDK.
-- Deployed with `app.yaml`: `uv sync && node visual/backend/index.js` (no npm ci).
-- **Result: App started successfully. 502 gone. Working.**
-
-**What finally worked:**
-1. Delete `requirements.txt` (stops platform BUILD phase pip conflicts)
-2. `uv sync` for Python deps (isolated `.venv/`, no conflicts with pre-installed packages)
-3. No `npm ci` (Databricks npm proxy cannot be bypassed, all deps are pure JS anyway)
-4. `node_modules/` uploaded as source (including `adm-zip` which was missing from git)
-5. Final `app.yaml`: `command: ["bash", "-c", "uv sync && node visual/backend/index.js"]`
-
-**Key learnings for DBX App deployments:**
-- Deployment SUCCEEDED != app is running. The status only covers source code copy, not app startup.
-- Databricks npm proxy (`npm-proxy.dev.databricks.com`) is baked into the runtime. Cannot be overridden by `.npmrc`, `--registry`, or any config. It times out and returns corrupted data.
-- Dotfiles (`.npmrc`) are excluded from workspace snapshots.
-- `pip install -r requirements.txt` runs automatically in BUILD phase if the file exists. Conflicts with pre-installed packages. Use `uv sync` instead (isolated venv).
-- Always pull actual logs with `databricks apps logs <name> -p <profile>`. SDK status is misleading.
-- Never stop app compute (`w.apps.stop()`). Just create new deployments.
-
-### 2026-05-15 -- Deploy footprint optimization
-
-Every DBX App deployment snapshots the entire workspace source path file-by-file. 1000+ files = 6 min deploy. Fewer files = faster deploys.
-
-**Setup App -- node_modules tar.gz:**
-- Pruned devDependencies (nodemon): 1107 -> 785 files
-- Stripped docs, tests, .github, fsevents, source maps: 785 -> 473 files
-- Tar.gz'd: 3.4MB / 473 files -> 669KB / 1 file
-- Startup unzips in ~2s: `tar xzf node_modules.tar.gz`
-- Purged all other node_modules locally (935MB freed): app/, app/client/, app/server/, visual/frontend/ -- none needed at runtime (pre-built dist/ dirs)
-
-**Agent App -- dist tar.gz:**
-- `app/client/dist/` (React chat UI): 16MB / 471 files -> 4.1MB tar.gz
-- `app/server/dist/` (Express server): 2.2MB / ~30 files -> 526KB tar.gz
-- `deploy_agent_app.py` updated: uses pre-built tar.gz if present, falls back to on-the-fly compression
-- Startup script unpacks both before starting: `tar xzf dist.tar.gz` per dir (~2s)
-- `requirements.txt` removed from agent bundle (uv sync handles it)
-
-**Total footprint reduction:**
-
-| Component | Before | After |
-|-----------|--------|-------|
-| Setup App node_modules | 7.7MB / 1107 files | 669KB / 1 file |
-| Agent App dist dirs | 18.2MB / ~500 files | 4.6MB / 2 files |
-| Combined | 25.9MB / ~1600 files | 5.3MB / 3 files |
-
-Expected deploy time improvement: ~6 min -> ~1-2 min (snapshot of 3 files vs 1600).
-
-### Setup App UI -- Invocation Map (SDK / REST / CLI)
-
-Every backend action invoked by the Setup App UI, classified by what it calls under the hood and whether it works in deployed (DBX App) mode.
-
-**Legend:** SDK = Python `WorkspaceClient()`, REST = raw `urllib.request`, CLI = `databricks` Go binary, PY = Python script via subprocess
-
-#### Host step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| keep current | read config | Config | YES |
-| use existing CLI profile | `databricks auth profiles` | CLI | NO -- CLI not installed |
-| set up new workspace | `databricks auth login --host` (opens browser) | CLI | NO -- CLI not installed, no browser |
-| enter manually | save to config | Config | YES |
-
-#### Auth step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| keep current | read config | Config | YES |
-| generate 7-day PAT | Python script creates PAT via SDK | SDK | YES (if host configured) |
-| enter token manually | save to config | Config | YES |
-
-#### Warehouse step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| keep current | read config | Config | YES |
-| pick from workspace | `w.warehouses.list()` | SDK | YES |
-| enter id manually | save to config | Config | YES |
-
-#### Schema step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| pick existing catalog | `w.catalogs.list()` | SDK | YES |
-| keep current | read config | Config | YES |
-| enter manually | save to config | Config | YES |
-
-#### Tables step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| provision tables | `create_catalog_schema.py` + `run_sql.py` per table | PY+SDK | YES |
-| keep current | noop | Config | YES |
-
-#### Functions step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| create all | `create_all_functions.py` + `create_all_procedures.py` | PY+SDK | YES |
-| keep current | noop | Config | YES |
-
-#### Model endpoint step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| same workspace | comment out FM-specific keys | Config | YES |
-| use existing profile | `databricks auth profiles` + auto-PAT | CLI+SDK | NO -- CLI part fails |
-| set up new workspace | `databricks auth login` | CLI | NO |
-| keep current | read config | Config | YES |
-| enter manually | save to config | Config | YES |
-
-#### Prompt step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| generate from domain | `generate_prompts.py --mode=generate` | PY (LLM call) | YES |
-| view / edit prompts | read/write `conf/prompt/` files | Filesystem | YES |
-| keep current | noop | Config | YES |
-
-#### Genie step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| pick existing space | `w.genie.list_spaces()` | SDK | YES |
-| create new room | `create_genie_space.py` | PY+SDK | YES |
-| keep current | read config | Config | YES |
-| enter id manually | save to config | Config | YES |
-
-#### KA step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| provision from pdfs | volume upload + `create_kas_from_yml.py` | PY+SDK | YES |
-| keep current | read config | Config | YES |
-| enter id manually | save to config | Config | YES |
-
-#### Vector Search step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| keep current | read config | Config | YES |
-| enter index path | save to config | Config | YES |
-
-#### MCP / API / A2A steps
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| add server/connection/agent | save to config | Config | YES |
-| keep current | read config | Config | YES |
-
-#### Features step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| keep current | toggle config keys | Config | YES |
-
-#### Lakebase step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| pick existing | `w.database.list_database_instances()` | SDK | YES |
-| create instance | `create_lakebase.py` | PY+SDK | YES |
-| keep current | read config | Config | YES |
-| enter name manually | save to config | Config | YES |
-
-#### MLflow step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| create new experiment | `create_mlflow_experiment.py` | PY+SDK | YES |
-| keep current | read config | Config | YES |
-| enter id manually | save to config | Config | YES |
-
-#### Grants step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| run grant script | `run_all_grants.py` (7 steps) | PY+SDK | YES |
-| view issues | read config | Config | YES |
-
-#### Deploy step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| deploy now | `deploy.sh` (DAB bundle) | Bash+CLI | NO -- needs `databricks` CLI |
-| dry run | `deploy.sh --dry-run` | Bash+CLI | NO |
-| deploy agent (SDK) | `deploy_agent_app.py` | PY+SDK | YES |
-| set app name | save to config | Config | YES |
-
-#### Git step
-
-| UI Action | Backend | Method | Works deployed? |
-|-----------|---------|--------|-----------------|
-| push to GitHub/GitLab | `git_push.py` (Git Folders API) | PY+SDK | YES |
-| skip | noop | - | YES |
-
-#### Test endpoints (per step)
-
-| Step | Method | Works deployed? |
-|------|--------|-----------------|
-| host | REST (`/api/2.0/preview/scim/v2/Me`) | YES |
-| auth | REST (SCIM with token) | YES |
-| warehouse | SDK (`w.warehouses.get()`) | YES |
-| schema | SDK (`w.schemas.get()`) | YES |
-| model | REST (POST to endpoint) | YES |
-| genie | SDK (`w.genie.get_space()`) | YES |
-| ka | SDK (`w.serving_endpoints.get()`) | YES |
-| mlflow | SDK (`w.experiments.get_experiment()`) | YES |
-| lakebase | SDK (`w.database.get_database_instance()`) | YES |
-| deploy | SDK (`w.apps.get()`) | YES |
-
-#### Summary -- what breaks on deployed
-
-| Step | Broken action | Method | Fix |
-|------|--------------|--------|-----|
-| host | "use existing CLI profile" | CLI (`databricks auth profiles`) | Hide in FORGE_MODE, or replace with SDK workspace discovery |
-| host | "set up new workspace" | CLI (`databricks auth login`) | Hide in FORGE_MODE, use manual entry |
-| model | "use existing profile" | CLI | Same -- hide or replace |
-| model | "set up new workspace" | CLI | Same |
-| deploy | "deploy now" / "dry run" | Bash + CLI (`deploy.sh`) | Hide in FORGE_MODE, use SDK deploy (`deploy_agent_app.py`) |
-
-**5 broken actions out of ~50 total. All caused by CLI dependency. All fixable by hiding in FORGE_MODE or replacing with SDK equivalents.**
+## IMPLEMENTATION LOGBOOK
+
+Moved to [implementation-logbook.md](implementation-logbook.md) to keep this plan document focused.
+
+## PART 12: Runtime Modes - Comprehensive Reference (2026-05-21)
+
+### MODE 1: LOCAL (git clone)
+
+**How:** `git clone` + `./start.sh`
+
+| Category | Detail |
+|----------|--------|
+| **User installs** | Python 3.11+, Node.js, uv, git |
+| **Build tools needed** | npm (first run: `npm ci`), uv (`uv sync`) |
+| **Code location** | Cloned repo on user's disk |
+| **Entry point** | `node visual/backend/index.js` |
+| **Port** | 9000 |
+| **FORGE_MODE** | false |
+| **ConfigProvider** | LocalConfigProvider |
+| **Config storage** | `.env.local` file in repo root |
+| **Stash storage** | `stash/` directory in repo |
+| **Python subprocess** | `uv run python` |
+| **Frontend** | Pre-built `dist/` committed, or Vite dev server |
+| **node_modules** | Installed via `npm ci` on first run |
+| **Auth** | CLI profile, PAT, or bridge-forge |
+| **IP for API calls** | User's machine IP (typically whitelisted) |
+| **Cross-cloud** | Works |
+| **Updates** | `git pull` |
+| **Offline** | Yes (except API calls) |
+
+---
+
+### MODE 2: LOCAL (installable) - FUTURE
+
+**How:** `curl -sL https://brickforge.dev/install | bash` then `brickforge`
+
+| Category | Detail |
+|----------|--------|
+| **User installs** | Python 3.11+, Node.js (or compile SEA to eliminate) |
+| **Build tools needed** | None. Everything pre-built and bundled. |
+| **Code location** | `~/.brickforge/app/` |
+| **Entry point** | `brickforge` CLI -> `node ~/.brickforge/app/visual/backend/index.js` |
+| **Port** | 9000 |
+| **FORGE_MODE** | false (hybrid mode) |
+| **ConfigProvider** | LocalForgeConfigProvider (NEW - reads `.forge` zip from disk) |
+| **Config storage** | `~/.brickforge/stashes/active.forge.zip` |
+| **Stash storage** | `~/.brickforge/stashes/` |
+| **Python subprocess** | `python` (deps pre-installed via `pip install -r` on first launch) |
+| **Frontend** | Pre-built `dist/` bundled in tarball |
+| **node_modules** | Bundled in tarball (no npm needed) |
+| **Auth** | PAT or bridge-forge |
+| **IP for API calls** | User's machine IP (typically whitelisted) |
+| **Cross-cloud** | Works |
+| **Updates** | `brickforge update` (NEW) |
+| **Offline** | Yes (except API calls) |
+
+**Eliminates:** git, uv, npm. User never sees source code.
+
+---
+
+### MODE 3: LOCAL (Git or Installable) + REMOTE STASH - FUTURE
+
+**How:** Same as MODE 1 or MODE 2, with "sync to UC Volume" toggle enabled
+
+| Category | Detail |
+|----------|--------|
+| **User installs** | Same as MODE 2 |
+| **Build tools needed** | None |
+| **Code location** | Same as MODE 2 |
+| **Entry point** | Same as MODE 2 |
+| **Port** | 9000 |
+| **FORGE_MODE** | false (hybrid mode) |
+| **ConfigProvider** | LocalForgeConfigProvider + UC Volume sync on write |
+| **Config storage** | Local `.forge` zip + flushed to `/Volumes/{catalog}/{schema}/brickforge/stash/` |
+| **Stash storage** | Local disk + UC Volume (bidirectional) |
+| **Python subprocess** | `python` |
+| **Frontend** | Pre-built `dist/` bundled |
+| **node_modules** | Bundled |
+| **Auth** | PAT or bridge-forge |
+| **IP for API calls** | User's machine IP |
+| **Cross-cloud** | Works |
+| **Updates** | `brickforge update` |
+| **Offline** | Partial (local stash works, Volume sync queued) |
+
+**Adds over MODE 2:** Stash portability. Switch machines, pick up where you left off. Prerequisite: workspace step configured (host + token + schema).
+
+---
+
+### MODE 4: DEPLOYED (DBX App)
+
+**How:** Pre-deployed by admin, or `databricks apps deploy`. User opens browser URL.
+
+| Category | Detail |
+|----------|--------|
+| **User installs** | Nothing. Browser only. |
+| **Build tools needed** | None for user. `uv sync` + tar extract at app startup. |
+| **Code location** | `/app/python/source_code/` on DBX compute |
+| **Entry point** | `node visual/backend/index.js` (started by `app.yaml` command) |
+| **Port** | DATABRICKS_APP_PORT (platform-injected) |
+| **FORGE_MODE** | true |
+| **ConfigProvider** | ForgeConfigProvider |
+| **Config storage** | In-memory zip, flushed to UC Volume |
+| **Stash storage** | UC Volume only (`/Volumes/.../brickforge/stash/`) |
+| **Python subprocess** | `python` (venv from `uv sync` at startup) |
+| **Frontend** | Pre-built `dist/` committed |
+| **node_modules** | Extracted from `node_modules.tar.gz` at startup |
+| **Auth** | SP OAuth (platform-injected) + bridge-forge for target workspace |
+| **IP for API calls** | DBX App egress IP (dynamic, AWS/Azure serverless pool) |
+| **Cross-cloud** | Same-cloud only. Cross-cloud blocked by IP ACL unless NCC configured. |
+| **Updates** | Redeploy |
+| **Offline** | No |
+
+**Startup command** (`app.yaml`):
+```
+uv sync && cd visual/backend && tar xzf node_modules.tar.gz && cd ../.. && node visual/backend/index.js
+```
+
+---
+
+### AGENT APP (deployed by any Setup App mode)
+
+Not a mode of the Setup App. This is the output - the agent application deployed to Databricks by any of the 4 modes above.
+
+**How:** User clicks "Deploy" in Setup App. Setup App bundles stash + framework into zip, uploads, deploys.
+
+| Category | Detail |
+|----------|--------|
+| **Runs on** | Databricks App compute |
+| **Entry point** | `python agent.start_server:main` |
+| **Config source** | `app.yaml` env vars (baked at deploy time from stash) |
+| **Stash at runtime** | Not needed. Config = env vars. Domain files = in zip. |
+| **Python deps** | `uv sync` at startup |
+| **Node.js** | Yes (runs `node app/server/dist/index.mjs` for chat UI) |
+| **Frontend** | Pre-built `app/client/dist/` in bundle. Fallback: `npm install + build`. |
+| **Bundle size** | ~13MB / ~150 files |
+| **uv** | Pre-installed on DBX compute |
+| **npm** | Pre-installed on DBX compute (fallback only) |
+
+**Key point:** The stash is a build-time artifact. At runtime the agent reads env vars and bundled files. No stash dependency at runtime.
+
+---
+
+### DEPENDENCIES BY MODE
+
+| Dependency | MODE 1 (clone) | MODE 2 (install) | MODE 3 (install+sync) | MODE 4 (deployed) | AGENT APP |
+|-----------|:-:|:-:|:-:|:-:|:-:|
+| Python 3.11+ | USER | USER | USER | PLATFORM | PLATFORM |
+| Node.js | USER | USER* | USER* | PLATFORM | PLATFORM |
+| npm | USER | - | - | STARTUP | FALLBACK |
+| uv | USER | - | - | STARTUP | STARTUP |
+| git | USER | - | - | - | - |
+| Databricks CLI | - | - | - | - | - |
+| openssl | OPT | OPT | OPT | OPT | - |
+| Browser | USER | USER | USER | USER | USER |
+
+`USER` = user must install. `PLATFORM` = pre-installed on DBX compute. `STARTUP` = used at app startup, pre-installed. `OPT` = optional. `--` = not needed. `*` = eliminable via Node SEA compilation.
+
+---
+
+### KEY INSIGHTS
+
+1. **Stash is build-time only.** Agent app never reads it. Clean separation.
+2. **Installable eliminates git, uv, npm.** Only Python + Node.js remain. Node.js eliminable via SEA.
+3. **LocalForgeConfigProvider is the missing piece.** Sync disk-based `.forge` zip reader. Bridges local and deployed.
+4. **Remote stash sync is additive.** Local-only first, UC Volume toggle second, GitHub third.
+5. **Cross-cloud is network, not auth.** Local modes bypass it. Deployed needs same-cloud or NCC.
+6. **One Setup App per cloud for deployed coverage.** AWS instance + Azure instance. Users pick matching cloud.
+7. **`.env.local` is a legacy artifact.** Installable mode replaces it with `.forge` zip everywhere.
