@@ -39,7 +39,7 @@ _FRAMEWORK_MODULES = {"sql_executor", "ka_factory", "api_factory", "a2a_factory"
 
 def _discover_domain_tools() -> list:
     """Auto-discover @tool functions from tools/ (excluding framework utilities)."""
-    tools_dir = Path(__file__).resolve().parents[2] / "tools"
+    tools_dir = Path(__file__).resolve().parents[1] / "tools"
     discovered = []
     for _, name, _ in pkgutil.iter_modules([str(tools_dir)]):
         if name in _FRAMEWORK_MODULES:
@@ -274,7 +274,7 @@ async def non_streaming(request: ResponsesAgentRequest) -> ResponsesAgentRespons
 
 
 def _load_system_prompt() -> str:
-    base = Path(__file__).resolve().parents[2] / "conf" / "prompt"
+    base = Path(__file__).resolve().parents[1] / "conf" / "prompt"
     main_path = base / "main.prompt"
     kb_path = base / "knowledge.base"
     content = main_path.read_text(encoding="utf-8").strip() if main_path.exists() else ""

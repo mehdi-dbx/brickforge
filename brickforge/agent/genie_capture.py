@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 
 logger = logging.getLogger(__name__)
 
-CAPTURE_DIR = Path(__file__).resolve().parents[2] / "data" / "genie-capture-sql"
+CAPTURE_DIR = Path(__file__).resolve().parents[1] / "data" / "genie-capture-sql"
 
 
 def _extract_query_from_args(args: Any) -> Optional[str]:

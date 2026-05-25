@@ -19,7 +19,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from databricks.sdk import WorkspaceClient
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 

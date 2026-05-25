@@ -15,7 +15,7 @@ from pathlib import Path
 from databricks.sdk import WorkspaceClient
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 # ANSI

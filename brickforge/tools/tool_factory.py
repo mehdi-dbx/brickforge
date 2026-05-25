@@ -24,7 +24,7 @@ from tools.sql_executor import (
 
 _log = logging.getLogger(__name__)
 
-_FUNC_DIR = Path(__file__).resolve().parents[2] / "data" / "func"
+_FUNC_DIR = Path(__file__).resolve().parents[1] / "data" / "func"
 
 
 # ---------------------------------------------------------------------------

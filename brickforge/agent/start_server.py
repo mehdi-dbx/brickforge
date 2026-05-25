@@ -18,9 +18,9 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-_NODE_SERVER = Path(__file__).resolve().parents[2] / "app" / "server" / "dist" / "index.mjs"
+_NODE_SERVER = Path(__file__).resolve().parents[1] / "app" / "server" / "dist" / "index.mjs"
 
-_CLIENT_DIST = Path(__file__).resolve().parents[2] / "app" / "client" / "dist" / "index.html"
+_CLIENT_DIST = Path(__file__).resolve().parents[1] / "app" / "client" / "dist" / "index.html"
 
 @app.on_event("startup")
 async def start_frontend():

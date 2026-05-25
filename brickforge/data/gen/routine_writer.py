@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 GEN_DIR = ROOT / "data" / "gen"
 FUNC_DIR = GEN_DIR / "func"
 PROC_DIR = GEN_DIR / "proc"

@@ -17,7 +17,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 LOG_FILE = ROOT / "logs" / "create_all_functions.log"

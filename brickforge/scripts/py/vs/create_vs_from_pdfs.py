@@ -30,7 +30,7 @@ from databricks.sdk.service.sql import StatementState
 from databricks.sdk.service.vectorsearch import EndpointType
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
