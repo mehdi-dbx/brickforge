@@ -48,6 +48,16 @@ These are the actions that actually DO things on a Databricks workspace. They we
 - **Local (editable)**: dev workflow, everything works
 - **Target workspace**: e2-demo-field-eng.cloud.databricks.com (IP must be whitelisted)
 
+## Confidence: 60%
+
+Doubt factors:
+- `parents[N]` depth changes done mechanically with sed -- one wrong file = silent runtime failure
+- Subprocess `cwd=PACKAGE_ROOT` untested with actual script execution
+- Inline scripts in routes reference relative paths (`data/init/...`) -- if cwd is wrong, script not found
+- `generate_tables.py` writes to `ROOT / "data" / "gen" / "csv"` -- in pip install that's inside `site-packages/`, which may be read-only on some systems
+- Zero subprocess actions tested from non-editable install
+- The PYTHONPATH and ENV_FILE fixes are correct in theory but have never been exercised end-to-end
+
 ## Priority
 
 1 > 2 > 3 > 4 > 5. If 1 and 2 work, the core flow is validated. 3-4 are important but secondary. 5 has a known limitation.
