@@ -16,5 +16,7 @@ else:
 # USER_DIR: ~/.brickforge/ -- runtime data (logs, config, stash cache)
 USER_DIR = Path.home() / ".brickforge"
 USER_DIR.mkdir(parents=True, exist_ok=True)
-LOG_DIR = USER_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+
+# Single log file per session: ~/.brickforge/brickforge_YYYYMMDD_HHMMSS.log
+from datetime import datetime as _dt
+LOG_FILE = USER_DIR / f"brickforge_{_dt.now().strftime('%Y%m%d_%H%M%S')}.log"

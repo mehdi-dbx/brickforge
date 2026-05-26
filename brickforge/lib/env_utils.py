@@ -15,11 +15,11 @@ from brickforge.lib.config_provider import ConfigProvider
 # ── Server logger ─────────────────────────────────────────────────────────────
 
 def _get_server_logger() -> logging.Logger:
-    """Get or create the server file logger (writes to ~/.brickforge/logs/server.log)."""
+    """Get or create the server file logger (writes to ~/.brickforge/brickforge_<date>.log)."""
     logger = logging.getLogger("brickforge.server")
     if not logger.handlers:
-        from brickforge import LOG_DIR
-        handler = logging.FileHandler(LOG_DIR / "server.log", encoding="utf-8")
+        from brickforge import LOG_FILE
+        handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
@@ -27,7 +27,7 @@ def _get_server_logger() -> logging.Logger:
 
 
 def log_error(endpoint: str, error: str, full_traceback: str = "") -> None:
-    """Log an error to ~/.brickforge/logs/server.log."""
+    """Log an error to ~/.brickforge/brickforge_*.log."""
     logger = _get_server_logger()
     logger.error(f"{endpoint}: {error}")
     if full_traceback:
@@ -84,13 +84,13 @@ def parse_subprocess_error(stderr: str, stdout: str = "") -> str:
         # Extract the last line (the actual error)
         lines = raw.strip().split("\n")
         last_line = lines[-1].strip() if lines else "Unknown error"
-        return f"{last_line} (see ~/.brickforge/logs/server.log for details)"
+        return f"{last_line} (see ~/.brickforge/brickforge_*.log for details)"
 
     # Short enough to show as-is
     if len(raw) < 200 and "Traceback" not in raw:
         return raw.strip()
 
-    return "An error occurred. Check ~/.brickforge/logs/server.log for details."
+    return "An error occurred. Check ~/.brickforge/brickforge_*.log for details."
 
 
 def detect_cloud(host: str) -> str | None:

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import AsyncGenerator
 
-from brickforge import PROJECT_ROOT, PACKAGE_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT, LOG_FILE
 
 
 def sse_event(event_type: str, data: dict) -> str:
@@ -32,12 +32,9 @@ class ExecLogger:
     """Logs exec output to file."""
 
     def __init__(self, action: str):
-        self.log_dir = PROJECT_ROOT / "logs" / "exec"
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.log_file = self.log_dir / f"{action}-{int(time.time() * 1000)}.log"
-        self.latest_link = self.log_dir / f"{action}-latest.log"
+        self.log_file = LOG_FILE
         self._lines: list[str] = []
-        self._lines.append(f"=== {action} {time.strftime('%Y-%m-%dT%H:%M:%S')}Z ===\n")
+        self._lines.append(f"\n=== EXEC {action} {time.strftime('%Y-%m-%dT%H:%M:%S')}Z ===\n")
 
     def log(self, text: str) -> None:
         self._lines.append(text if text.endswith("\n") else text + "\n")
@@ -45,12 +42,9 @@ class ExecLogger:
     def finish(self, ok: bool, code: int = 0) -> None:
         self._lines.append(f"=== {'OK' if ok else 'FAILED'} (exit {code}) ===\n")
         content = "".join(self._lines)
-        self.log_file.write_text(content)
-        # Update latest link (copy, not symlink for cross-platform)
-        try:
-            self.latest_link.write_text(content)
-        except Exception:
-            pass
+        # Append to single session log file
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(content)
 
 
 async def stream_subprocess(
