@@ -227,16 +227,8 @@ def do_token_exchange(code):
             app_ip_data = json.loads(r.read())
         app_ip = app_ip_data.get('ip', '')
         if app_ip:
-            # Check if it's the same machine (localhost or same IP)
-            try:
-                my_ip = urllib.request.urlopen('https://api.ipify.org', timeout=5).read().decode().strip()
-            except Exception:
-                my_ip = ''
-            if app_ip == my_ip or 'localhost' in APP_URL or '127.0.0.1' in APP_URL:
-                print(f'{OK} Setup App is local ({app_ip}) -- no whitelisting needed')
-            else:
-                print(f'{INFO} Setup App IP: {DIM}{app_ip}{W}')
-                print(f'{RUN} Whitelisting {app_ip} on {ws}...')
+            print(f'{INFO} Setup App IP: {DIM}{app_ip}{W}')
+            print(f'{RUN} Whitelisting {app_ip} on {ws}...')
                 try:
                     import datetime as _dt
                     label = f'brickforge-{app_ip}-{_dt.date.today().strftime("%Y%m%d")}'

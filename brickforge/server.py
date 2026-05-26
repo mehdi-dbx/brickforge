@@ -206,19 +206,43 @@ def main():
     import uvicorn
 
     port = PORT
-    for attempt in range(10):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("0.0.0.0", port))
+        sock.close()
+    except OSError:
+        sock.close()
+        print(f"\n  Port {port} is already in use.")
         try:
-            sock.bind(("0.0.0.0", port))
-            sock.close()
-            break
-        except OSError:
-            sock.close()
-            print(f"[visual] port {port} in use, trying {port + 1}")
-            port += 1
-    else:
-        print(f"[x] No available port found ({PORT}-{PORT + 9})")
-        return
+            choice = input(f"  [K]ill it and reuse {port}, or [N]ext available port? (k/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            choice = "n"
+        if choice == "k":
+            import subprocess
+            pids = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True).stdout.strip()
+            if pids:
+                for pid in pids.split("\n"):
+                    try:
+                        import os
+                        os.kill(int(pid), 9)
+                    except (ValueError, ProcessLookupError):
+                        pass
+                print(f"  [+] Killed process on port {port}")
+                import time
+                time.sleep(1)
+        else:
+            for _ in range(10):
+                port += 1
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    s.bind(("0.0.0.0", port))
+                    s.close()
+                    break
+                except OSError:
+                    s.close()
+            else:
+                print(f"  [x] No available port found ({PORT}-{PORT + 10})")
+                return
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 

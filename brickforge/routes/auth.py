@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from brickforge import PROJECT_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT
 from brickforge.lib.env_utils import detect_cloud
 
 router = APIRouter()
@@ -129,7 +129,7 @@ async def bridge_receive(request: Request):
         target_cloud = detect_cloud(host)
         cross_cloud_warning = ""
         if app_cloud and target_cloud and app_cloud != target_cloud:
-            cross_cloud_warning = f"The target workspace ({target_cloud}) is on a different cloud than this Setup App ({app_cloud}). API calls may be blocked by IP Access Lists. For best results, use the Setup App locally or deploy it on the same cloud."
+            cross_cloud_warning = f"The target workspace ({target_cloud}) is on a different cloud than this Setup App ({app_cloud}). The Setup App's IP may not be in the workspace's IP Access List. If API calls fail, ask your workspace admin to whitelist the Setup App's IP."
             print(f"[bridge] CROSS-CLOUD WARNING: app={app_cloud}, target={target_cloud}")
 
         # Store in config

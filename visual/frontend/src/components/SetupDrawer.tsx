@@ -1177,7 +1177,7 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
 
             {connInfo?.warning && (
               <div className="mt-3 rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2">
-                <div className="text-[11px] text-dbx-amber font-medium">Cross-cloud detected</div>
+                <div className="text-[11px] text-dbx-amber font-medium">IP Access List warning</div>
                 <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">{connInfo.warning}</div>
               </div>
             )}
@@ -1686,9 +1686,9 @@ export function SetupDrawer({
         )}
         {crossCloud && (
           <div className="mt-3 rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2">
-            <div className="text-[11px] text-dbx-amber font-medium">Cross-cloud detected</div>
+            <div className="text-[11px] text-dbx-amber font-medium">IP Access List warning</div>
             <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">
-              Target workspace ({targetCloud}) is on a different cloud than this Setup App ({appCloud}). API calls may be blocked by IP Access Lists. For best results, use the Setup App locally or deploy it on the same cloud.
+              Target workspace ({targetCloud}) is on a different cloud than this Setup App ({appCloud}). The Setup App's IP may not be in the workspace's IP Access List. If API calls fail, ask your workspace admin to whitelist it.
             </div>
           </div>
         )}
