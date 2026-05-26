@@ -24,7 +24,7 @@ def _get_config():
 async def cleanup_resources():
     env = build_sub_env(_get_config())
     script = """
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 from databricks.sdk import WorkspaceClient
 import os, json
 
@@ -90,7 +90,7 @@ async def cleanup_exec(request: Request):
     async def generate():
         env = build_sub_env(_get_config())
         script = f"""
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 from databricks.sdk import WorkspaceClient
 from pathlib import Path
 import os, re, json, sys

@@ -958,7 +958,7 @@ async def save_prompt(request: Request):
 
 def _save_schema_script(catalog: str, schema: str) -> str:
     return f"""
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 from databricks.sdk import WorkspaceClient
 import re; from pathlib import Path
 w = WorkspaceClient()
@@ -1000,7 +1000,7 @@ print('[+] PROJECT_UNITY_CATALOG_SCHEMA = ' + spec)
 
 def _pat_script() -> str:
     return """
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 import os, urllib.request, json, ssl, datetime
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
 token = os.environ.get('DATABRICKS_TOKEN','').strip()
@@ -1089,7 +1089,7 @@ print('[+] All functions and procedures created')
 
 def _ka_script() -> str:
     return """
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 import subprocess, sys
 print('[~] creating Knowledge Assistant from YAML...')
 sys.stdout.flush()
@@ -1103,7 +1103,7 @@ def _auth_login_script(host: str, profile: str) -> str:
     host_url = host_url.rstrip("/")
     safe_profile = profile.replace("'", "\\'") if profile else ""
     return f"""
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 from pathlib import Path
 import os, configparser, subprocess, sys
 
@@ -1141,7 +1141,7 @@ print('[+] done')
 
 def _model_profile_script(profile: str) -> str:
     return f"""
-from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact, write_env_entry, ENV_FILE
 import subprocess, re
 out = subprocess.check_output(['databricks', 'auth', 'profiles'], text=True)
