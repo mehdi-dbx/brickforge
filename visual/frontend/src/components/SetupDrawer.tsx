@@ -1208,7 +1208,7 @@ export function SetupDrawer({
 
   // Hide CLI-dependent choices in forge/deployed mode
   const CLI_ACTIONS = new Set(['cfg-profile', 'cfg-new'])
-  const DEPLOY_CLI_ACTIONS = new Set(['exec-deploy', 'exec-deploy-dry'])
+  const DEPLOY_CLI_ACTIONS = new Set<string>()
   const filteredChoices = forgeMode
     ? step.choices.filter(c => !CLI_ACTIONS.has(c.action) && !DEPLOY_CLI_ACTIONS.has(c.action))
     : step.choices

@@ -902,8 +902,6 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             "exec-mlflow": [PYTHON,"data/init/create_mlflow_experiment.py"],
             "exec-grants": [PYTHON,"deploy/grant/run_all_grants.py"],
             "exec-ka": [PYTHON,"-c", _ka_script()],
-            "exec-deploy": ["bash", "deploy/deploy.sh"],
-            "exec-deploy-dry": ["bash", "deploy/deploy.sh", "--dry-run"],
         }
 
         if action in cmd_map:

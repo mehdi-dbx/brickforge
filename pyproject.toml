@@ -1,6 +1,6 @@
 [project]
 name = "brickforge"
-version = "0.1.0a10"
+version = "0.1.0a26"
 description = "Build and deploy Databricks AI agents from a visual Setup App"
 requires-python = ">=3.9"
 dependencies = [
@@ -90,6 +90,7 @@ brickforge = [
     "app/client/dist/**/*",
     "app/server/dist/**/*.mjs",
     "pyproject.toml",
+    "requirements.txt",
 ]
 
 [tool.uv]

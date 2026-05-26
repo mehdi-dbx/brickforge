@@ -221,7 +221,20 @@ def do_token_exchange(code):
             if comment.startswith('brickforge-') and expiry > now:
                 remaining_h = int((expiry - now) / 3600000)
                 print(f'{OK} Found active PAT: {DIM}{comment} ({remaining_h}h remaining){W}')
-                print(f'{INFO} Reusing existing PAT (token value not retrievable -- using JWT instead)')
+                # Delete old PAT and create fresh one (can't retrieve existing token value)
+                try:
+                    tid = t.get('token_id', '')
+                    del_req = urllib.request.Request(
+                        f'{ws}/api/2.0/token/delete',
+                        data=json.dumps({'token_id': tid}).encode(),
+                        headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    urllib.request.urlopen(del_req, timeout=10, context=ctx)
+                    print(f'{OK} Revoked old PAT to create fresh one')
+                except Exception:
+                    pass  # deletion failed, will create with different name
+                tokens = None  # force creation
                 break
         else:
             tokens = None  # no existing PAT found, create one
@@ -278,12 +291,14 @@ def do_token_exchange(code):
                 if e.code == 403:
                     print(f'{FAIL} Cannot whitelist IP (admin required)')
                     print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')
-                elif e.code == 409:
-                    _wl_ok = True
-                    print(f'{OK} IP already whitelisted')
-                else:
-                    print(f'{FAIL} Whitelist failed: HTTP {e.code}')
-                    print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')
+                elif e.code in (400, 409):
+                    err_body = e.read().decode() if hasattr(e, 'read') else ''
+                    if 'already' in err_body.lower() or 'exist' in err_body.lower() or 'duplicate' in err_body.lower() or e.code == 409:
+                        _wl_ok = True
+                        print(f'{OK} IP already whitelisted')
+                    else:
+                        print(f'{FAIL} Whitelist failed: HTTP {e.code}')
+                        print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')
             except Exception as e:
                 print(f'{FAIL} Whitelist failed: {str(e)[:80]}')
                 print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')

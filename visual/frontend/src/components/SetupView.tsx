@@ -72,7 +72,7 @@ export function SetupView() {
     if (selectedChoice === null) return
     // Filter choices same as SetupDrawer does in forge mode
     const CLI_ACTIONS = new Set(['cfg-profile', 'cfg-new'])
-    const DEPLOY_CLI_ACTIONS = new Set(['exec-deploy', 'exec-deploy-dry'])
+    const DEPLOY_CLI_ACTIONS = new Set<string>()
     const choices = forgeMode
       ? step.choices.filter(c => !CLI_ACTIONS.has(c.action) && !DEPLOY_CLI_ACTIONS.has(c.action))
       : step.choices
@@ -90,7 +90,7 @@ export function SetupView() {
 
     // Actions that go straight to execute (no configure phase)
     const DIRECT_EXEC = new Set(['exec-assets', 'exec-tables', 'exec-functions',
-      'exec-lakebase', 'exec-mlflow', 'exec-grants', 'exec-deploy', 'exec-deploy-dry',
+      'exec-lakebase', 'exec-mlflow', 'exec-grants',
       'exec-deploy-agent', 'exec-same', 'exec-git-push'])
     if (DIRECT_EXEC.has(action)) {
       setExecLines([])

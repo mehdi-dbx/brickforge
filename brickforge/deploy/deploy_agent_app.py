@@ -16,13 +16,12 @@ import argparse
 import base64
 import io
 import json
-import os
-import sys
 import tarfile
 import zipfile
 from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.apps import App, AppDeployment
 from databricks.sdk.service.workspace import ImportFormat
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -225,6 +224,26 @@ def build_agent_bundle(config: dict) -> bytes:
             if pyproject_alt.exists():
                 zf.write(str(pyproject_alt), "pyproject.toml")
 
+        # Bundle pinned requirements.txt (pre-generated at build time)
+        req_file = ROOT / "requirements.txt"
+        if not req_file.exists():
+            req_file = ROOT.parent / "requirements.txt"
+        if req_file.exists():
+            zf.write(str(req_file), "requirements.txt")
+            print(f"  [+] requirements.txt (pinned)")
+        else:
+            # Fallback: generate from pyproject.toml (unpinned, slower resolve)
+            _pyproject_path = ROOT / "pyproject.toml" if (ROOT / "pyproject.toml").exists() else ROOT.parent / "pyproject.toml"
+            if _pyproject_path.exists():
+                try:
+                    import tomllib
+                except ModuleNotFoundError:
+                    import tomli as tomllib  # Python < 3.11
+                with open(_pyproject_path, "rb") as pf:
+                    deps = tomllib.load(pf).get("project", {}).get("dependencies", [])
+                zf.writestr("requirements.txt", "\n".join(deps) + "\n")
+                print(f"  [!] requirements.txt (unpinned -- slow install)")
+
         # Generate and add app.yaml
         app_yaml = generate_app_yaml(config)
         zf.writestr("app.yaml", app_yaml)
@@ -253,27 +272,31 @@ def deploy(config: dict) -> dict:
 
     # Upload zip to workspace
     workspace_dir = f"/Workspace/Users/{me.user_name}/{app_name}"
-    zip_path = f"{workspace_dir}/_bundle.zip"
+    zip_path = f"{workspace_dir}/_bundle.dat"
 
     print(f"[~] Uploading bundle to {zip_path}...")
+    # Clean workspace dir and recreate
     try:
-        w.workspace.mkdirs(workspace_dir)
+        w.workspace.delete(workspace_dir, recursive=True)
     except Exception:
         pass
+    w.workspace.mkdirs(workspace_dir)
     b64 = base64.b64encode(bundle_zip).decode()
-    w.workspace.import_(path=zip_path, content=b64, format=ImportFormat.AUTO, overwrite=True)
-    print(f"[+] Bundle uploaded")
+    w.workspace.import_(path=zip_path, content=b64, format=ImportFormat.RAW, overwrite=True)
+    print(f"[+] Bundle uploaded ({len(bundle_zip) // 1024}KB)")
 
     # Upload a startup script that unzips + starts
     startup_script = """\
 #!/bin/bash
-set -e
+set -ex
+echo "[start.sh] pwd=$(pwd) ls=$(ls -la)"
 cd /app/python/source_code
-if [ -f _bundle.zip ]; then
+echo "[start.sh] source_code contents: $(ls)"
+if [ -f _bundle.dat ]; then
     echo "[1/4] Extracting bundle..."
-    unzip -o _bundle.zip -d .
-    rm _bundle.zip
-    echo "[1/4] done"
+    unzip -o _bundle.dat -d .
+    rm _bundle.dat
+    echo "[1/4] done -- contents: $(ls)"
 fi
 echo "[2/4] Unpacking dist archives..."
 for tgz in app/client/dist.tar.gz app/server/dist.tar.gz; do
@@ -283,32 +306,30 @@ for tgz in app/client/dist.tar.gz app/server/dist.tar.gz; do
     fi
 done
 echo "[2/4] done"
-echo "[3/4] Installing Python deps..."
-pip install . 2>&1
+echo "[3/4] Installing Python deps (clean venv)..."
+python -m venv .venv --clear
+. .venv/bin/activate
+if [ -f requirements.txt ]; then
+    pip install -r requirements.txt 2>&1
+else
+    echo "[3/4] no requirements.txt found, skipping"
+fi
 echo "[3/4] done"
 echo "[4/4] starting agent..."
 exec python -c "from agent.start_server import main; main()"
 """
-    b64_startup = base64.b64encode(startup_script.encode()).decode()
-    w.workspace.import_(
-        path=f"{workspace_dir}/start.sh",
-        content=b64_startup,
-        format=ImportFormat.AUTO,
-        overwrite=True,
-    )
+    def _upload_text(path: str, content: str):
+        b64_content = base64.b64encode(content.encode()).decode()
+        w.workspace.import_(path=path, content=b64_content, format=ImportFormat.RAW, overwrite=True)
+
+    _upload_text(f"{workspace_dir}/start.sh", startup_script)
 
     # Generate app.yaml that calls the startup script
     app_yaml_for_deploy = generate_app_yaml(config).replace(
         'command: ["bash", "-c", "pip install . && node app/server/dist/index.mjs"]',
         'command: ["bash", "start.sh"]',
     )
-    b64_app_yaml = base64.b64encode(app_yaml_for_deploy.encode()).decode()
-    w.workspace.import_(
-        path=f"{workspace_dir}/app.yaml",
-        content=b64_app_yaml,
-        format=ImportFormat.AUTO,
-        overwrite=True,
-    )
+    _upload_text(f"{workspace_dir}/app.yaml", app_yaml_for_deploy)
     print(f"[+] app.yaml + start.sh uploaded")
 
     # Create or get the app
@@ -317,37 +338,28 @@ exec python -c "from agent.start_server import main; main()"
         app_info = w.apps.get(app_name)
         print(f"[+] App exists: {app_info.url}")
     except Exception:
-        app_info = w.apps.create(name=app_name, description="BrickForge Agent Application")
+        waiter = w.apps.create(app=App(name=app_name, description="BrickForge Agent Application"))
+        print(f"[~] App creating, waiting for compute...")
+        app_info = waiter.result()
         print(f"[+] App created: {app_name}")
-        # Wait for compute to be ready
-        import time
-        for _ in range(30):
-            app_info = w.apps.get(app_name)
-            state = app_info.compute_status.state.value if app_info.compute_status else "UNKNOWN"
-            if state != "STARTING":
-                break
-            time.sleep(5)
 
     # Deploy
     print(f"[~] Deploying from {workspace_dir}...")
-    deployment = w.apps.deploy(app_name, source_code_path=workspace_dir)
-    dep_id = deployment.deployment_id
+    dep_waiter = w.apps.deploy(app_name, app_deployment=AppDeployment(source_code_path=workspace_dir))
+    dep_id = dep_waiter.deployment_id
     print(f"[+] Deployment started: {dep_id}")
 
     # Wait for deployment
-    import time
-    for i in range(60):
-        dep = w.apps.get_deployment(app_name, dep_id)
-        state = dep.status.state.value if dep.status else "UNKNOWN"
+    print(f"[~] Waiting for deployment...")
+    try:
+        dep_result = dep_waiter.result()
+        state = dep_result.status.state.value if dep_result.status else "UNKNOWN"
         if state == "SUCCEEDED":
             print(f"[+] Deployment SUCCEEDED")
-            break
-        if state in ("FAILED", "CANCELLED"):
-            print(f"[x] Deployment {state}: {dep.status.message}")
-            break
-        if i % 4 == 0:
-            print(f"[~] {state}...")
-        time.sleep(5)
+        else:
+            print(f"[~] Deployment state: {state}")
+    except Exception as e:
+        print(f"[x] Deployment failed: {e}")
 
     app_info = w.apps.get(app_name)
     url = getattr(app_info, "url", "")
