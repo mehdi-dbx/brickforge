@@ -27,11 +27,13 @@ def _get_server_logger() -> logging.Logger:
 
 
 def log_error(endpoint: str, error: str, full_traceback: str = "") -> None:
-    """Log an error to ~/.brickforge/brickforge_*.log."""
+    """Log an error to ~/.brickforge/brickforge_*.log and print to terminal."""
     logger = _get_server_logger()
     logger.error(f"{endpoint}: {error}")
     if full_traceback:
         logger.debug(f"{endpoint} traceback:\n{full_traceback}")
+    # Also print to terminal for live monitoring
+    print(f"[error] {endpoint}: {error[:150]}")
 
 
 # ── Error parsing ────────────────────────────────────────────────────────────
@@ -84,13 +86,13 @@ def parse_subprocess_error(stderr: str, stdout: str = "") -> str:
         # Extract the last line (the actual error)
         lines = raw.strip().split("\n")
         last_line = lines[-1].strip() if lines else "Unknown error"
-        return f"{last_line} (see ~/.brickforge/brickforge_*.log for details)"
+        return f"{last_line} (check ~/.brickforge/ for full logs)"
 
     # Short enough to show as-is
     if len(raw) < 200 and "Traceback" not in raw:
         return raw.strip()
 
-    return "An error occurred. Check ~/.brickforge/brickforge_*.log for details."
+    return "An error occurred (check ~/.brickforge/ for full logs)"
 
 
 def detect_cloud(host: str) -> str | None:
