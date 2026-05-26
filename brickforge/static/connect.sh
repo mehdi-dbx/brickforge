@@ -218,6 +218,43 @@ def do_token_exchange(code):
         print(f'{WARN} PAT creation failed: {DIM}{str(e)[:80]}{W}')
         print(f'{INFO} Falling back to JWT + refresh token')
 
+    # Whitelist Setup App IP on target workspace (if running remotely)
+    section('Network')
+    print(f'{RUN} Checking Setup App IP...')
+    try:
+        app_ip_req = urllib.request.Request(f'{APP_URL}/api/setup/my-ip')
+        with urllib.request.urlopen(app_ip_req, timeout=5) as r:
+            app_ip_data = json.loads(r.read())
+        app_ip = app_ip_data.get('ip', '')
+        if app_ip:
+            print(f'{INFO} Setup App IP: {DIM}{app_ip}{W}')
+            print(f'{RUN} Whitelisting {app_ip} on {ws}...')
+                try:
+                    import datetime as _dt
+                    label = f'brickforge-{app_ip}-{_dt.date.today().strftime("%Y%m%d")}'
+                    wl_data = json.dumps({'label': label, 'list_type': 'ALLOW', 'ip_addresses': [f'{app_ip}/32']}).encode()
+                    wl_req = urllib.request.Request(
+                        f'{ws}/api/2.0/ip-access-lists',
+                        data=wl_data, method='POST',
+                        headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'}
+                    )
+                    with urllib.request.urlopen(wl_req, timeout=10, context=ctx) as r:
+                        json.loads(r.read())
+                    print(f'{OK} IP whitelisted: {app_ip}/32')
+                except urllib.error.HTTPError as e:
+                    if e.code == 403:
+                        print(f'{WARN} Cannot whitelist IP (admin required). Ask your workspace admin to allow {app_ip}')
+                    elif e.code == 409:
+                        print(f'{OK} IP already whitelisted')
+                    else:
+                        print(f'{WARN} Whitelist failed: HTTP {e.code} -- ask admin to allow {app_ip}')
+                except Exception as e:
+                    print(f'{WARN} Whitelist failed: {str(e)[:80]} -- ask admin to allow {app_ip}')
+        else:
+            print(f'{OK} Could not detect Setup App IP -- skipping')
+    except Exception as e:
+        print(f'{OK} Setup App IP check skipped ({str(e)[:60]})')
+
     # Encrypt
     section('Encryption')
     print(f'{RUN} Encrypting token...')
