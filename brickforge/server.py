@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from brickforge import PROJECT_ROOT, PACKAGE_ROOT
+from brickforge import PROJECT_ROOT, PACKAGE_ROOT, USER_DIR
 from brickforge.lib.config_provider import LocalConfigProvider, ForgeConfigProvider, ConfigProvider
 from brickforge.routes.setup import router as setup_router
 from brickforge.routes.auth import router as auth_router
@@ -19,12 +19,16 @@ from brickforge.routes.projects import router as projects_router
 from brickforge.lib.graph_builder import build_graph
 
 DIST_DIR = Path(__file__).resolve().parent / "static"
-ENV_FILE = PROJECT_ROOT / ".env.local"
+# Config file: ~/.brickforge/.env.local (pip install) or repo/.env.local (editable)
+if (PROJECT_ROOT / "pyproject.toml").exists():
+    ENV_FILE = PROJECT_ROOT / ".env.local"  # editable install: repo root
+else:
+    ENV_FILE = USER_DIR / ".env.local"  # pip install: ~/.brickforge/
 PORT = int(os.environ.get("DATABRICKS_APP_PORT") or os.environ.get("VISUAL_PORT") or 9000)
 FORGE_MODE = os.environ.get("FORGE_MODE") == "true" or os.environ.get("DATABRICKS_APP_PORT") is not None
 
 # Config provider -- default to local, overridden in lifespan for FORGE mode
-config: ConfigProvider = LocalConfigProvider(PROJECT_ROOT / ".env.local")
+config: ConfigProvider = LocalConfigProvider(ENV_FILE)
 
 
 @asynccontextmanager
