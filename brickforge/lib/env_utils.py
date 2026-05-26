@@ -47,33 +47,35 @@ def parse_subprocess_error(stderr: str, stdout: str = "") -> str:
     if raw.strip():
         log_error("subprocess", raw[:200], raw)
 
+    LOG_HINT = " (check ~/.brickforge/ for full logs)"
+
     # IP ACL blocked
     m = re.search(r"Source IP address: ([\d.]+) is blocked by Databricks IP ACL", raw)
     if m:
         ip = m.group(1)
-        return f"Your IP ({ip}) is blocked by the workspace IP Access List. Connect via VPN, run from an authorized network, or ask your workspace admin to whitelist {ip}."
+        return f"Your IP ({ip}) is blocked by the workspace IP Access List. Connect via VPN, run from an authorized network, or ask your workspace admin to whitelist {ip}." + LOG_HINT
 
     # Permission denied (generic)
     if "PermissionDenied" in raw and "IP ACL" not in raw:
-        return "Permission denied. Check your token has the required permissions for this operation."
+        return "Permission denied. Check your token has the required permissions for this operation." + LOG_HINT
 
     # Auth failures
     if "401" in raw and ("Unauthorized" in raw or "unauthorized" in raw):
-        return "Token invalid or expired. Re-authenticate via bridge-forge."
+        return "Token invalid or expired. Re-authenticate via bridge-forge." + LOG_HINT
 
     # Token parse error
     if "unable to parse response" in raw:
-        return "Authentication error. Your token may be expired. Re-authenticate via bridge-forge."
+        return "Authentication error. Your token may be expired. Re-authenticate via bridge-forge." + LOG_HINT
 
     # SSL
     if "CERTIFICATE_VERIFY_FAILED" in raw or "SSL" in raw:
-        return "SSL certificate error. Check your VPN or proxy settings."
+        return "SSL certificate error. Check your VPN or proxy settings." + LOG_HINT
 
     # DNS
     if "nodename nor servname" in raw or "Name or service not known" in raw:
         host_match = re.search(r"https?://([^\s/]+)", raw)
         host = host_match.group(1) if host_match else "the workspace"
-        return f"Cannot reach {host}. Check the URL and your network connection."
+        return f"Cannot reach {host}. Check the URL and your network connection." + LOG_HINT
 
     # Catalog/schema not found
     if "does not exist" in raw:
@@ -83,16 +85,15 @@ def parse_subprocess_error(stderr: str, stdout: str = "") -> str:
 
     # Generic traceback -- hide it, point to logs
     if "Traceback (most recent call last)" in raw:
-        # Extract the last line (the actual error)
         lines = raw.strip().split("\n")
         last_line = lines[-1].strip() if lines else "Unknown error"
-        return f"{last_line} (check ~/.brickforge/ for full logs)"
+        return f"{last_line}" + LOG_HINT
 
     # Short enough to show as-is
     if len(raw) < 200 and "Traceback" not in raw:
         return raw.strip()
 
-    return "An error occurred (check ~/.brickforge/ for full logs)"
+    return "An error occurred" + LOG_HINT
 
 
 def detect_cloud(host: str) -> str | None:
