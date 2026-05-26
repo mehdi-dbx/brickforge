@@ -199,30 +199,53 @@ def do_token_exchange(code):
     _wl_ok = False
     _wl_ip = ''
 
-    # Try to create a PAT (7 days) -- preferred over JWT
+    # Check for existing brickforge PAT before creating a new one
     import datetime
     PAT = ''
     today = datetime.date.today().strftime('%Y%m%d')
     pat_name = f'brickforge-7days-{today}'
-    print(f'{RUN} Creating PAT ({pat_name})...')
+    print(f'{RUN} Checking for existing brickforge PAT...')
     try:
-        pat_req = urllib.request.Request(
-            f'{ws}/api/2.0/token/create',
-            data=json.dumps({'lifetime_seconds': 604800, 'comment': pat_name}).encode(),
-            headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'},
-            method='POST'
+        list_req = urllib.request.Request(
+            f'{ws}/api/2.0/token/list',
+            headers={'Authorization': f'Bearer {TOKEN}'},
         )
-        with urllib.request.urlopen(pat_req, timeout=10, context=ctx) as r:
-            pat_resp = json.loads(r.read())
-        PAT = pat_resp.get('token_value', '')
-        if PAT:
-            _pat_ok = True
-            print(f'{OK} PAT created: {DIM}{PAT[:12]}... (7 days){W}')
+        with urllib.request.urlopen(list_req, timeout=10, context=ctx) as r:
+            tokens = json.loads(r.read()).get('token_infos', [])
+        now = int(datetime.datetime.now().timestamp() * 1000)
+        for t in tokens:
+            comment = t.get('comment', '')
+            expiry = t.get('expiry_time', 0)
+            if comment.startswith('brickforge-') and expiry > now:
+                remaining_h = int((expiry - now) / 3600000)
+                print(f'{OK} Found active PAT: {DIM}{comment} ({remaining_h}h remaining){W}')
+                print(f'{INFO} Reusing existing PAT (token value not retrievable -- using JWT instead)')
+                break
         else:
-            print(f'{FAIL} PAT response empty -- falling back to JWT')
-    except Exception as e:
-        print(f'{FAIL} PAT creation failed: {str(e)[:80]}')
-        print(f'{INFO} Falling back to JWT + refresh token')
+            tokens = None  # no existing PAT found, create one
+    except Exception:
+        tokens = None  # list failed, try to create
+
+    if tokens is None:
+        print(f'{RUN} Creating PAT ({pat_name})...')
+        try:
+            pat_req = urllib.request.Request(
+                f'{ws}/api/2.0/token/create',
+                data=json.dumps({'lifetime_seconds': 604800, 'comment': pat_name}).encode(),
+                headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urllib.request.urlopen(pat_req, timeout=10, context=ctx) as r:
+                pat_resp = json.loads(r.read())
+            PAT = pat_resp.get('token_value', '')
+            if PAT:
+                _pat_ok = True
+                print(f'{OK} PAT created: {DIM}{PAT[:12]}... (7 days){W}')
+            else:
+                print(f'{FAIL} PAT response empty -- falling back to JWT')
+        except Exception as e:
+            print(f'{FAIL} PAT creation failed: {str(e)[:80]}')
+            print(f'{INFO} Falling back to JWT + refresh token')
 
     # Whitelist Setup App IP on target workspace (if running remotely)
     section('Network')
