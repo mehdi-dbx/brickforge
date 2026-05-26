@@ -16,8 +16,8 @@ DIRS=(
   visual/backend
   visual/frontend/dist
   agent
-  app/client/dist
-  app/server/dist
+  brickforge/app/client/dist
+  brickforge/app/server/dist
   tools
   data/default
   data/init

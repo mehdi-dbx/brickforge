@@ -1,7 +1,8 @@
 # Build artifacts
 
-app/client/node_modules/
-app/server/node_modules/
+brickforge/app/client/node_modules/
+brickforge/app/server/node_modules/
+brickforge/app/node_modules/
 visual/frontend/node_modules/
 visual/graph-layout.json
 node_modules/
@@ -39,7 +40,7 @@ data/gen/routine-wizard-state.json
 
 # FEVM session cookies (contains auth tokens, never commit)
 internal/fevm/session_cookies.json
-app/client/dist/
+brickforge/app/client/dist/
 
 # Vocareum bundle output (now tracked)
 # dbc/output/

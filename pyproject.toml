@@ -38,6 +38,16 @@ start-app = "brickforge.agent.start_server:main"
 [tool.setuptools.packages.find]
 include = ["brickforge*"]
 
+[tool.setuptools.exclude-package-data]
+brickforge = [
+    "app/node_modules/**/*",
+    "app/client/node_modules/**/*",
+    "app/server/node_modules/**/*",
+    "app/client/dist/**/*",
+    "app/server/dist/**/*",
+    "app/tests/**/*",
+]
+
 [tool.setuptools.package-data]
 brickforge = [
     "static/**/*",
@@ -54,6 +64,16 @@ brickforge = [
     "eval/**/*.jsonl",
     "eval/**/*.py",
     "deploy/**/*.sh",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "app/**/*.js",
+    "app/**/*.mjs",
+    "app/**/*.json",
+    "app/**/*.css",
+    "app/**/*.html",
+    "app/**/*.yaml",
+    "app/**/*.yml",
+    "app/**/*.sh",
 ]
 
 [tool.uv]
