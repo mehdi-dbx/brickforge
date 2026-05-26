@@ -194,6 +194,11 @@ def do_token_exchange(code):
         BRIDGE_USER = 'unknown'
     print(f'{OK} User: {C}{BRIDGE_USER}{W}')
 
+    global _pat_ok, _wl_ok, _wl_ip
+    _pat_ok = False
+    _wl_ok = False
+    _wl_ip = ''
+
     # Try to create a PAT (7 days) -- preferred over JWT
     import datetime
     PAT = ''
@@ -211,11 +216,12 @@ def do_token_exchange(code):
             pat_resp = json.loads(r.read())
         PAT = pat_resp.get('token_value', '')
         if PAT:
+            _pat_ok = True
             print(f'{OK} PAT created: {DIM}{PAT[:12]}... (7 days){W}')
         else:
-            print(f'{WARN} PAT response empty -- falling back to JWT')
+            print(f'{FAIL} PAT response empty -- falling back to JWT')
     except Exception as e:
-        print(f'{WARN} PAT creation failed: {DIM}{str(e)[:80]}{W}')
+        print(f'{FAIL} PAT creation failed: {str(e)[:80]}')
         print(f'{INFO} Falling back to JWT + refresh token')
 
     # Whitelist Setup App IP on target workspace (if running remotely)
@@ -227,6 +233,7 @@ def do_token_exchange(code):
             app_ip_data = json.loads(r.read())
         app_ip = app_ip_data.get('ip', '')
         if app_ip:
+            _wl_ip = app_ip
             print(f'{INFO} Setup App IP: {DIM}{app_ip}{W}')
             print(f'{RUN} Whitelisting {app_ip} on {ws}...')
             try:
@@ -240,16 +247,21 @@ def do_token_exchange(code):
                 )
                 with urllib.request.urlopen(wl_req, timeout=10, context=ctx) as r:
                     json.loads(r.read())
+                _wl_ok = True
                 print(f'{OK} IP whitelisted: {app_ip}/32')
             except urllib.error.HTTPError as e:
                 if e.code == 403:
-                    print(f'{WARN} Cannot whitelist IP (admin required). Ask your workspace admin to allow {app_ip}')
+                    print(f'{FAIL} Cannot whitelist IP (admin required)')
+                    print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')
                 elif e.code == 409:
+                    _wl_ok = True
                     print(f'{OK} IP already whitelisted')
                 else:
-                    print(f'{WARN} Whitelist failed: HTTP {e.code} -- ask admin to allow {app_ip}')
+                    print(f'{FAIL} Whitelist failed: HTTP {e.code}')
+                    print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')
             except Exception as e:
-                print(f'{WARN} Whitelist failed: {str(e)[:80]} -- ask admin to allow {app_ip}')
+                print(f'{FAIL} Whitelist failed: {str(e)[:80]}')
+                print(f'{INFO} Ask your workspace admin to allow {Y}{app_ip}{W}')
         else:
             print(f'{OK} Could not detect Setup App IP -- skipping')
     except Exception as e:
@@ -340,11 +352,40 @@ section('Connect')
 
 if bridge_url_holder[0]:
     print(f'{OK} Browser redirected to Setup App\n')
-    print(f'{BOLD}{G}╔══════════════════════════════════════════════╗{W}')
-    print(f'{BOLD}{G}║  Token delivered via browser redirect.       ║{W}')
-    print(f'{BOLD}{G}║  Check the Setup App -- it should update.    ║{W}')
-    print(f'{BOLD}{G}║  You can close this window.                  ║{W}')
-    print(f'{BOLD}{G}╚══════════════════════════════════════════════╝{W}\n')
+
+    # Summary
+    _pat_ok = globals().get('_pat_ok', False)
+    _wl_ok = globals().get('_wl_ok', False)
+    _wl_ip = globals().get('_wl_ip', '')
+    has_issues = not _pat_ok or (not _wl_ok and _wl_ip)
+
+    if has_issues:
+        print(f'{BOLD}{Y}╔══════════════════════════════════════════════╗{W}')
+        print(f'{BOLD}{Y}║  Token delivered -- some steps need attention ║{W}')
+        print(f'{BOLD}{Y}╠══════════════════════════════════════════════╣{W}')
+        print(f'{BOLD}{Y}║{W}  {G}✓{W} Authenticated                             {BOLD}{Y}║{W}')
+        if _pat_ok:
+            print(f'{BOLD}{Y}║{W}  {G}✓{W} PAT created (7 days)                      {BOLD}{Y}║{W}')
+        else:
+            print(f'{BOLD}{Y}║{W}  {R}✗{W} PAT failed (using JWT -- expires in 1h)    {BOLD}{Y}║{W}')
+        if _wl_ip:
+            if _wl_ok:
+                print(f'{BOLD}{Y}║{W}  {G}✓{W} IP whitelisted                            {BOLD}{Y}║{W}')
+            else:
+                print(f'{BOLD}{Y}║{W}  {R}✗{W} IP whitelist failed ({_wl_ip})   {BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}                                              {BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}  To resolve, try one of:                    {BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}  - Connect to your corporate VPN and retry  {BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}  - Run from an authorized network           {BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}  - Ask workspace admin to whitelist your IP  {BOLD}{Y}║{W}')
+        if _wl_ip and not _wl_ok:
+            print(f'{BOLD}{Y}║{W}    IP to whitelist: {C}{_wl_ip}{W}')
+        print(f'{BOLD}{Y}╚══════════════════════════════════════════════╝{W}\n')
+    else:
+        print(f'{BOLD}{G}╔══════════════════════════════════════════════╗{W}')
+        print(f'{BOLD}{G}║  All good -- Setup App is ready.             ║{W}')
+        print(f'{BOLD}{G}║  You can close this window.                  ║{W}')
+        print(f'{BOLD}{G}╚══════════════════════════════════════════════╝{W}\n')
 else:
     print(f'{FAIL} Token exchange failed. Check errors above.\n')
 PYTHON_SCRIPT
