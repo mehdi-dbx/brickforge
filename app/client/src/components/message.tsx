@@ -210,6 +210,7 @@ const PurePreviewMessage = ({
               if (isNamePart(part)) {
                 return (
                   <Streamdown
+                    code={false}
                     key={key}
                     className="-mb-2 mt-0 border-l-4 pl-2 text-muted-foreground"
                   >{`# ${formatNamePart(part)}`}</Streamdown>

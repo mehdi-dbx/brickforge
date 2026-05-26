@@ -23,5 +23,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      external: ['shiki', /^shiki\//, 'mermaid', /^mermaid\//, 'cytoscape', /^cytoscape\//, 'katex', /^katex\//],
+    },
   },
 });

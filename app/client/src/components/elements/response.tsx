@@ -8,6 +8,8 @@ export const Response = memo(
   (props: ResponseProps) => {
     return (
       <Streamdown
+        code={false}
+        mermaid={false}
         components={{
           a: DatabricksMessageCitationStreamdownIntegration,
         }}
