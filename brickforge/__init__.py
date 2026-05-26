@@ -12,3 +12,9 @@ if (_candidate / "pyproject.toml").exists():
     PROJECT_ROOT = _candidate  # running from repo (editable install or direct)
 else:
     PROJECT_ROOT = PACKAGE_ROOT  # pip-installed: brickforge/ is the root
+
+# USER_DIR: ~/.brickforge/ -- runtime data (logs, config, stash cache)
+USER_DIR = Path.home() / ".brickforge"
+USER_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR = USER_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)

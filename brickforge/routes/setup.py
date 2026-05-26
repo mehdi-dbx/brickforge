@@ -306,7 +306,7 @@ except Exception: print('[]')
             cwd=str(PACKAGE_ROOT), env=env,
         )
         if result.returncode != 0:
-            return {"items": [], "error": result.stderr or result.stdout}
+            from brickforge.lib.env_utils import parse_subprocess_error; return {"items": [], "error": parse_subprocess_error(result.stderr, result.stdout)}
         items = json.loads(result.stdout.strip())
         return {"items": items}
     except Exception as e:
@@ -536,8 +536,14 @@ except Exception as e:
         )
         raw = (result.stdout or "").strip() or (result.stderr or "").strip()
         ok = result.returncode == 0 and raw.startswith("[+]")
-        return {"ok": ok, "message": raw.lstrip("[+] ").lstrip("[x] ") if raw else "no response"}
+        if ok:
+            return {"ok": True, "message": raw.lstrip("[+] ") if raw else "ok"}
+        # Parse error for clean user message
+        from brickforge.lib.env_utils import parse_subprocess_error
+        return {"ok": False, "message": parse_subprocess_error(result.stderr, result.stdout) if "Traceback" in raw or "blocked" in raw else (raw.lstrip("[x] ") if raw else "no response")}
     except Exception as e:
+        from brickforge.lib.env_utils import log_error
+        log_error("/api/setup/test", str(e))
         return {"ok": False, "message": str(e)}
 
 

@@ -34,7 +34,7 @@ async def list_documents():
         if result.returncode == 0:
             data = json.loads(result.stdout.strip())
             return data
-        return {"files": [], "error": result.stderr or result.stdout}
+        from brickforge.lib.env_utils import parse_subprocess_error; return {"files": [], "error": parse_subprocess_error(result.stderr, result.stdout)}
     except Exception as e:
         return {"files": [], "error": str(e)}
 

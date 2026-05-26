@@ -77,7 +77,7 @@ print(json.dumps({'items': items}))
         )
         if result.returncode == 0 and result.stdout.strip():
             return json.loads(result.stdout.strip())
-        return {"items": [], "error": result.stderr or "no output"}
+        from brickforge.lib.env_utils import parse_subprocess_error; return {"items": [], "error": parse_subprocess_error(result.stderr, result.stdout) if result.stderr else "no output"}
     except Exception as e:
         return {"items": [], "error": str(e)}
 
