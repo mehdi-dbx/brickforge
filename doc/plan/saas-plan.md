@@ -446,6 +446,27 @@ This project needs to be validated by Databricks internal authorities and must a
 - For DBX App modes (A/B): Setup App uses Python SDK `databricks.sdk.service.apps` API or shells out to `databricks` CLI if available in runtime
 - Both paths produce the same result - DAB bundle deployed
 
+**Agent App build strategy (3 paths, auto-detected):**
+
+The pip package ships agent app source (client + server + packages) but not built dist. Deploy must detect and pick the best build path automatically:
+
+1. **Pre-built dist exists** (editable install / local dev) -- bundle tarballs as-is, fastest deploy
+2. **Node available locally** (pip install + node on machine) -- build locally then bundle, fast deploy
+3. **No node locally** (pip install only) -- ship source, build on Databricks Apps at startup
+
+Detection logic in `deploy_agent_app.py`:
+- Check `app/client/dist/` exists -> path 1
+- Check `node` in PATH -> path 2 (run `npm install && npm run build` before bundling)
+- Fallback -> path 3 (startup script builds from source on DBX Apps compute)
+
+Dependencies:
+- Path 1: none (dist already built)
+- Path 2: node.js + npm on user's machine
+- Path 3: node.js on Databricks Apps compute (always available), npm pulls from `npm-proxy.cloud.databricks.com`
+
+All Python deps handled by pip. Only external dependency is node.js (for chat UI build).
+Status: NOT YET WIRED -- deploy_agent_app.py and startup script need updates.
+
 ### Challenge 7: Prompts / Knowledge Base
 
 System prompt in `.forge` (inline or sidecar file).

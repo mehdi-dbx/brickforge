@@ -1107,6 +1107,37 @@ stash_dir = os.environ.get(<span class="str">'FORGE_STASH_DIR'</span>)
   </tbody>
 </table>
 
+<h3>Agent App Build Strategy (3 paths, auto-detected)</h3>
+<p>The pip package ships agent app source (client + server + packages) but not built dist. <code>deploy_agent_app.py</code> detects and picks the best build path automatically:</p>
+<table>
+  <thead>
+    <tr><th>Path</th><th>Condition</th><th>What happens</th><th>Speed</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1. Pre-built</td>
+      <td><code>app/client/dist/</code> exists (editable install / local dev)</td>
+      <td>Bundle tarballs as-is</td>
+      <td>Fastest</td>
+    </tr>
+    <tr>
+      <td>2. Local build</td>
+      <td><code>node</code> in PATH (pip install + node on machine)</td>
+      <td>Run <code>npm install && npm run build</code> locally, then bundle</td>
+      <td>Fast</td>
+    </tr>
+    <tr>
+      <td>3. Remote build</td>
+      <td>No node locally (pip install only)</td>
+      <td>Ship source, build on Databricks Apps at startup</td>
+      <td>Slower cold start</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Detection:</strong> check <code>app/client/dist/</code> &rarr; check <code>node</code> in PATH &rarr; fallback to source.</p>
+<p><strong>Dependencies:</strong> Path 1: none. Path 2: node.js + npm. Path 3: node.js on DBX Apps compute (always available), npm pulls from <code>npm-proxy.cloud.databricks.com</code>. All Python deps handled by pip.</p>
+<p class="status amber">STATUS: NOT YET WIRED -- deploy_agent_app.py and startup script need updates.</p>
+
 <h3>Grant Script (Implemented)</h3>
 <p><code>deploy/grant/run_all_grants.py</code> replaces the old <code>deploy/run_all_grants.sh</code> bash script. Cross-platform (no bash dependency). 7 grant steps executed in sequence:</p>
 <table>

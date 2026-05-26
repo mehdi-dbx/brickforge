@@ -1,4 +1,4 @@
-command: ["bash", "-c", "uv sync && node app/server/dist/index.mjs"]
+command: ["bash", "-c", "pip install . && node app/server/dist/index.mjs"]
 
 env:
   - name: MLFLOW_TRACKING_URI

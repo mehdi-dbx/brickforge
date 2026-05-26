@@ -1,4 +1,9 @@
+import os
+import subprocess
+from pathlib import Path
+
 from dotenv import load_dotenv
+from fastapi import HTTPException
 from mlflow.genai.agent_server import AgentServer, setup_mlflow_git_based_version_tracking
 
 # Load env vars from .env then .env.local before importing the agent for proper auth
@@ -11,12 +16,6 @@ server = AgentServer("ResponsesAgent", enable_chat_proxy=True)
 
 # Define the app as a module level variable to enable multiple workers
 app = server.app  # noqa: F841
-
-import os
-import subprocess
-from pathlib import Path
-
-from fastapi import HTTPException
 
 _NODE_SERVER = Path(__file__).resolve().parents[1] / "app" / "server" / "dist" / "index.mjs"
 

@@ -36,11 +36,16 @@ These are the actions that actually DO things on a Databricks workspace. They we
 - Verify: `generate_tables.py` starts, SSE streams output
 - Verify: generated files written to `PACKAGE_ROOT/data/gen/`
 
-### 5. Deploy agent
-- From the pip-installed app, click deploy
-- Verify: `deploy_agent_app.py` bundles agent/, tools/, data/ from PACKAGE_ROOT
-- Verify: app/ (chat UI) at PROJECT_ROOT -- will fail from pure pip install (known limitation)
-- Document: agent deploy requires editable install or repo clone
+### 5. Deploy agent -- NOT YET IMPLEMENTED
+- app/ now inside brickforge/app/ (source ships in pip wheel, 162 files)
+- Chat UI trimmed: shiki/mermaid/cytoscape/katex externalized (16MB -> 1.8MB dist)
+- Deploy needs to support 3 build paths (not yet wired):
+  1. **Pre-built dist exists** (editable install / local dev) -- bundle tarballs as-is, fastest
+  2. **Node available locally** (pip install + node on machine) -- build locally then bundle
+  3. **No node locally** (pip install only) -- ship source, build on Databricks Apps at startup
+- Detection is automatic: check for dist/ -> check for node -> fallback to source
+- Databricks Apps compute has node.js, npm pulls from npm-proxy.cloud.databricks.com
+- Only external dependency: node.js (for local build path). Python deps handled by pip.
 
 ## Test Environment
 
@@ -60,4 +65,4 @@ Doubt factors:
 
 ## Priority
 
-1 > 2 > 3 > 4 > 5. If 1 and 2 work, the core flow is validated. 3-4 are important but secondary. 5 has a known limitation.
+1 > 2 > 3 > 4 > 5. If 1 and 2 work, the core flow is validated. 3-4 are important but secondary. 5 needs the 3-path build logic wired into deploy_agent_app.py and the startup script.

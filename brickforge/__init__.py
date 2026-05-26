@@ -1,7 +1,7 @@
 """BrickForge - Build and deploy Databricks AI agents from a visual Setup App."""
 from pathlib import Path
 
-__version__ = "0.1.0a9"
+__version__ = "0.1.0a10"
 
 # PACKAGE_ROOT: always the brickforge/ directory itself (where tools/, data/, agent/ live)
 PACKAGE_ROOT = Path(__file__).resolve().parent

@@ -1,12 +1,12 @@
 [project]
 name = "brickforge"
-version = "0.1.0a9"
+version = "0.1.0a10"
 description = "Build and deploy Databricks AI agents from a visual Setup App"
 requires-python = ">=3.9"
 dependencies = [
     "databricks-sdk>=0.102.0",
     "databricks-langchain",
-    "mlflow>=2.0",
+    "mlflow>=3.12.0",
     "python-dotenv",
     "pyyaml",
     "fastapi",
@@ -37,14 +37,13 @@ start-app = "brickforge.agent.start_server:main"
 
 [tool.setuptools.packages.find]
 include = ["brickforge*"]
+exclude = ["brickforge.app.node_modules*", "brickforge.app.client.node_modules*", "brickforge.app.server.node_modules*", "brickforge.app.tests*"]
 
 [tool.setuptools.exclude-package-data]
 brickforge = [
     "app/node_modules/**/*",
     "app/client/node_modules/**/*",
     "app/server/node_modules/**/*",
-    "app/client/dist/**/*",
-    "app/server/dist/**/*",
     "app/tests/**/*",
 ]
 
@@ -64,16 +63,33 @@ brickforge = [
     "eval/**/*.jsonl",
     "eval/**/*.py",
     "deploy/**/*.sh",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "app/**/*.js",
-    "app/**/*.mjs",
-    "app/**/*.json",
-    "app/**/*.css",
-    "app/**/*.html",
-    "app/**/*.yaml",
-    "app/**/*.yml",
-    "app/**/*.sh",
+    "app/*.json",
+    "app/*.yaml",
+    "app/*.yml",
+    "app/*.ts",
+    "app/client/src/**/*.ts",
+    "app/client/src/**/*.tsx",
+    "app/client/src/**/*.css",
+    "app/client/*.html",
+    "app/client/*.json",
+    "app/client/*.ts",
+    "app/client/*.js",
+    "app/server/src/**/*.ts",
+    "app/server/*.json",
+    "app/server/*.ts",
+    "app/packages/*/src/**/*.ts",
+    "app/packages/*/package.json",
+    "app/packages/*/tsconfig.json",
+    "app/packages/*/tsdown.config.ts",
+    "app/packages/db/migrations/**/*.sql",
+    "app/packages/db/migrations/**/*.json",
+    "app/scripts/**/*.sh",
+    "app/scripts/**/*.ts",
+    "app/app.yaml",
+    "app/databricks.yml",
+    "app/client/dist/**/*",
+    "app/server/dist/**/*.mjs",
+    "pyproject.toml",
 ]
 
 [tool.uv]

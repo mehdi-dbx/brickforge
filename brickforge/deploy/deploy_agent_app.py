@@ -46,10 +46,6 @@ AGENT_APP_TARBALL_DIRS = [
     "app/server/dist",
 ]
 
-AGENT_APP_FILES = [
-    "pyproject.toml",
-]
-
 EXCLUDE_PATTERNS = {
     "__pycache__", ".mypy_cache", ".DS_Store", "node_modules",
     ".git", ".claude", "stash", "edu", "doc", "visual",
@@ -68,7 +64,7 @@ def _should_exclude(rel_path: Path) -> bool:
 # ── app.yaml generation ──────────────────────────────────────────────────────
 
 AGENT_APP_YAML_TEMPLATE = """\
-command: ["bash", "-c", "uv sync && node app/server/dist/index.mjs"]
+command: ["bash", "-c", "pip install . && node app/server/dist/index.mjs"]
 
 env:
   - name: MLFLOW_TRACKING_URI
@@ -219,11 +215,15 @@ def build_agent_bundle(config: dict) -> bytes:
             zf.writestr(tar_name, tar_bytes)
             print(f"  [+] {dir_name}/ -> {tar_name} ({len(tar_bytes)//1024}KB)")
 
-        # Add individual files
-        for fname in AGENT_APP_FILES:
-            fpath = ROOT / fname
-            if fpath.exists():
-                zf.write(fpath, fname)
+        # Add pyproject.toml (copied into brickforge/ at build time)
+        pyproject = ROOT / "pyproject.toml"
+        if pyproject.exists():
+            zf.write(str(pyproject), "pyproject.toml")
+        else:
+            # Editable install: pyproject.toml is at repo root
+            pyproject_alt = ROOT.parent / "pyproject.toml"
+            if pyproject_alt.exists():
+                zf.write(str(pyproject_alt), "pyproject.toml")
 
         # Generate and add app.yaml
         app_yaml = generate_app_yaml(config)
@@ -283,8 +283,8 @@ for tgz in app/client/dist.tar.gz app/server/dist.tar.gz; do
     fi
 done
 echo "[2/4] done"
-echo "[3/4] uv sync..."
-uv sync 2>&1
+echo "[3/4] Installing Python deps..."
+pip install . 2>&1
 echo "[3/4] done"
 echo "[4/4] starting agent..."
 exec python -c "from agent.start_server import main; main()"
@@ -299,7 +299,7 @@ exec python -c "from agent.start_server import main; main()"
 
     # Generate app.yaml that calls the startup script
     app_yaml_for_deploy = generate_app_yaml(config).replace(
-        'command: ["bash", "-c", "uv sync && node app/server/dist/index.mjs"]',
+        'command: ["bash", "-c", "pip install . && node app/server/dist/index.mjs"]',
         'command: ["bash", "start.sh"]',
     )
     b64_app_yaml = base64.b64encode(app_yaml_for_deploy.encode()).decode()
