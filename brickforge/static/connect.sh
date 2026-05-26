@@ -102,6 +102,8 @@ if not ws:
     sys.exit(1)
 if not ws.startswith('http'):
     ws = 'https://' + ws
+if not ws.startswith('http'):
+    ws = 'https://' + ws
 print(f'{OK} Target: {C}{ws}{W}')
 print()
 print(f'  {BOLD}{Y}A 7-day Personal Access Token (PAT) will be created{W}')
