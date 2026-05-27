@@ -146,8 +146,23 @@ Goal: deploy the agent chat app from a pip-installed brickforge on EC2 to Databr
 | 8 | databricks-langchain missing AsyncCheckpointSaver | a21 | Bumped to 0.19.0 |
 | 9 | Dependency version conflicts (requests, langgraph) | a22-a25 | Full venv freeze with compatible versions |
 | 10 | White screen (Vite externals crash in browser) | a25-a26 | Stub modules via resolve.alias |
+| 11 | `user_id` referenced before assignment in agent.py | a27 | Moved extraction before `init_agent()` call |
+| 12 | ENDPOINT_NOT_FOUND (no model endpoint saved) | a29-a31 | `exec-same` auto-discovers FM endpoints via SDK |
+| 13 | Wrong SDK model (ServedEntitySpec.served_entity) | a30 | Flat access: `sc.external_model` directly |
+| 14 | Phantom import (write_env_entry) | a31 | Inlined env file write with regex |
 
-#### Final state (a26)
+#### a27: agent.py user_id fix
+- `user_id` used on line 288 before assignment on line 291
+- Fix: moved `_get_user_id()` and `_get_thread_id()` before `init_agent()` call
+
+#### a29-a31: Model endpoint auto-discovery
+- "Same workspace" mode commented out `AGENT_MODEL_ENDPOINT` without saving an alternative
+- Agent fell back to hardcoded `databricks-claude-sonnet-4-6` which doesn't exist -- 404
+- a29: added auto-discovery via `w.serving_endpoints.list()`, filter for external/foundation models, save first match
+- a30: `ServedEntitySpec` has flat `.external_model`, not nested `.served_entity.external_model` -- AttributeError
+- a31: `write_env_entry` doesn't exist in `config_provider` (it's local to `setup_dbx_env.py`) -- ImportError. Inlined env file write with regex.
+
+#### Final state (a31)
 - Wheel: 2.0MB (setup app + agent app source + pre-built dist + 160 pinned deps)
 - Deploy from pip install: pip install brickforge -> brickforge -> bridge-forge -> configure -> deploy
 - DBX Apps startup: unzip -> unpack dist -> pip install -r requirements.txt (fast) -> agent + chat UI start

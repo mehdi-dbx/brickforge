@@ -284,11 +284,11 @@ def _load_system_prompt() -> str:
 
 async def _run_agent(request: ResponsesAgentRequest) -> AsyncGenerator[ResponsesAgentStreamEvent, None]:
     async with lakebase_context() as (checkpointer, store):
+        thread_id = _get_thread_id(request)
+        user_id = _get_user_id(request)
         agent, llm_supports_streaming = await init_agent(
             checkpointer=checkpointer, store=store, user_id=user_id,
         )
-        thread_id = _get_thread_id(request)
-        user_id = _get_user_id(request)
         config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
         if user_id:
             config["configurable"]["user_id"] = user_id

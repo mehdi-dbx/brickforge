@@ -579,15 +579,51 @@ async def setup_exec(request: Request):
         # ── Direct call actions ────────────────────────────────────────
 
         if action == "exec-same":
-            config.disable_many(["AGENT_MODEL_ENDPOINT", "AGENT_MODEL_TOKEN"])
-            for line in ["[+] same-workspace mode selected",
-                         "[+] AGENT_MODEL_ENDPOINT commented out",
-                         "[+] AGENT_MODEL_TOKEN commented out",
-                         "[+] ready"]:
-                yield sse_line(line + "\n")
-                logger.log(line)
+            # Auto-discover FM endpoint on this workspace
+            script = """\
+import os, json
+from databricks.sdk import WorkspaceClient
+from dotenv import load_dotenv
+load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+w = WorkspaceClient()
+endpoints = list(w.serving_endpoints.list())
+# Prefer external model endpoints (e.g. Claude via Anthropic)
+fm = [e for e in endpoints if e.config and any(
+    sc.external_model for sc in (e.config.served_entities or [])
+)]
+if not fm:
+    fm = [e for e in endpoints if e.config and any(
+        sc.foundation_model for sc in (e.config.served_entities or [])
+    )]
+if not fm:
+    # Fallback: any endpoint with a known FM name pattern
+    fm = [e for e in endpoints if any(k in (e.name or '') for k in ['claude','llama','mixtral','gpt','anthropic'])]
+if not fm:
+    print('[x] no Foundation Model endpoint found on this workspace')
+    exit(1)
+name = fm[0].name
+env_file = os.environ.get('ENV_FILE', '.env.local')
+# Write AGENT_MODEL_ENDPOINT to .env.local
+import re as _re
+try:
+    with open(env_file) as f: content = f.read()
+except FileNotFoundError:
+    content = ''
+pat = _re.compile(r'^#?\\s*AGENT_MODEL_ENDPOINT=.*$', _re.MULTILINE)
+if pat.search(content):
+    content = pat.sub(f'AGENT_MODEL_ENDPOINT={name}', content)
+else:
+    content = content.rstrip() + f'\\nAGENT_MODEL_ENDPOINT={name}\\n'
+# Comment out cross-workspace token
+content = _re.sub(r'^(AGENT_MODEL_TOKEN=)', r'# \\1', content, flags=_re.MULTILINE)
+with open(env_file, 'w') as f: f.write(content)
+print('[+] same-workspace mode')
+print('[+] AGENT_MODEL_ENDPOINT = ' + name)
+"""
+            cmd = [PYTHON, "-c", script]
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+                yield event
             logger.finish(True)
-            yield sse_done(True)
             return
 
         if action == "forge-bridge":
