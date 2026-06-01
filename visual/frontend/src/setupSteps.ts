@@ -48,9 +48,12 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'functions',
     label: 'UC functions',
     title: 'Functions & procedures',
-    help: 'Create SQL functions and stored procedures in Unity Catalog. Uses default routines from data/default/func + data/default/proc and any generated routines from data/gen/func + data/gen/proc. These are the query templates and mutation operations the agent calls via tools.',
+    help: 'Create UC functions and stored procedures that the agent uses as tools. Functions are parameterized queries registered in Unity Catalog. Procedures are mutation operations (UPDATE, INSERT). Generate them from your table schemas or upload SQL files.',
     choices: [
-      { title: 'create all',           desc: 'provision functions and procedures from default + generated SQL',     action: 'exec-functions' },
+      { title: 'provision existing',     desc: 'create functions + procedures from stash or previously generated SQL',  action: 'exec-functions' },
+      { title: 'generate routines',      desc: 'open the routines wizard to generate functions from your tables with AI', action: 'gen-routines' },
+      { title: 'upload SQL files',       desc: 'upload .sql files with CREATE FUNCTION / PROCEDURE statements',        action: 'upload-sql' },
+      { title: 'skip',                   desc: 'no functions needed right now',                                         action: 'done' },
     ],
   },
   {

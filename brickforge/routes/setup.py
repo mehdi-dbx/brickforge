@@ -58,6 +58,11 @@ FEATURE_REGISTRY = {
         "desc": "Speech-to-text input in the chat UI (requires OpenAI API key)",
         "default": "false",
     },
+    "IMAGE": {
+        "label": "Image upload",
+        "desc": "Upload images in chat for visual analysis (requires vision-capable model)",
+        "default": "false",
+    },
 }
 
 MULTI_INSTANCE_PREFIXES = {
@@ -546,18 +551,30 @@ for csv in csvs:
 print(f'[+] {found}/{len(csvs)} table(s) exist in {spec}')
 """.strip(),
     "functions": """
-import os, re
-from pathlib import Path
+import os
+from databricks.sdk import WorkspaceClient
+from dotenv import load_dotenv
+load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 spec = os.environ.get('PROJECT_UNITY_CATALOG_SCHEMA','').strip()
 if not spec: print('[x] schema not set'); exit(1)
-root = Path('.')
-func_count = proc_count = 0
-for base in ['data/default', 'data/gen']:
-    fd = root / base / 'func'; pd = root / base / 'proc'
-    if fd.exists(): func_count += len([f for f in fd.glob('*.sql') if re.search(r'CREATE', f.read_text(), re.I)])
-    if pd.exists(): proc_count += len(list(pd.glob('*.sql')))
+cat, sch = spec.split('.', 1)
+w = WorkspaceClient()
+func_count = 0
+try:
+    funcs = list(w.functions.list(catalog_name=cat, schema_name=sch))
+    func_count = len(funcs)
+except Exception as e:
+    print(f'[~] could not list functions: {e}')
+proc_count = 0
+try:
+    wh = os.environ.get('DATABRICKS_WAREHOUSE_ID','')
+    if wh:
+        r = w.statement_execution.execute_statement(warehouse_id=wh, statement=f'SHOW PROCEDURES IN {spec}', wait_timeout='10s')
+        proc_count = len(r.result.data_array) if r.result and r.result.data_array else 0
+except Exception:
+    pass
 total = func_count + proc_count
-if total == 0: print('[x] no function/procedure SQL files found'); exit(1)
+if total == 0: print('[x] no functions or procedures found in ' + spec); exit(1)
 print(f'[+] {func_count} function(s) + {proc_count} procedure(s) ready in {spec}')
 """.strip(),
 }

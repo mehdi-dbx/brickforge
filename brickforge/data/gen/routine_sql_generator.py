@@ -7,27 +7,35 @@ from typing import Any
 from data.gen.llm_client import call_llm
 
 FUNCTION_SYSTEM_PROMPT = """\
-You are a SQL developer writing query templates for Databricks Unity Catalog.
+You are a SQL developer writing UC functions for Databricks Unity Catalog.
 
-Generate a SELECT query template that an AI agent will use to look up data.
+Generate a CREATE OR REPLACE FUNCTION statement that an AI agent will call.
 
 Return ONLY the raw SQL — no markdown fences, no explanation.
 
 Format:
--- Description of what the query does. Params: {{param1}}, {{param2}}
-SELECT column1, column2
-FROM __SCHEMA_QUALIFIED__.`table_name`
-WHERE column = '{{param1}}' AND other = {{param2}};
+CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.function_name(
+    p_param1 STRING,
+    p_param2 TIMESTAMP
+)
+RETURNS TABLE(column1 STRING, column2 DOUBLE)
+LANGUAGE SQL
+SQL SECURITY INVOKER
+RETURN
+    SELECT column1, column2
+    FROM __SCHEMA_QUALIFIED__.table_name
+    WHERE column = p_param1;
 
 Rules:
-- First line: SQL comment with description and list of parameters
-- Use __SCHEMA_QUALIFIED__ before every table name (backtick-quoted)
-- Use {{param_name}} for parameter placeholders (curly braces)
-- String parameters: wrap in single quotes '{{param}}'
-- Numeric parameters: no quotes {{param}}
+- Use __SCHEMA_QUALIFIED__ before the function name and every table name
+- Prefix all parameters with p_ to avoid column name collisions
+- Use typed parameters (STRING, INT, DOUBLE, TIMESTAMP, BOOLEAN)
+- RETURNS TABLE with explicit column names and types matching the SELECT
+- Include LANGUAGE SQL and SQL SECURITY INVOKER
+- Use RETURN (not BEGIN...END) for the query body
+- For optional parameters: use NULL default and filter with (p_x IS NULL OR col = p_x)
 - Write realistic WHERE, JOIN, GROUP BY, ORDER BY as appropriate
-- Return useful columns for an AI agent to reason about
-- No CREATE FUNCTION wrapper — just the raw SELECT template"""
+- Return useful columns for an AI agent to reason about"""
 
 PROCEDURE_SYSTEM_PROMPT = """\
 You are a SQL developer writing stored procedures for Databricks Unity Catalog.
@@ -104,8 +112,12 @@ def _validate_sql(sql: str, routine_type: str) -> str:
         if "BEGIN" not in sql.upper() or "END" not in sql.upper():
             raise ValueError("Procedure SQL missing BEGIN...END block")
     else:
-        if "SELECT" not in sql.upper():
-            raise ValueError("Function SQL missing SELECT statement")
+        if "CREATE" not in sql.upper() or "FUNCTION" not in sql.upper():
+            raise ValueError("Function SQL missing CREATE FUNCTION statement")
+        if "RETURNS TABLE" not in sql.upper():
+            raise ValueError("Function SQL missing RETURNS TABLE clause")
+        if "RETURN" not in sql.upper():
+            raise ValueError("Function SQL missing RETURN statement")
 
     return sql
 
