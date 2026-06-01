@@ -80,6 +80,13 @@ export function SetupView() {
 
     if (action === 'done') { setPhase('done'); return }
 
+    // gen-data: switch to the Data tab's generate wizard
+    if (action === 'gen-data') {
+      window.dispatchEvent(new CustomEvent('switch-view', { detail: 'data' }))
+      window.dispatchEvent(new CustomEvent('data-mode', { detail: 'generate' }))
+      return
+    }
+
     // Already in configure — advance to execute (unless action handles its own lifecycle)
     const SELF_CONTAINED = new Set(['forge-bridge', 'cfg-prompt', 'cfg-prompt-gen'])
     if (phase === 'configure' && !SELF_CONTAINED.has(action)) {
