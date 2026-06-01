@@ -35,9 +35,13 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'tables',
     label: 'data tables',
     title: 'Data tables',
-    help: 'Provision Delta tables from the data layer into the Unity Catalog schema. Uses default and/or generated data based on USE_DEFAULT_DATA / USE_GEN_DATA flags. Requires a valid Unity Catalog schema to be set first.',
+    help: 'Provision Delta tables into the Unity Catalog schema. Choose a data source: use the shipped seed data, upload your own CSVs, generate synthetic data with AI, or connect tables that already exist in UC.',
     choices: [
-      { title: 'provision tables',      desc: 'create catalog, schema, and Delta tables from CSV data',            action: 'exec-tables' },
+      { title: 'use default data',       desc: 'provision from shipped seed CSVs (airops, flights, etc.)',          action: 'exec-tables' },
+      { title: 'upload your own CSVs',    desc: 'upload CSV files and create Delta tables from them',               action: 'upload-csv' },
+      { title: 'generate synthetic data', desc: 'open the data gen wizard to create tables with AI',                action: 'gen-data' },
+      { title: 'connect existing tables', desc: 'point to tables already in Unity Catalog -- no creation needed',   action: 'connect-tables' },
+      { title: 'skip',                    desc: 'no data tables needed right now',                                  action: 'done' },
     ],
   },
   {

@@ -1284,6 +1284,10 @@ export function SetupDrawer({
   const [apiDesc, setApiDesc]           = useState('')
   const [apiParams, setApiParams]       = useState('')
   const [selLakebaseId, setSelLakebaseId] = useState('')
+  const [csvFiles, setCsvFiles]           = useState<File[]>([])
+  const [csvUploading, setCsvUploading]   = useState(false)
+  const csvInputRef                       = useRef<HTMLInputElement>(null)
+  const [connectSchema, setConnectSchema] = useState('')
   const [instanceTest, setInstanceTest] = useState<TestResult>({ status: 'idle', message: '' })
   const [instanceTools, setInstanceTools] = useState<{ name: string; description: string }[] | null>(null)
   const [toolsLoading, setToolsLoading] = useState(false)
@@ -1331,6 +1335,7 @@ export function SetupDrawer({
     setManualVal(''); setGenieName(''); setKaDocsReady(false)
     setMcpSlug(''); setMcpHeader('')
     setAssetsSchema(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
+    setCsvFiles([]); setConnectSchema('')
   }, [activeStep, selectedChoice, currentValues.PROJECT_UNITY_CATALOG_SCHEMA])
 
   // SSE runner
@@ -1384,6 +1389,11 @@ export function SetupDrawer({
       action = 'save-multi-instance'
       Object.assign(params, { prefix, slug: mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_'), url: manualVal.trim(), header: mcpHeader.trim() })
     }
+    // connect-tables: save the schema reference directly
+    if (action === 'connect-tables' && connectSchema.trim()) {
+      action = 'save-manual'
+      Object.assign(params, { key: 'PROJECT_UNITY_CATALOG_SCHEMA', value: connectSchema.trim() })
+    }
     // Create all assets: pass confirmed schema so backend saves it first
     if (action === 'exec-assets' && assetsSchema) { Object.assign(params, { schema: assetsSchema.trim() }) }
 
@@ -1391,6 +1401,36 @@ export function SetupDrawer({
     const controller = new AbortController()
     abortRef.current = controller
     async function run() {
+      // upload-csv: multipart upload then SSE provision
+      if (choice?.action === 'upload-csv' && csvFiles.length > 0) {
+        try {
+          setCsvUploading(true)
+          window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `[~] uploading ${csvFiles.length} CSV file(s)...`, stream: 'stdout' } }))
+          const form = new FormData()
+          for (const f of csvFiles) form.append('files', f)
+          const upResp = await fetch('/api/setup/upload-csv', { method: 'POST', body: form, signal: controller.signal })
+          const upData = await upResp.json()
+          setCsvUploading(false)
+          if (!upData.ok) {
+            const failedFiles = (upData.uploaded || []).filter((u: any) => !u.ok).map((u: any) => `${u.name}: ${u.error || 'unknown'}`).join(', ')
+            window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `[x] upload failed: ${failedFiles || 'unknown'}`, stream: 'stderr' } }))
+            wrappedExecDone(false)
+            return
+          }
+          for (const f of (upData.uploaded || [])) {
+            const sym = f.ok ? '[+]' : '[x]'
+            window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `${sym} ${f.name}`, stream: 'stdout' } }))
+          }
+          // Now provision the uploaded CSVs via SSE
+          action = 'exec-tables-uploaded'
+        } catch (e) {
+          setCsvUploading(false)
+          if (controller.signal.aborted) return
+          wrappedExecDone(false)
+          return
+        }
+      }
+
       try {
         const resp = await fetch('/api/setup/exec', {
           method: 'POST',
@@ -1536,7 +1576,7 @@ export function SetupDrawer({
     if (!choice) return null
     const action = choice.action
 
-    const validSchema = /^\w+\.\w+$/.test(assetsSchema.trim())
+    const validSchema = /^[\w-]+\.[\w-]+$/.test(assetsSchema.trim())
 
     function canRun() {
       if (action === 'cfg-profile')   return !!selProfile
@@ -1548,12 +1588,14 @@ export function SetupDrawer({
       if (action === 'cfg-new')         return !!manualVal.trim()
       if (action === 'cfg-deploy-name') return !!manualVal.trim()
       if (action === 'exec-assets')     return validSchema
+      if (action === 'upload-csv')     return csvFiles.length > 0 && !csvUploading
+      if (action === 'connect-tables') return /^[\w-]+\.[\w-]+$/.test(connectSchema.trim())
       if (action === 'cfg-ka')        return kaDocsReady
       if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && activeStep === 'host') return /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
-      if (action === 'manual' && activeStep === 'schema') return /^\w+\.\w+$/.test(manualVal.trim())
+      if (action === 'manual' && activeStep === 'schema') return /^[\w-]+\.[\w-]+$/.test(manualVal.trim())
       if (action === 'manual')        return !!manualVal.trim()
       return true
     }
@@ -1608,6 +1650,46 @@ export function SetupDrawer({
         <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
           saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_URL to .env.local
         </div>
+      </>)
+    else if (action === 'upload-csv')
+      body = (<>
+        <Label>select CSV files</Label>
+        <InfoBox>Choose one or more .csv files. Each file becomes a Delta table named after the file (e.g. flights.csv becomes the flights table).</InfoBox>
+        <input
+          ref={csvInputRef}
+          type="file"
+          multiple
+          accept=".csv"
+          onChange={e => { if (e.target.files) setCsvFiles(Array.from(e.target.files)) }}
+          className="hidden"
+        />
+        <button
+          onClick={() => csvInputRef.current?.click()}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[12px] font-mono font-medium border border-dashed border-dbx-gray-300 dark:border-dbx-gray-600 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-red dark:hover:border-[#FF6B5A] hover:text-dbx-red dark:hover:text-[#FF6B5A] transition-all"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          {csvFiles.length > 0 ? `${csvFiles.length} file(s) selected` : 'choose CSV files'}
+        </button>
+        {csvFiles.length > 0 && (
+          <div className="mt-2 space-y-0.5">
+            {csvFiles.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 py-0.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+                <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{f.name}</span>
+                <span className="text-[11px] font-mono text-dbx-gray-400">{(f.size / 1024).toFixed(0)} KB</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </>)
+    else if (action === 'connect-tables')
+      body = (<>
+        <Label>catalog.schema</Label>
+        <InfoBox>Enter the Unity Catalog catalog.schema where your tables already exist. The project will use these tables without creating or modifying them.</InfoBox>
+        <Input value={connectSchema} onChange={setConnectSchema} placeholder="my_catalog.my_schema" />
+        {connectSchema.trim() && !/^[\w-]+\.[\w-]+$/.test(connectSchema.trim()) && (
+          <div className="mt-1 text-[11px] font-mono text-dbx-amber">format: catalog.schema</div>
+        )}
       </>)
     else if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a'))
       body = (<>

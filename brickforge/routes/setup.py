@@ -11,7 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from brickforge import PROJECT_ROOT, PACKAGE_ROOT
@@ -86,10 +86,10 @@ async def setup_status():
                 status = "configured"
                 values["AGENT_MODEL_ENDPOINT"] = env["DATABRICKS_HOST"].rstrip("/") + " (same workspace)"
 
-            # Tables: count CSVs
+            # Tables: count CSVs from all sources (default, gen, uploaded)
             if step == "tables":
                 csv_count = 0
-                for d in [PACKAGE_ROOT / "data" / "default" / "csv", PACKAGE_ROOT / "data" / "gen" / "csv"]:
+                for d in [PACKAGE_ROOT / "data" / "default" / "csv", PACKAGE_ROOT / "data" / "gen" / "csv", PROJECT_ROOT / "data" / "upload" / "csv"]:
                     try:
                         csv_count += len([f for f in d.iterdir() if f.suffix == ".csv"])
                     except FileNotFoundError:
@@ -449,9 +449,17 @@ spec = os.environ.get('PROJECT_UNITY_CATALOG_SCHEMA','').strip()
 if not spec: print('[x] schema not set'); exit(1)
 root = Path('.')
 csvs = []
-for d in [root / 'data' / 'default' / 'csv', root / 'data' / 'gen' / 'csv']:
+for d in [root / 'data' / 'default' / 'csv', root / 'data' / 'gen' / 'csv', root / 'data' / 'upload' / 'csv']:
     if d.exists(): csvs.extend(d.glob('*.csv'))
-if not csvs: print('[x] no CSVs found'); exit(1)
+if not csvs:
+    # No CSVs but schema may still have tables (connect-existing mode)
+    w = WorkspaceClient()
+    try:
+        tbls = list(w.tables.list(catalog_name=spec.split('.')[0], schema_name=spec.split('.')[1]))
+        if tbls: print(f'[+] {len(tbls)} table(s) exist in {spec}'); exit(0)
+    except Exception as e:
+        print(f'[~] could not list tables: {e}')
+    print('[x] no CSVs found and no tables in schema'); exit(1)
 w = WorkspaceClient()
 found = 0
 for csv in csvs:
@@ -545,6 +553,54 @@ except Exception as e:
         from brickforge.lib.env_utils import log_error
         log_error("/api/setup/test", str(e))
         return {"ok": False, "message": str(e)}
+
+
+# ── Upload CSV ────────────────────────────────────────────────────────────────
+
+MAX_CSV_SIZE = 100 * 1024 * 1024  # 100 MB
+
+_COL_NAME_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
+@router.post("/api/setup/upload-csv")
+async def upload_csv(files: list[UploadFile] = File(...)):
+    """Accept user-uploaded CSV files and save them to data/upload/csv/."""
+    upload_dir = PROJECT_ROOT / "data" / "upload" / "csv"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    init_dir = PROJECT_ROOT / "data" / "upload" / "init"
+    init_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded = []
+    for f in files:
+        if not f.filename or not f.filename.lower().endswith(".csv"):
+            uploaded.append({"name": f.filename or "?", "ok": False, "error": "not a .csv file"})
+            continue
+        # Sanitize filename to prevent path traversal
+        safe_name = Path(f.filename).name
+        if ".." in safe_name or "/" in safe_name or "\\" in safe_name:
+            uploaded.append({"name": f.filename, "ok": False, "error": "invalid filename"})
+            continue
+        try:
+            content = await f.read()
+            if len(content) > MAX_CSV_SIZE:
+                uploaded.append({"name": safe_name, "ok": False, "error": f"file exceeds {MAX_CSV_SIZE // (1024*1024)}MB limit"})
+                continue
+            dest = upload_dir / safe_name
+            dest.write_bytes(content)
+            # Generate a minimal CREATE TABLE SQL from the CSV header
+            header_line = content.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+            cols = [c.strip().strip('"').strip("'") for c in header_line.split(",") if c.strip()]
+            # Sanitize column names to alphanumeric + underscores only
+            cols = [_COL_NAME_RE.sub("_", c).strip("_") or f"col_{i}" for i, c in enumerate(cols)]
+            table_name = _COL_NAME_RE.sub("_", Path(safe_name).stem).strip("_").lower() or "unnamed_table"
+            col_defs = ", ".join(f"`{c}` STRING" for c in cols)
+            sql = f"CREATE TABLE IF NOT EXISTS ${{catalog}}.${{schema}}.{table_name} ({col_defs});\n"
+            (init_dir / f"create_{table_name}.sql").write_text(sql)
+            uploaded.append({"name": safe_name, "ok": True})
+        except Exception as e:
+            uploaded.append({"name": safe_name, "ok": False, "error": str(e)[:200]})
+
+    return {"ok": all(u["ok"] for u in uploaded), "uploaded": uploaded}
 
 
 # ── Exec (SSE) ────────────────────────────────────────────────────────────────
@@ -933,6 +989,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
         # Mapped commands
         cmd_map = {
             "exec-tables": [PYTHON,"-c", _tables_script()],
+            "exec-tables-uploaded": [PYTHON,"-c", _tables_uploaded_script()],
             "exec-functions": [PYTHON,"-c", _functions_script()],
             "exec-lakebase": [PYTHON,"data/init/create_lakebase.py"],
             "exec-mlflow": [PYTHON,"data/init/create_mlflow_experiment.py"],
@@ -1103,6 +1160,45 @@ for i, sf in enumerate(sql_files, 1):
     if r.returncode != 0: print(f'[x] Failed: {rel}'); sys.exit(1)
     print(f'[+] {name}')
 print(f'[+] All {len(sql_files)} table(s) provisioned')
+""".strip()
+
+
+def _tables_uploaded_script() -> str:
+    return """
+import subprocess, sys, os
+from pathlib import Path
+ROOT = Path('.')
+print('[~] Creating catalog and schema...')
+sys.stdout.flush()
+r = subprocess.run([sys.executable, 'data/init/create_catalog_schema.py'], cwd=ROOT)
+if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
+print('[+] Catalog and schema ready')
+upload_init = ROOT / 'data' / 'upload' / 'init'
+sql_files = sorted(upload_init.glob('create_*.sql')) if upload_init.exists() else []
+if not sql_files: print('[x] No uploaded table SQL files found'); sys.exit(1)
+# Also load the CSVs into the tables
+upload_csv_dir = ROOT / 'data' / 'upload' / 'csv'
+print(f'[~] Provisioning {len(sql_files)} uploaded table(s)...')
+for i, sf in enumerate(sql_files, 1):
+    rel = str(sf.relative_to(ROOT))
+    name = sf.stem.replace('create_', '')
+    print(f'[~] ({i}/{len(sql_files)}) {name}...')
+    sys.stdout.flush()
+    r = subprocess.run([sys.executable, 'data/py/run_sql.py', rel], cwd=ROOT)
+    if r.returncode != 0: print(f'[x] Failed: {rel}'); sys.exit(1)
+    # Load CSV data into the table
+    csv_path = upload_csv_dir / f'{name}.csv'
+    if not csv_path.exists():
+        # Try original filename patterns
+        candidates = list(upload_csv_dir.glob(f'{name}*.csv'))
+        csv_path = candidates[0] if candidates else csv_path
+    if csv_path.exists():
+        print(f'[~] Loading data from {csv_path.name}...')
+        sys.stdout.flush()
+        r2 = subprocess.run([sys.executable, 'data/py/csv_to_delta.py', str(csv_path)], cwd=ROOT)
+        if r2.returncode != 0: print(f'[~] CSV load warning: {csv_path.name}')
+    print(f'[+] {name}')
+print(f'[+] All {len(sql_files)} uploaded table(s) provisioned')
 """.strip()
 
 
