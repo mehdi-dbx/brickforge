@@ -1,2 +1,15 @@
--- Border terminals: lists each terminal with status plus a total row per status showing count. Params: {zone}
-SELECT `terminal_id`, `status`, NULL AS `terminal_count` FROM __SCHEMA_QUALIFIED__.`border_terminals` WHERE `zone` = '{zone}' UNION ALL SELECT 'TOTAL' AS `terminal_id`, `status`, COUNT(*) AS `terminal_count` FROM __SCHEMA_QUALIFIED__.`border_terminals` WHERE `zone` = '{zone}' GROUP BY `status`
+CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.border_terminal_details(
+    p_zone STRING
+)
+RETURNS TABLE(terminal_id STRING, status STRING, terminal_count LONG)
+LANGUAGE SQL
+SQL SECURITY INVOKER
+RETURN
+    SELECT terminal_id, status, NULL AS terminal_count
+    FROM __SCHEMA_QUALIFIED__.border_terminals
+    WHERE zone = p_zone
+    UNION ALL
+    SELECT 'TOTAL' AS terminal_id, status, COUNT(*) AS terminal_count
+    FROM __SCHEMA_QUALIFIED__.border_terminals
+    WHERE zone = p_zone
+    GROUP BY status;

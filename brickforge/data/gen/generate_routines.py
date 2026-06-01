@@ -93,28 +93,25 @@ def mode_save() -> None:
 
 
 def mode_provision_gen() -> None:
-    """Run generated procedure SQL files via data/py/run_sql.py.
-
-    Functions are query templates (not DDL) and are NOT provisioned.
-    Only procedures (CREATE OR REPLACE PROCEDURE) are executed.
-    """
+    """Provision generated functions and procedures to UC via data/py/run_sql.py."""
     import subprocess
 
+    gen_func = ROOT / "data" / "gen" / "func"
     gen_proc = ROOT / "data" / "gen" / "proc"
-    if not gen_proc.exists():
-        print("[x] No generated procedure files found in data/gen/proc/")
-        sys.exit(1)
 
-    sql_files = sorted(gen_proc.glob("*.sql"))
-    if not sql_files:
-        print("[x] No .sql files found in data/gen/proc/")
+    func_files = sorted(gen_func.glob("*.sql")) if gen_func.exists() else []
+    proc_files = sorted(gen_proc.glob("*.sql")) if gen_proc.exists() else []
+    all_files = func_files + proc_files
+
+    if not all_files:
+        print("[x] No generated function or procedure SQL files found")
         sys.exit(1)
 
     # Ensure catalog/schema exists first
     print("[~] Ensuring catalog and schema exist...")
     sys.stdout.flush()
     r = subprocess.run(
-        ["uv", "run", "python", "data/init/create_catalog_schema.py"],
+        [sys.executable, "data/init/create_catalog_schema.py"],
         cwd=ROOT, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -122,30 +119,30 @@ def mode_provision_gen() -> None:
         sys.exit(1)
     print("[+] Catalog and schema ready")
 
-    # Run each generated procedure SQL file
-    total = len(sql_files)
-    for i, sql_file in enumerate(sql_files, 1):
+    # Run each SQL file (functions + procedures)
+    total = len(all_files)
+    func_count = 0
+    proc_count = 0
+    for i, sql_file in enumerate(all_files, 1):
         rel = str(sql_file.relative_to(ROOT))
-        print(f"[~] ({i}/{total}) Running {rel}...")
+        kind = "function" if sql_file.parent.name == "func" else "procedure"
+        print(f"[~] ({i}/{total}) Creating {kind}: {sql_file.stem}...")
         sys.stdout.flush()
         r = subprocess.run(
-            ["uv", "run", "python", "data/py/run_sql.py", rel],
+            [sys.executable, "data/py/run_sql.py", rel],
             cwd=ROOT, capture_output=True, text=True,
         )
         if r.returncode != 0:
             print(f"[x] Failed: {r.stderr.strip() or r.stdout.strip()}")
             sys.exit(1)
-        proc_name = sql_file.stem
-        print(f"[+] Created procedure: {proc_name}")
+        if kind == "function":
+            func_count += 1
+        else:
+            proc_count += 1
+        print(f"[+] Created {kind}: {sql_file.stem}")
 
-    # Count function templates saved (informational only)
-    gen_func = ROOT / "data" / "gen" / "func"
-    func_count = len(list(gen_func.glob("*.sql"))) if gen_func.exists() else 0
-
-    print(f"[+] Provisioned {total} procedure(s)")
-    if func_count:
-        print(f"[+] {func_count} function template(s) saved locally (query templates, not provisioned)")
-    _emit_result({"ok": True, "procedures": total, "functions": func_count})
+    print(f"[+] Provisioned {func_count} function(s) + {proc_count} procedure(s)")
+    _emit_result({"ok": True, "functions": func_count, "procedures": proc_count})
 
 
 def main() -> None:

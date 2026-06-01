@@ -142,6 +142,19 @@ async def setup_status():
                 prefix = MULTI_INSTANCE_PREFIXES[step]
                 instances = config.list_by_prefix(prefix)
 
+                # Features: inject registry defaults for unconfigured features
+                if step == "features":
+                    configured_keys = {i["key"] for i in instances}
+                    for key, meta in FEATURE_REGISTRY.items():
+                        env_key = f"PROJECT_TOOL_{key}"
+                        if env_key not in configured_keys:
+                            instances.append({
+                                "key": env_key,
+                                "value": meta["default"],
+                                "enabled": meta["default"].lower() == "true",
+                                "label": meta["label"].lower(),
+                            })
+
                 if step == "vs":
                     instances = [i for i in instances if "INDEX" in i["key"]]
                 elif step == "mcp" or step == "a2a":
@@ -669,7 +682,7 @@ async def upload_csv(files: list[UploadFile] = File(...)):
 
 # ── Exec (SSE) ────────────────────────────────────────────────────────────────
 
-NO_AUTH_ACTIONS = {"save-deploy-name", "forge-bridge"}
+NO_AUTH_ACTIONS = {"save-deploy-name", "forge-bridge", "save-feature-toggle"}
 
 
 @router.post("/api/setup/exec")

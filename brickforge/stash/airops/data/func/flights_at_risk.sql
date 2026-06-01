@@ -1,2 +1,16 @@
--- Flights at risk of delay: flights checking in through zone departing within time window. Params: {zone}, {time_start}, {time_end}
-SELECT `flight_number`, `departure_time` FROM __SCHEMA_QUALIFIED__.`flights` WHERE `zone` = '{zone}' AND `departure_time` >= TIMESTAMP('{time_start}') AND `departure_time` < TIMESTAMP('{time_end}') AND `flight_number` IS NOT NULL AND `departure_time` IS NOT NULL AND `zone` IS NOT NULL;
+CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.flights_at_risk(
+    p_zone STRING,
+    p_time_start STRING,
+    p_time_end STRING
+)
+RETURNS TABLE(flight_number STRING, departure_time TIMESTAMP_NTZ)
+LANGUAGE SQL
+SQL SECURITY INVOKER
+RETURN
+    SELECT flight_number, departure_time
+    FROM __SCHEMA_QUALIFIED__.flights
+    WHERE zone = p_zone
+    AND departure_time >= CAST(p_time_start AS TIMESTAMP_NTZ)
+    AND departure_time < CAST(p_time_end AS TIMESTAMP_NTZ)
+    AND flight_number IS NOT NULL
+    AND departure_time IS NOT NULL;

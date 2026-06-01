@@ -1,2 +1,13 @@
--- Available agents for redeployment: lists check-in agents currently on break or available (not at counter). Params: {zone} (optional)
-SELECT `agent_id`, `name`, `zone`, `counter`, `at_counter` FROM __SCHEMA_QUALIFIED__.`checkin_agents` WHERE `at_counter` IN ('BREAK', 'AVAILABLE') AND `agent_id` IS NOT NULL AND `name` IS NOT NULL AND `zone` IS NOT NULL AND `counter` IS NOT NULL AND `at_counter` IS NOT NULL {zone_filter}
+CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.available_agents_for_redeployment(
+    p_zone STRING
+)
+RETURNS TABLE(agent_id STRING, name STRING, zone STRING, counter STRING, at_counter STRING)
+LANGUAGE SQL
+SQL SECURITY INVOKER
+RETURN
+    SELECT agent_id, name, zone, counter, at_counter
+    FROM __SCHEMA_QUALIFIED__.checkin_agents
+    WHERE at_counter IN ('BREAK', 'AVAILABLE')
+    AND agent_id IS NOT NULL
+    AND name IS NOT NULL
+    AND (p_zone IS NULL OR zone = p_zone);

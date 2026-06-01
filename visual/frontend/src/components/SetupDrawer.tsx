@@ -1951,7 +1951,7 @@ export function SetupDrawer({
                 : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'}
             `}
           >
-            {action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
+            {action === 'cfg-features' ? 'save features →' : action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
           </button>
           <button
             onClick={onBack}
