@@ -57,11 +57,10 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'model',
     label: 'model endpoint',
     title: 'Agent model endpoint',
-    help: 'The Foundation Model API endpoint the agent uses for LLM reasoning (Claude via Databricks model serving). If the FM endpoint is in the same workspace, no extra token is needed. For cross-workspace setups, a separate profile and PAT will be generated automatically.',
+    help: 'Pick the LLM endpoint your agent will use for reasoning. Auto-detect scans this workspace for available Foundation Model endpoints. Cross-workspace is for advanced setups where the endpoint lives on a different workspace.',
     choices: [
-      { title: 'same workspace',       desc: 'use this workspace auth -- no extra config needed',             action: 'exec-same' },
-      { title: 'use existing profile',  desc: 'pick a CLI profile for FM workspace, auto-generate PAT',      action: 'cfg-profile' },
-      { title: 'set up new workspace', desc: 'authenticate a new FM workspace and generate credentials',     action: 'cfg-new' },
+      { title: 'auto-detect',          desc: 'scan this workspace for FM endpoints and pick one',            action: 'cfg-model' },
+      { title: 'cross-workspace',      desc: 'use an FM endpoint from a different workspace (advanced)',     action: 'cfg-profile' },
       { title: 'enter manually',       desc: 'paste an endpoint URL and token directly',                     action: 'manual' },
     ],
   },
@@ -138,7 +137,9 @@ export const SETUP_STEPS: SetupStep[] = [
     label: 'features',
     title: 'Agent features',
     help: 'Toggle optional agent capabilities on or off. Each feature adds a tool or behavior to the agent. Disabled features are not loaded at startup.',
-    choices: [],
+    choices: [
+      { title: 'manage features', desc: 'view and toggle available agent features', action: 'cfg-features' },
+    ],
   },
   {
     id: 'lakebase',

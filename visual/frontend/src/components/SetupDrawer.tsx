@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pencil, Upload, Link, Trash2, FileText } from 'lucide-react'
-import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxGenieSpace, ExecLine, TableDef } from '../types'
+import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxEndpoint, DbxGenieSpace, ExecLine, TableDef } from '../types'
 import { GenTerminal } from './GenTerminal'
 import { SETUP_STEPS } from '../setupSteps'
 
@@ -92,6 +92,26 @@ function WarehouseList({ selected, onSelect }: { selected: string; onSelect: (id
   )
 }
 
+function EndpointList({ selected, onSelect }: { selected: string; onSelect: (name: string) => void }) {
+  const { data, loading, error } = useFetchOnce<DbxEndpoint[]>('/api/setup/resources?type=endpoints')
+  const endpoints = (data as DbxEndpoint[]) || []
+  if (loading) return <Spinner label="scanning endpoints…" />
+  if (error)   return <ErrMsg msg={error} />
+  if (endpoints.length === 0) return <ErrMsg msg="no Foundation Model endpoints found on this workspace" />
+  return (
+    <>
+      <Label>available FM endpoints</Label>
+      {endpoints.map(ep => (
+        <PickRow key={ep.name} active={selected === ep.name} onClick={() => onSelect(ep.name)}>
+          <Dot color="green" />
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{ep.name}</span>
+          <Tag color="blue">{ep.type}</Tag>
+        </PickRow>
+      ))}
+    </>
+  )
+}
+
 function CatalogPicker({ catalog, schema, onCatalog, onSchema }: {
   catalog: string; schema: string; onCatalog: (c: string) => void; onSchema: (s: string) => void
 }) {
@@ -156,6 +176,51 @@ function LakebaseList({ selected, onSelect }: { selected: string; onSelect: (nam
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{i.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{i.state}</span>
         </PickRow>
+      ))}
+    </>
+  )
+}
+
+// ─── Feature toggle list ─────────────────────────────────────────────────────
+
+interface FeatureItem {
+  key: string
+  env_key: string
+  label: string
+  desc: string
+  default: string
+  enabled: boolean
+  configured: boolean
+}
+
+function FeatureList({ toggles, onToggle }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void }) {
+  if (toggles.length === 0) return <InfoBox>No features available.</InfoBox>
+  return (
+    <>
+      <Label>agent features</Label>
+      {toggles.map(f => (
+        <button
+          key={f.key}
+          onClick={() => onToggle(f.key, !f.enabled)}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border mb-1.5 text-left transition-all duration-150
+            ${f.enabled
+              ? 'border-dbx-blue/40 dark:border-dbx-green/40 bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+              : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-600'}
+          `}
+        >
+          {/* Toggle indicator */}
+          <div className={`w-8 h-4 rounded-full flex-shrink-0 relative transition-colors ${f.enabled ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300 dark:bg-dbx-gray-600'}`}>
+            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${f.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium font-mono text-dbx-gray-800 dark:text-dbx-gray-100">{f.label}</div>
+            <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">{f.desc}</div>
+          </div>
+          <span className={`text-[10px] font-mono flex-shrink-0 ${f.enabled ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
+            {f.enabled ? 'on' : 'off'}
+          </span>
+        </button>
       ))}
     </>
   )
@@ -1269,6 +1334,7 @@ export function SetupDrawer({
   const [selProfile, setSelProfile]     = useState('')
   const [selWhId, setSelWhId]           = useState('')
   const [selWhName, setSelWhName]       = useState('')
+  const [selEndpoint, setSelEndpoint]   = useState('')
   const [selCatalog, setSelCatalog]     = useState('')
   const [catSchema, setCatSchema]       = useState('main')
   const [selGenieId, setSelGenieId]     = useState('')
@@ -1293,6 +1359,8 @@ export function SetupDrawer({
   const [toolsLoading, setToolsLoading] = useState(false)
   const [featureKeyInput, setFeatureKeyInput] = useState('')
   const [featureKeySaving, setFeatureKeySaving] = useState(false)
+  const [featureItems, setFeatureItems] = useState<FeatureItem[]>([])
+  const [featuresDirty, setFeaturesDirty] = useState<Record<string, boolean>>({})  // key -> new enabled state
 
   // Test a specific instance by env key
   const handleInstanceTest = useCallback(async (key: string) => {
@@ -1336,7 +1404,17 @@ export function SetupDrawer({
     setMcpSlug(''); setMcpHeader('')
     setAssetsSchema(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
     setCsvFiles([]); setConnectSchema('')
+    setFeaturesDirty({})
   }, [activeStep, selectedChoice, currentValues.PROJECT_UNITY_CATALOG_SCHEMA])
+
+  // Fetch feature registry when cfg-features is selected
+  useEffect(() => {
+    if (choice?.action !== 'cfg-features') return
+    fetch('/api/setup/resources?type=features')
+      .then(r => r.json())
+      .then(data => { if (data.items) setFeatureItems(data.items) })
+      .catch(() => {})
+  }, [choice])
 
   // SSE runner
   useEffect(() => {
@@ -1344,6 +1422,25 @@ export function SetupDrawer({
     let action = choice.action
     const params: Record<string, string> = {}
 
+    // Features: save all toggled features sequentially
+    if (action === 'cfg-features') {
+      const dirty = Object.entries(featuresDirty)
+      if (dirty.length === 0) { onExecDone(true); onRefresh(); return }
+      ;(async () => {
+        for (const [key, enabled] of dirty) {
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-feature-toggle', params: { key, enabled: enabled ? 'true' : 'false' } }),
+          })
+        }
+        setFeaturesDirty({})
+        onExecDone(true)
+        onRefresh()
+      })()
+      return
+    }
+    if (action === 'cfg-model'     && selEndpoint) { action = 'save-model-endpoint'; Object.assign(params, { name: selEndpoint }) }
     if (action === 'cfg-warehouse' && selWhId)    { action = 'save-warehouse'; Object.assign(params, { id: selWhId, name: selWhName }) }
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
     if (action === 'cfg-genie'     && selGenieId) { action = 'save-genie';     Object.assign(params, { id: selGenieId, name: selGenieName }) }
@@ -1579,6 +1676,8 @@ export function SetupDrawer({
     const validSchema = /^[\w-]+\.[\w-]+$/.test(assetsSchema.trim())
 
     function canRun() {
+      if (action === 'cfg-features')  return true
+      if (action === 'cfg-model')     return !!selEndpoint
       if (action === 'cfg-profile')   return !!selProfile
       if (action === 'cfg-warehouse') return !!selWhId
       if (action === 'cfg-catalog')   return !!selCatalog && !!catSchema
@@ -1601,7 +1700,14 @@ export function SetupDrawer({
     }
 
     let body: React.ReactNode
-    if (action === 'cfg-profile')
+    if (action === 'cfg-features')
+      body = <FeatureList toggles={featureItems} onToggle={(key, enabled) => {
+        setFeatureItems(prev => prev.map(f => f.key === key ? { ...f, enabled } : f))
+        setFeaturesDirty(prev => ({ ...prev, [key]: enabled }))
+      }} />
+    else if (action === 'cfg-model')
+      body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} />
+    else if (action === 'cfg-profile')
       body = <ProfileList selected={selProfile} onSelect={setSelProfile} />
     else if (action === 'cfg-warehouse')
       body = <WarehouseList selected={selWhId} onSelect={(id, name) => { setSelWhId(id); setSelWhName(name) }} />

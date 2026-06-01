@@ -44,6 +44,22 @@ STEP_ENV_KEYS: dict[str, list[str]] = {
     "git":       [],
 }
 
+# ── Feature registry ──────────────────────────────────────────────────────────
+# Each entry: env-key suffix -> {label, desc, default}
+# The full env key is PROJECT_TOOL_<KEY>.
+FEATURE_REGISTRY = {
+    "CHART": {
+        "label": "Graph plotting",
+        "desc": "Agent can generate interactive charts (area, line, bar, pie) inline in chat",
+        "default": "true",
+    },
+    "VOICE": {
+        "label": "Voice input",
+        "desc": "Speech-to-text input in the chat UI (requires OpenAI API key)",
+        "default": "false",
+    },
+}
+
 MULTI_INSTANCE_PREFIXES = {
     "genie": "PROJECT_GENIE_",
     "ka": "PROJECT_KA_",
@@ -283,6 +299,25 @@ except: spaces = []
 out = [{'id': getattr(s,'space_id',''), 'name': getattr(s,'title','')} for s in spaces]
 print(json.dumps(out))
 """,
+        "endpoints": """
+from databricks.sdk import WorkspaceClient; import json
+w = WorkspaceClient()
+eps = list(w.serving_endpoints.list())
+fm = []
+for e in eps:
+    if not e.config: continue
+    entities = e.config.served_entities or []
+    is_ext = any(sc.external_model for sc in entities if sc.external_model)
+    is_fm = any(sc.foundation_model for sc in entities if sc.foundation_model)
+    if is_ext: fm.append({'name': e.name, 'type': 'external'})
+    elif is_fm: fm.append({'name': e.name, 'type': 'foundation'})
+if not fm:
+    import re
+    for e in eps:
+        if re.search(r'claude|llama|mixtral|gpt|anthropic', e.name or '', re.I):
+            fm.append({'name': e.name, 'type': 'pattern-match'})
+print(json.dumps(fm))
+""",
         "lakebase": """
 from databricks.sdk import WorkspaceClient; import json
 try:
@@ -293,6 +328,30 @@ try:
 except Exception: print('[]')
 """,
     }
+
+    # Features: return registry merged with current config (no subprocess needed)
+    if type == "features":
+        config = _get_config()
+        entries = config.list()
+        env_map = {e["key"]: e for e in entries}
+        items = []
+        for key, meta in FEATURE_REGISTRY.items():
+            env_key = f"PROJECT_TOOL_{key}"
+            entry = env_map.get(env_key)
+            if entry:
+                enabled = entry["enabled"] and entry["value"].strip().lower() not in ("false", "0", "")
+            else:
+                enabled = meta["default"].lower() == "true"
+            items.append({
+                "key": key,
+                "env_key": env_key,
+                "label": meta["label"],
+                "desc": meta["desc"],
+                "default": meta["default"],
+                "enabled": enabled,
+                "configured": env_key in env_map,
+            })
+        return {"items": items}
 
     script = scripts.get(type)
     if not script:
@@ -384,7 +443,12 @@ except Exception as e:
 import os, urllib.request, json, ssl, time
 endpoint = os.environ.get('AGENT_MODEL_ENDPOINT','').strip()
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
-if not endpoint: endpoint = host + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
+if not endpoint:
+    print('[x] AGENT_MODEL_ENDPOINT not set'); exit(1)
+# Resolve bare endpoint name to full URL
+if not endpoint.startswith('http'):
+    if not host: print('[x] no host to resolve endpoint name'); exit(1)
+    endpoint = host + '/serving-endpoints/' + endpoint + '/invocations'
 token = (os.environ.get('AGENT_MODEL_TOKEN','') or os.environ.get('DATABRICKS_TOKEN','')).strip()
 if not token: print('[x] no token'); exit(1)
 payload = json.dumps({'messages': [{'role': 'user', 'content': 'Reply with exactly: pong'}], 'max_tokens': 10}).encode()
@@ -634,53 +698,7 @@ async def setup_exec(request: Request):
 
         # ── Direct call actions ────────────────────────────────────────
 
-        if action == "exec-same":
-            # Auto-discover FM endpoint on this workspace
-            script = """\
-import os, json
-from databricks.sdk import WorkspaceClient
-from dotenv import load_dotenv
-load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
-w = WorkspaceClient()
-endpoints = list(w.serving_endpoints.list())
-# Prefer external model endpoints (e.g. Claude via Anthropic)
-fm = [e for e in endpoints if e.config and any(
-    sc.external_model for sc in (e.config.served_entities or [])
-)]
-if not fm:
-    fm = [e for e in endpoints if e.config and any(
-        sc.foundation_model for sc in (e.config.served_entities or [])
-    )]
-if not fm:
-    # Fallback: any endpoint with a known FM name pattern
-    fm = [e for e in endpoints if any(k in (e.name or '') for k in ['claude','llama','mixtral','gpt','anthropic'])]
-if not fm:
-    print('[x] no Foundation Model endpoint found on this workspace')
-    exit(1)
-name = fm[0].name
-env_file = os.environ.get('ENV_FILE', '.env.local')
-# Write AGENT_MODEL_ENDPOINT to .env.local
-import re as _re
-try:
-    with open(env_file) as f: content = f.read()
-except FileNotFoundError:
-    content = ''
-pat = _re.compile(r'^#?\\s*AGENT_MODEL_ENDPOINT=.*$', _re.MULTILINE)
-if pat.search(content):
-    content = pat.sub(f'AGENT_MODEL_ENDPOINT={name}', content)
-else:
-    content = content.rstrip() + f'\\nAGENT_MODEL_ENDPOINT={name}\\n'
-# Comment out cross-workspace token
-content = _re.sub(r'^(AGENT_MODEL_TOKEN=)', r'# \\1', content, flags=_re.MULTILINE)
-with open(env_file, 'w') as f: f.write(content)
-print('[+] same-workspace mode')
-print('[+] AGENT_MODEL_ENDPOINT = ' + name)
-"""
-            cmd = [PYTHON, "-c", script]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
-                yield event
-            logger.finish(True)
-            return
+        # exec-same removed: replaced by cfg-model picker + save-model-endpoint
 
         if action == "forge-bridge":
             logger.finish(True)
@@ -743,6 +761,25 @@ print('[+] AGENT_MODEL_ENDPOINT = ' + name)
             yield sse_done(True)
             return
 
+        if action == "save-feature-toggle":
+            key = params.get("key", "")
+            enabled = params.get("enabled", "true")
+            if not key or key not in FEATURE_REGISTRY:
+                yield sse_line(f"[x] unknown feature: {key}\n", "err")
+                logger.finish(False, 1)
+                yield sse_done(False, 1)
+                return
+            env_key = f"PROJECT_TOOL_{key}"
+            config.set_many({env_key: enabled})
+            os.environ[env_key] = enabled
+            state = "enabled" if enabled.lower() == "true" else "disabled"
+            label = FEATURE_REGISTRY[key]["label"]
+            yield sse_line(f"[+] {label} ({env_key}) {state}\n")
+            logger.log(f"[+] {env_key} = {enabled}")
+            logger.finish(True)
+            yield sse_done(True)
+            return
+
         if action == "save-multi-instance":
             prefix = params.get("prefix", "")
             slug = params.get("slug", "")
@@ -788,6 +825,30 @@ print('[+] AGENT_MODEL_ENDPOINT = ' + name)
                 return
             config.set_many({"DATABRICKS_WAREHOUSE_ID": wh_id})
             yield sse_line(f"[+] DATABRICKS_WAREHOUSE_ID = {wh_id}\n")
+            logger.finish(True)
+            yield sse_done(True)
+            return
+
+        if action == "save-model-endpoint":
+            ep_name = params.get("name", "")
+            if not ep_name:
+                logger.finish(False, 1)
+                yield sse_done(False, 1)
+                return
+            config.set_many({"AGENT_MODEL_ENDPOINT": ep_name})
+            # Comment out cross-workspace token (same-workspace mode)
+            env_file = config.get("ENV_FILE") or str(PROJECT_ROOT / ".env.local")
+            try:
+                import re as _re
+                with open(env_file) as f:
+                    content = f.read()
+                content = _re.sub(r'^(AGENT_MODEL_TOKEN=)', r'# \1', content, flags=_re.MULTILINE)
+                with open(env_file, 'w') as f:
+                    f.write(content)
+            except FileNotFoundError:
+                pass
+            yield sse_line(f"[+] same-workspace mode\n")
+            yield sse_line(f"[+] AGENT_MODEL_ENDPOINT = {ep_name}\n")
             logger.finish(True)
             yield sse_done(True)
             return

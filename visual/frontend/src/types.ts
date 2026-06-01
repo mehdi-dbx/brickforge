@@ -66,6 +66,11 @@ export interface DbxWarehouse {
   state: string
 }
 
+export interface DbxEndpoint {
+  name: string
+  type: string
+}
+
 export interface DbxGenieSpace {
   id: string
   name: string
