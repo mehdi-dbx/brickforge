@@ -37,10 +37,10 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Data tables',
     help: 'Provision Delta tables into the Unity Catalog schema. Choose a data source: use the shipped seed data, upload your own CSVs, generate synthetic data with AI, or connect tables that already exist in UC.',
     choices: [
-      { title: 'use default data',       desc: 'provision from shipped seed CSVs (airops, flights, etc.)',          action: 'exec-tables' },
-      { title: 'upload your own CSVs',    desc: 'upload CSV files and create Delta tables from them',               action: 'upload-csv' },
       { title: 'generate synthetic data', desc: 'open the data gen wizard to create tables with AI',                action: 'gen-data' },
       { title: 'connect existing tables', desc: 'point to tables already in Unity Catalog -- no creation needed',   action: 'connect-tables' },
+      { title: 'upload your own CSVs',    desc: 'upload CSV files and create Delta tables from them',               action: 'upload-csv' },
+      { title: 'use demo data',           desc: 'provision from shipped seed CSVs (airops, flights, etc.)',          action: 'exec-tables' },
       { title: 'skip',                    desc: 'no data tables needed right now',                                  action: 'done' },
     ],
   },
@@ -50,10 +50,9 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Functions & procedures',
     help: 'Create UC functions and stored procedures that the agent uses as tools. Functions are parameterized queries registered in Unity Catalog. Procedures are mutation operations (UPDATE, INSERT). Generate them from your table schemas or upload SQL files.',
     choices: [
-      { title: 'provision existing',     desc: 'create functions + procedures from stash or previously generated SQL',  action: 'exec-functions' },
-      { title: 'generate routines',      desc: 'open the routines wizard to generate functions from your tables with AI', action: 'gen-routines' },
-      { title: 'upload SQL files',       desc: 'upload .sql files with CREATE FUNCTION / PROCEDURE statements',        action: 'upload-sql' },
-      { title: 'skip',                   desc: 'no functions needed right now',                                         action: 'done' },
+      { title: 'generate routines',      desc: 'generate functions from your tables with AI',                           action: 'gen-routines' },
+      { title: 'pick from existing',     desc: 'use functions already in Unity Catalog',                                action: 'exec-functions' },
+      { title: 'skip',                   desc: 'no functions needed right now',                                          action: 'done' },
     ],
   },
   {
@@ -94,6 +93,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Knowledge assistant',
     help: 'A Knowledge Assistant endpoint backed by your documents. It ingests PDFs into a vector index and exposes a retrieval-augmented endpoint the agent calls to answer questions with cited sources.',
     choices: [
+      { title: 'pick from existing',   desc: 'use a Knowledge Assistant already in this workspace',  action: 'pick-ka' },
       { title: 'provision from pdfs', desc: 'upload PDFs to volume, then create KA endpoint',     action: 'cfg-ka' },
       { title: 'enter id manually',   desc: 'paste a KA endpoint name directly',                 action: 'manual' },
     ],

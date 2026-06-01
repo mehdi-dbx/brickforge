@@ -58,8 +58,8 @@ FEATURE_REGISTRY = {
         "desc": "Speech-to-text input in the chat UI (requires OpenAI API key)",
         "default": "false",
     },
-    "IMAGE": {
-        "label": "Image upload",
+    "VISION": {
+        "label": "Vision",
         "desc": "Upload images in chat for visual analysis (requires vision-capable model)",
         "default": "false",
     },
@@ -107,29 +107,15 @@ async def setup_status():
                 status = "configured"
                 values["AGENT_MODEL_ENDPOINT"] = env["DATABRICKS_HOST"].rstrip("/") + " (same workspace)"
 
-            # Tables: count CSVs from all sources (default, gen, uploaded)
+            # Tables: status based on whether schema is configured (test button does the real UC check)
             if step == "tables":
-                csv_count = 0
-                for d in [PACKAGE_ROOT / "data" / "default" / "csv", PACKAGE_ROOT / "data" / "gen" / "csv", PROJECT_ROOT / "data" / "upload" / "csv"]:
-                    try:
-                        csv_count += len([f for f in d.iterdir() if f.suffix == ".csv"])
-                    except FileNotFoundError:
-                        pass
-                status = "configured" if csv_count > 0 else "missing"
-                values = {"TABLE_COUNT": str(csv_count)}
+                schema_spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+                status = "configured" if schema_spec and "." in schema_spec else "missing"
 
-            # Functions: count SQL files
+            # Functions: status based on whether schema is configured (test button does the real UC check)
             if step == "functions":
-                routine_count = 0
-                for sub in ["func", "proc"]:
-                    for base in ["data/default", "data/gen"]:
-                        d = PROJECT_ROOT / base / sub
-                        try:
-                            routine_count += len([f for f in d.iterdir() if f.suffix == ".sql"])
-                        except FileNotFoundError:
-                            pass
-                status = "configured" if routine_count > 0 else "missing"
-                values = {"ROUTINE_COUNT": str(routine_count)}
+                schema_spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+                status = "configured" if schema_spec and "." in schema_spec else "missing"
 
             # Prompt: file-based
             if step == "prompt":
@@ -702,6 +688,93 @@ MAX_CSV_SIZE = 100 * 1024 * 1024  # 100 MB
 
 _COL_NAME_RE = re.compile(r"[^a-zA-Z0-9_]")
 
+
+@router.get("/api/setup/schema-tables")
+async def schema_tables():
+    """List tables in the configured UC schema. On-demand, not called on page load."""
+    config = _get_config()
+    env = {e["key"]: e["value"] for e in config.list()}
+    spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+    if not spec or "." not in spec:
+        return {"tables": [], "count": 0, "schema": ""}
+    cat, sch = spec.split(".", 1)
+    try:
+        from databricks.sdk import WorkspaceClient
+        from brickforge.lib.env_utils import build_sub_env
+        sub = build_sub_env(config)
+        old_env = dict(os.environ)
+        os.environ.update(sub)
+        try:
+            w = WorkspaceClient()
+            tables = [{"name": t.name, "type": str(t.table_type).split(".")[-1] if t.table_type else "TABLE"} for t in w.tables.list(catalog_name=cat, schema_name=sch) if t.name]
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+        return {"tables": tables, "count": len(tables), "schema": spec}
+    except Exception as e:
+        return {"tables": [], "count": 0, "schema": spec, "error": str(e)[:200]}
+
+
+@router.get("/api/setup/serving-endpoints")
+async def serving_endpoints_list(filter: str = ""):
+    """List serving endpoints. Optional filter: 'ka' for knowledge assistants, 'fm' for foundation models."""
+    config = _get_config()
+    try:
+        from databricks.sdk import WorkspaceClient
+        from brickforge.lib.env_utils import build_sub_env
+        sub = build_sub_env(config)
+        old_env = dict(os.environ)
+        os.environ.update(sub)
+        try:
+            w = WorkspaceClient()
+            eps = list(w.serving_endpoints.list())
+            results = []
+            for ep in eps:
+                entities = ep.config.served_entities if ep.config else []
+                is_external = any(e.external_model for e in (entities or []))
+                is_foundation = any(e.foundation_model for e in (entities or []))
+                is_agent = not is_external and not is_foundation
+                ep_type = "external" if is_external else "foundation" if is_foundation else "agent"
+                if filter == "ka" and not is_agent:
+                    continue
+                if filter == "fm" and not (is_external or is_foundation):
+                    continue
+                results.append({"name": ep.name, "type": ep_type})
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+        return {"endpoints": results, "count": len(results)}
+    except Exception as e:
+        return {"endpoints": [], "count": 0, "error": str(e)[:200]}
+
+
+@router.get("/api/setup/schema-functions")
+async def schema_functions():
+    """List functions and procedures in the configured UC schema. On-demand."""
+    config = _get_config()
+    env = {e["key"]: e["value"] for e in config.list()}
+    spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+    if not spec or "." not in spec:
+        return {"functions": [], "count": 0, "schema": ""}
+    cat, sch = spec.split(".", 1)
+    try:
+        from databricks.sdk import WorkspaceClient
+        from brickforge.lib.env_utils import build_sub_env
+        sub = build_sub_env(config)
+        old_env = dict(os.environ)
+        os.environ.update(sub)
+        try:
+            w = WorkspaceClient()
+            funcs = [{"name": f.name, "type": str(f.data_type).split(".")[-1] if f.data_type else "FUNCTION"} for f in w.functions.list(catalog_name=cat, schema_name=sch) if f.name]
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+        return {"functions": funcs, "count": len(funcs), "schema": spec}
+    except Exception as e:
+        return {"functions": [], "count": 0, "schema": spec, "error": str(e)[:200]}
+
+
+# ── Upload CSV ────────────────────────────────────────────────────────────────
 
 @router.post("/api/setup/upload-csv")
 async def upload_csv(files: list[UploadFile] = File(...)):

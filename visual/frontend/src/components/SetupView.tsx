@@ -57,7 +57,8 @@ export function SetupView() {
     setSelectedChoice(null)
     setExecLines([])
     setSelectedInstanceKey(null)
-  }, [])
+    refreshStatus()
+  }, [refreshStatus])
 
   const handleClickInstance = useCallback((stepId: StepId, key: string) => {
     setActiveStep(stepId)
@@ -103,7 +104,7 @@ export function SetupView() {
     }
 
     // Actions that go straight to execute (no configure phase)
-    const DIRECT_EXEC = new Set(['exec-assets', 'exec-tables', 'exec-functions',
+    const DIRECT_EXEC = new Set(['exec-assets', 'exec-tables',
       'exec-lakebase', 'exec-mlflow', 'exec-grants',
       'exec-deploy-agent', 'exec-same', 'exec-git-push'])
     if (DIRECT_EXEC.has(action)) {
@@ -138,9 +139,19 @@ export function SetupView() {
     setPhase('choose')
     setSelectedChoice(null)
     setExecLines([])
-    // Invalidate cache for this step so it re-tests after reconfigure
-    setTestCache(prev => { const next = { ...prev }; delete next[activeStep]; return next })
+    // Invalidate cache for this step + dependents
+    setTestCache(prev => {
+      const next = { ...prev }
+      delete next[activeStep]
+      if (activeStep === 'schema') {
+        for (const dep of SCHEMA_DEPENDENTS) delete next[dep]
+      }
+      return next
+    })
   }, [activeStep])
+
+  // Steps whose test results depend on schema being set
+  const SCHEMA_DEPENDENTS: StepId[] = ['tables', 'functions', 'genie']
 
   const handleExecDone = useCallback((ok: boolean) => {
     setStepStates(prev => ({
@@ -148,7 +159,15 @@ export function SetupView() {
       [activeStep]: { ...prev[activeStep], status: ok ? 'done' : 'error' },
     }))
     // Invalidate test cache — value changed, needs re-verification next visit
-    setTestCache(prev => { const next = { ...prev }; delete next[activeStep]; return next })
+    setTestCache(prev => {
+      const next = { ...prev }
+      delete next[activeStep]
+      // When schema changes, invalidate all dependent blocks
+      if (activeStep === 'schema') {
+        for (const dep of SCHEMA_DEPENDENTS) delete next[dep]
+      }
+      return next
+    })
     setTimeout(() => {
       setPhase('done')
       if (ok) refreshStatus()
@@ -230,6 +249,7 @@ export function SetupView() {
           selectedChoice={selectedChoice}
           execLines={execLines}
           currentValues={{ ...stepStates.host.values, ...stepStates.schema.values, ...stepStates[activeStep].values }}
+          stepStatus={stepStates[activeStep]?.status || 'missing'}
           testCache={testCache}
           onTestResult={handleTestResult}
           onSelectChoice={setSelectedChoice}

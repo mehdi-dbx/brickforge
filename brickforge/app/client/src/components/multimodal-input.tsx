@@ -161,7 +161,7 @@ function PureMultimodalInput({
 
   // Feature toggles (decoupled, driven by PROJECT_TOOL_* env vars)
   const voiceEnabled = featureEnabled('voice');
-  const imageEnabled = featureEnabled('image');
+  const visionEnabled = featureEnabled('vision');
   const { voiceState, startRecording, stopRecording, abortRecording } = useVoice(submitForm, voiceEnabled);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -262,7 +262,7 @@ function PureMultimodalInput({
           />
         )}
 
-      {imageEnabled && (
+      {visionEnabled && (
         <input
           type="file"
           className="-top-4 -left-4 pointer-events-none fixed size-0.5 opacity-0"
@@ -353,7 +353,7 @@ function PureMultimodalInput({
               </div>
             )}
           </div>
-          {imageEnabled && (
+          {visionEnabled && (
             <Button
               type="button"
               variant="ghost"

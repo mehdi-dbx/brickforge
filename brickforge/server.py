@@ -167,6 +167,11 @@ async def get_env():
 async def put_env(request: Request):
     try:
         updates = await request.json()
+        if "DATABRICKS_HOST" in updates:
+            h = updates["DATABRICKS_HOST"].strip().rstrip("/")
+            if h and not h.startswith("http"):
+                h = "https://" + h
+            updates["DATABRICKS_HOST"] = h
         config.set_many(updates)
         return {"ok": True}
     except Exception as e:

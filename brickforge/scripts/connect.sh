@@ -406,7 +406,7 @@ if bridge_url_holder[0]:
         print(f'{BOLD}{Y}╔{"═"*W_}╗{W}')
         print(f'{BOLD}{Y}║{W}{_pad("  Token delivered -- some steps need attention", 46)}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}╠{"═"*W_}╣{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  ✓ Authenticated", 18)}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_pad("  ✓ Authenticated", 19)}{BOLD}{Y}║{W}')
         if _pat_ok:
             print(f'{BOLD}{Y}║{W}{_pad("  ✓ PAT created (7 days)", 24)}{BOLD}{Y}║{W}')
         else:
@@ -419,7 +419,7 @@ if bridge_url_holder[0]:
                 print(f'{BOLD}{Y}║{W}{_pad(_ip_msg, len(_ip_msg))}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}║{W}{" "*W_}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}║{W}{_pad("  To resolve, try one of:", 25)}{BOLD}{Y}║{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  - Connect to your corporate VPN and retry", 44)}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_pad("  - Connect to your corporate VPN and retry", 45)}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}║{W}{_pad("  - Run from an authorized network", 34)}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}║{W}{_pad("  - Ask workspace admin to whitelist your IP", 44)}{BOLD}{Y}║{W}')
         if _wl_ip and not _wl_ok:

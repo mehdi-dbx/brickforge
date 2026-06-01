@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Globe, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, type LucideIcon } from 'lucide-react'
+import { Globe, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, ChevronRight, type LucideIcon } from 'lucide-react'
 import type { StepId, StepStatus, StepState, StepInstance } from '../types'
 import { SETUP_STEPS } from '../setupSteps'
 
@@ -208,6 +208,7 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
   const [zoom, setZoom] = useState(1)
   const zoomRef = useRef(1)
   useEffect(() => { zoomRef.current = zoom }, [zoom])
+  const [collapsed, setCollapsed] = useState<Set<StepId>>(new Set())
 
   /* ── fit-to-view ───────────────────────────────────── */
   const fitToView = useCallback(() => {
@@ -237,9 +238,6 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
     obs.observe(el)
     return () => obs.disconnect()
   }, [fitToView])
-
-  // Re-fit when step instances change content height
-  useEffect(() => { requestAnimationFrame(fitToView) }, [stepStates, fitToView])
 
   // Ctrl/Cmd + wheel zoom
   useEffect(() => {
@@ -368,13 +366,29 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
                     )}
                   </button>
 
-                  {/* Sub-instances for multi-instance steps */}
+                  {/* Sub-instances for multi-instance steps (collapsible) */}
                   {isMulti && instances.length > 0 && (
-                    <div className="flex flex-col gap-0.5 mt-0.5 ml-6">
-                      {instances.map(inst => (
-                        <InstanceRow key={inst.key} inst={inst} stepId={id} onToggle={onToggleInstance} onClick={(k) => onClickInstance?.(id, k)} onDelete={onDeleteInstance} />
-                      ))}
-                    </div>
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setCollapsed(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next }) }}
+                        className="flex items-center gap-1 ml-6 mt-0.5 mb-0.5 text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 transition-colors"
+                      >
+                        <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${collapsed.has(id) ? '' : 'rotate-90'}`} />
+                        {collapsed.has(id) ? `${instances.length} hidden` : 'collapse'}
+                      </button>
+                      <div
+                        className="grid ml-6 transition-[grid-template-rows] duration-200 ease-in-out"
+                        style={{ gridTemplateRows: collapsed.has(id) ? '0fr' : '1fr' }}
+                      >
+                        <div className="overflow-hidden">
+                          <div className="flex flex-col gap-0.5">
+                            {instances.map(inst => (
+                              <InstanceRow key={inst.key} inst={inst} stepId={id} onToggle={onToggleInstance} onClick={(k) => onClickInstance?.(id, k)} onDelete={onDeleteInstance} />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
 

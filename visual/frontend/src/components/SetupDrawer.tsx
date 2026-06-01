@@ -12,6 +12,7 @@ interface SetupDrawerProps {
   selectedChoice: number | null
   execLines: ExecLine[]
   currentValues: Record<string, string>
+  stepStatus: string
   testCache: Partial<Record<StepId, TestResult>>
   onTestResult: (step: StepId, result: TestResult) => void
   onSelectChoice: (i: number) => void
@@ -49,65 +50,89 @@ function useFetchOnce<T>(url: string | null) {
 
 // ─── Resource pickers ──────────────────────────────────────────────────────────
 
-function ProfileList({ selected, onSelect }: { selected: string; onSelect: (n: string) => void }) {
+function ProfileList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (n: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxProfile[]>('/api/setup/profiles')
   const profiles = (data as DbxProfile[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading profiles…" />
   if (error)   return <ErrMsg msg={error} />
+  const filtered = filter.trim()
+    ? profiles.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()) || p.host.toLowerCase().includes(filter.toLowerCase()))
+    : profiles
   return (
     <>
       <Label>select cli profile</Label>
       <InfoBox>Profiles marked valid are authenticated and ready to use.</InfoBox>
-      {profiles.map(p => (
-        <PickRow key={p.name} active={selected === p.name} disabled={!p.valid} onClick={() => p.valid && onSelect(p.name)}>
+      <FilterInput value={filter} onChange={setFilter} count={profiles.length} />
+      {filtered.map(p => (
+        <PickRow key={p.name} active={selected === p.name} disabled={!p.valid}
+          onClick={() => p.valid && onSelect(p.name)}
+          onDoubleClick={() => { if (p.valid) { onSelect(p.name); onConfirm?.() } }}>
           <Dot color={p.valid ? 'green' : 'gray'} />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{p.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono truncate max-w-[160px]">{p.host.replace('https://', '')}</span>
           {p.valid && <Tag color="green">valid</Tag>}
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
 
-function WarehouseList({ selected, onSelect }: { selected: string; onSelect: (id: string, name: string) => void }) {
+function WarehouseList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (id: string, name: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxWarehouse[]>('/api/setup/resources?type=warehouses')
   const warehouses = (data as DbxWarehouse[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading warehouses…" />
   if (error)   return <ErrMsg msg={error} />
+  const filtered = filter.trim()
+    ? warehouses.filter(wh => wh.name.toLowerCase().includes(filter.toLowerCase()))
+    : warehouses
   return (
     <>
       <Label>available warehouses</Label>
-      {warehouses.map(wh => {
+      <FilterInput value={filter} onChange={setFilter} count={warehouses.length} />
+      {filtered.map(wh => {
         const running = wh.state?.toUpperCase().includes('RUNNING')
         return (
-          <PickRow key={wh.id} active={selected === wh.id} onClick={() => onSelect(wh.id, wh.name)}>
+          <PickRow key={wh.id} active={selected === wh.id}
+            onClick={() => onSelect(wh.id, wh.name)}
+            onDoubleClick={() => { onSelect(wh.id, wh.name); onConfirm?.() }}>
             <Dot color={running ? 'green' : 'gray'} />
             <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{wh.name}</span>
             {running && <Tag color="green">running</Tag>}
           </PickRow>
         )
       })}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
 
-function EndpointList({ selected, onSelect }: { selected: string; onSelect: (name: string) => void }) {
+function EndpointList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (name: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxEndpoint[]>('/api/setup/resources?type=endpoints')
   const endpoints = (data as DbxEndpoint[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="scanning endpoints…" />
   if (error)   return <ErrMsg msg={error} />
   if (endpoints.length === 0) return <ErrMsg msg="no Foundation Model endpoints found on this workspace" />
+  const filtered = filter.trim()
+    ? endpoints.filter(ep => ep.name.toLowerCase().includes(filter.toLowerCase()))
+    : endpoints
   return (
     <>
       <Label>available FM endpoints</Label>
-      {endpoints.map(ep => (
-        <PickRow key={ep.name} active={selected === ep.name} onClick={() => onSelect(ep.name)}>
+      <FilterInput value={filter} onChange={setFilter} count={endpoints.length} />
+      {filtered.map(ep => (
+        <PickRow key={ep.name} active={selected === ep.name}
+          onClick={() => onSelect(ep.name)}
+          onDoubleClick={() => { onSelect(ep.name); onConfirm?.() }}>
           <Dot color="green" />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{ep.name}</span>
           <Tag color="blue">{ep.type}</Tag>
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
@@ -117,17 +142,23 @@ function CatalogPicker({ catalog, schema, onCatalog, onSchema }: {
 }) {
   const { data, loading, error } = useFetchOnce<string[]>('/api/setup/resources?type=catalogs')
   const catalogs = (data as string[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading catalogs…" />
   if (error)   return <ErrMsg msg={error} />
+  const filtered = filter.trim()
+    ? catalogs.filter(c => c.toLowerCase().includes(filter.toLowerCase()))
+    : catalogs
   return (
     <>
       <Label>available catalogs</Label>
-      {catalogs.map(c => (
+      <FilterInput value={filter} onChange={setFilter} count={catalogs.length} />
+      {filtered.map(c => (
         <PickRow key={c} active={catalog === c} onClick={() => onCatalog(c)}>
           <Dot color="green" />
           <span className="font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{c}</span>
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
       <div className="mt-3">
         <Label>schema name</Label>
         <input
@@ -141,42 +172,93 @@ function CatalogPicker({ catalog, schema, onCatalog, onSchema }: {
   )
 }
 
-function GenieList({ selected, onSelect }: { selected: string; onSelect: (id: string, name: string) => void }) {
+function GenieList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (id: string, name: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxGenieSpace[]>('/api/setup/resources?type=genie')
   const spaces = (data as DbxGenieSpace[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading genie spaces…" />
   if (error)   return <ErrMsg msg={error} />
   if (spaces.length === 0) return <InfoBox>No genie spaces found — use "create new room" instead.</InfoBox>
+  const filtered = filter.trim()
+    ? spaces.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()))
+    : spaces
   return (
     <>
       <Label>available genie spaces</Label>
-      {spaces.map(s => (
-        <PickRow key={s.id} active={selected === s.id} onClick={() => onSelect(s.id, s.name)}>
+      <FilterInput value={filter} onChange={setFilter} count={spaces.length} />
+      {filtered.map(s => (
+        <PickRow key={s.id} active={selected === s.id}
+          onClick={() => onSelect(s.id, s.name)}
+          onDoubleClick={() => { onSelect(s.id, s.name); onConfirm?.() }}>
           <Dot color="green" />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{s.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{s.id.slice(0, 8)}…</span>
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
 
-function LakebaseList({ selected, onSelect }: { selected: string; onSelect: (name: string) => void }) {
+function KaPickerList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (name: string) => void; onConfirm?: () => void }) {
+  const [endpoints, setEndpoints] = useState<{ name: string; type: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('')
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/setup/serving-endpoints?filter=ka')
+      .then(r => r.json())
+      .then(data => setEndpoints(data.endpoints || []))
+      .catch(() => setEndpoints([]))
+      .finally(() => setLoading(false))
+  }, [])
+  if (loading) return <Spinner label="scanning endpoints..." />
+  if (endpoints.length === 0) return <InfoBox>No agent/KA endpoints found on this workspace.</InfoBox>
+  const filtered = filter.trim()
+    ? endpoints.filter(ep => ep.name.toLowerCase().includes(filter.toLowerCase()))
+    : endpoints
+  return (
+    <>
+      <Label>available KA endpoints</Label>
+      <FilterInput value={filter} onChange={setFilter} count={endpoints.length} />
+      {filtered.map(ep => (
+        <PickRow key={ep.name} active={selected === ep.name}
+          onClick={() => onSelect(ep.name)}
+          onDoubleClick={() => { onSelect(ep.name); onConfirm?.() }}>
+          <Dot color="green" />
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{ep.name}</span>
+          <Tag color="purple">agent</Tag>
+        </PickRow>
+      ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
+    </>
+  )
+}
+
+function LakebaseList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (name: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=lakebase')
   const instances = (data as { id: string; name: string; state: string }[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading lakebase instances…" />
   if (error)   return <ErrMsg msg={error} />
   if (instances.length === 0) return <InfoBox>No Lakebase instances found -- use "create instance" instead.</InfoBox>
+  const filtered = filter.trim()
+    ? instances.filter(i => i.name.toLowerCase().includes(filter.toLowerCase()))
+    : instances
   return (
     <>
       <Label>available lakebase instances</Label>
-      {instances.map(i => (
-        <PickRow key={i.name} active={selected === i.name} onClick={() => onSelect(i.name)}>
+      <FilterInput value={filter} onChange={setFilter} count={instances.length} />
+      {filtered.map(i => (
+        <PickRow key={i.name} active={selected === i.name}
+          onClick={() => onSelect(i.name)}
+          onDoubleClick={() => { onSelect(i.name); onConfirm?.() }}>
           <Dot color={i.state === 'AVAILABLE' ? 'green' : i.state === 'CREATING' ? 'amber' : 'red'} />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{i.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{i.state}</span>
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
@@ -428,20 +510,25 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
 // ─── Dynamic table list (fetched from API) ───────────────────────────────────
 
 function SchemaTableList({ prefix }: { prefix: string }) {
-  const [tables, setTables] = useState<string[]>([])
+  const [tables, setTables] = useState<{ name: string; type: string }[]>([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
-    fetch('/api/gen/tables')
+    setLoading(true)
+    fetch('/api/setup/schema-tables')
       .then(r => r.json())
-      .then(data => setTables((data.tables || []).map((t: { name: string }) => t.name)))
+      .then(data => setTables(data.tables || []))
       .catch(() => setTables([]))
+      .finally(() => setLoading(false))
   }, [])
-  if (tables.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no tables found</div>
+  if (loading) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1 animate-pulse">loading tables...</div>
+  if (tables.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no tables in schema</div>
   return (
     <>
+      <div className="text-[12px] font-mono text-dbx-gray-400 py-1">{tables.length} table(s) in {prefix || 'schema'}</div>
       {tables.map(t => (
-        <div key={t} className="flex items-center gap-2 py-1">
+        <div key={t.name} className="flex items-center gap-2 py-1">
           <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
-          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t}` : t}</span>
+          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t.name}` : t.name}</span>
         </div>
       ))}
     </>
@@ -451,40 +538,27 @@ function SchemaTableList({ prefix }: { prefix: string }) {
 // ─── Dynamic routine list (functions + procedures from API) ─────────────────
 
 function SchemaRoutineList({ prefix }: { prefix: string }) {
-  const [routines, setRoutines] = useState<{ name: string; kind: string; source: string }[]>([])
+  const [funcs, setFuncs] = useState<{ name: string; type: string }[]>([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
-    fetch('/api/gen/routines')
+    setLoading(true)
+    fetch('/api/setup/schema-functions')
       .then(r => r.json())
-      .then(data => setRoutines(data.routines || []))
-      .catch(() => setRoutines([]))
+      .then(data => setFuncs(data.functions || []))
+      .catch(() => setFuncs([]))
+      .finally(() => setLoading(false))
   }, [])
-  const functions = routines.filter(r => r.kind === 'function')
-  const procedures = routines.filter(r => r.kind === 'procedure')
-  if (routines.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no routines found</div>
+  if (loading) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1 animate-pulse">loading functions...</div>
+  if (funcs.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no functions in schema</div>
   return (
     <>
-      {functions.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[9px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1">functions ({functions.length})</div>
-          {functions.map(r => (
-            <div key={r.name} className="flex items-center gap-2 py-0.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
-              <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${r.name}` : r.name}</span>
-            </div>
-          ))}
+      <div className="text-[12px] font-mono text-dbx-gray-400 py-1">{funcs.length} function(s) in {prefix || 'schema'}</div>
+      {funcs.map(f => (
+        <div key={f.name} className="flex items-center gap-2 py-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${f.name}` : f.name}</span>
         </div>
-      )}
-      {procedures.length > 0 && (
-        <div>
-          <div className="text-[9px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1">procedures ({procedures.length})</div>
-          {procedures.map(r => (
-            <div key={r.name} className="flex items-center gap-2 py-0.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-dbx-amber flex-shrink-0" />
-              <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${r.name}` : r.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      ))}
     </>
   )
 }
@@ -918,6 +992,25 @@ function Dot({ color }: { color: 'green' | 'gray' | 'amber' | 'red' }) {
   return <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cls[color]}`} />
 }
 
+function FilterInput({ value, onChange, count }: { value: string; onChange: (v: string) => void; count: number }) {
+  if (count <= 5) return null
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder="filter…"
+      autoFocus
+      className="w-full mb-2 px-2 py-1 text-[12px] font-mono rounded border border-dbx-gray-300 dark:border-dbx-gray-600 bg-transparent text-dbx-gray-800 dark:text-dbx-gray-100 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+    />
+  )
+}
+
+function NoMatches({ visible }: { visible: boolean }) {
+  if (!visible) return null
+  return <div className="text-[12px] text-dbx-gray-400 font-mono py-2">no matches</div>
+}
+
 function Tag({ color, children }: { color: 'green' | 'purple'; children: React.ReactNode }) {
   const cls = color === 'green'
     ? 'bg-dbx-blue-bg dark:bg-dbx-green-bg/10 text-dbx-blue-dk dark:text-dbx-green border border-dbx-blue/20 dark:border-dbx-green/20'
@@ -925,12 +1018,13 @@ function Tag({ color, children }: { color: 'green' | 'purple'; children: React.R
   return <span className={`text-[10px] rounded-full px-2 py-0.5 font-mono font-medium ${cls}`}>{children}</span>
 }
 
-function PickRow({ active, disabled = false, onClick, children }: {
-  active: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode
+function PickRow({ active, disabled = false, onClick, onDoubleClick, children }: {
+  active: boolean; disabled?: boolean; onClick: () => void; onDoubleClick?: () => void; children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       disabled={disabled}
       className={`
         w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border mb-1.5 text-left transition-all duration-150
@@ -1059,16 +1153,21 @@ function InlineEditable({ value, stepId, onSave, onClear }: {
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && draft.trim()) {
-              // Validate host URL format for host step
-              if (stepId === 'host' && !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(draft.trim())) return
-              onSave(draft.trim()); setEditing(false)
+              let val = draft.trim()
+              // Auto-prepend https:// for host step
+              if (stepId === 'host' && !val.startsWith('http')) val = 'https://' + val
+              if (stepId === 'host' && !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(val)) return
+              onSave(val); setEditing(false)
             }
             if (e.key === 'Escape') { setDraft(value); setEditing(false) }
           }}
           onBlur={() => { setDraft(value); setEditing(false) }}
           className="flex-1 text-[13px] font-mono px-1.5 py-0.5 rounded border border-dbx-blue/40 dark:border-dbx-green/40 bg-transparent text-dbx-blue dark:text-dbx-green outline-none"
         />
-        {stepId === 'host' && editing && !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(draft.trim()) && draft.trim().length > 5 && (
+        {stepId === 'host' && editing && (() => {
+          const v = draft.trim().startsWith('http') ? draft.trim() : 'https://' + draft.trim()
+          return !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(v) && draft.trim().length > 5
+        })() && (
           <span className="text-[10px] text-dbx-amber ml-1 flex-shrink-0">must be a valid Databricks URL</span>
         )}
       </div>
@@ -1264,7 +1363,7 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
 // ─── Main drawer ───────────────────────────────────────────────────────────────
 
 export function SetupDrawer({
-  activeStep, phase, selectedChoice, execLines, currentValues,
+  activeStep, phase, selectedChoice, execLines, currentValues, stepStatus,
   testCache, onTestResult,
   onSelectChoice, onContinue, onBack, onReconfigure, onExecDone, onRefresh, onNext,
   selectedInstanceKey, instances, forgeMode,
@@ -1462,6 +1561,9 @@ export function SetupDrawer({
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
     if (action === 'cfg-genie'     && selGenieId) { action = 'save-genie';     Object.assign(params, { id: selGenieId, name: selGenieName }) }
     if (action === 'cfg-lakebase'  && selLakebaseId) { action = 'save-lakebase'; Object.assign(params, { name: selLakebaseId }) }
+    if (action === 'pick-ka'       && manualVal) { action = 'save-manual'; Object.assign(params, { key: 'PROJECT_KA_DEFAULT', value: manualVal }) }
+    // "Pick from existing" for functions: just confirm, no provisioning
+    if (action === 'exec-functions' && activeStep === 'functions') { onExecDone(true); onRefresh(); return }
     if (action === 'exec-genie'    && genieName)  { Object.assign(params, { name: genieName }) }
     // Host: cfg-profile saves host from selected profile
     if (action === 'cfg-profile' && activeStep === 'host' && selProfile) { action = 'save-host'; Object.assign(params, { profile: selProfile }) }
@@ -1707,6 +1809,7 @@ export function SetupDrawer({
       if (action === 'upload-csv')     return csvFiles.length > 0 && !csvUploading
       if (action === 'connect-tables') return /^[\w-]+\.[\w-]+$/.test(connectSchema.trim())
       if (action === 'cfg-ka')        return kaDocsReady
+      if (action === 'pick-ka')      return !!manualVal
       if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
@@ -1723,17 +1826,25 @@ export function SetupDrawer({
         setFeaturesDirty(prev => ({ ...prev, [key]: enabled }))
       }} />
     else if (action === 'cfg-model')
-      body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} />
+      body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-profile')
-      body = <ProfileList selected={selProfile} onSelect={setSelProfile} />
+      body = <ProfileList selected={selProfile} onSelect={setSelProfile} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-warehouse')
-      body = <WarehouseList selected={selWhId} onSelect={(id, name) => { setSelWhId(id); setSelWhName(name) }} />
+      body = <WarehouseList selected={selWhId} onSelect={(id, name) => { setSelWhId(id); setSelWhName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-catalog')
       body = <CatalogPicker catalog={selCatalog} schema={catSchema} onCatalog={setSelCatalog} onSchema={setCatSchema} />
     else if (action === 'cfg-genie')
-      body = <GenieList selected={selGenieId} onSelect={(id, name) => { setSelGenieId(id); setSelGenieName(name) }} />
+      body = <GenieList selected={selGenieId} onSelect={(id, name) => { setSelGenieId(id); setSelGenieName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-lakebase')
-      body = <LakebaseList selected={selLakebaseId} onSelect={setSelLakebaseId} />
+      body = <LakebaseList selected={selLakebaseId} onSelect={setSelLakebaseId} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'pick-ka')
+      body = <KaPickerList selected={manualVal} onSelect={setManualVal} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'exec-functions')
+      body = (<>
+        <Label>functions in Unity Catalog</Label>
+        <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
+        <InfoBox>These functions are available for the agent to use. Click continue to confirm.</InfoBox>
+      </>)
     else if (action === 'exec-genie')
       body = (<><Label>genie room name</Label><Input value={genieName} onChange={setGenieName} placeholder="Checkin Metrics" /></>)
     else if (action === 'cfg-api-uc')
@@ -2099,7 +2210,9 @@ export function SetupDrawer({
                           }).then(() => { onRefresh(); onReconfigure() })
                         }}
                       />
-                    : <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">not configured</div>
+                    : stepStatus !== 'missing'
+                      ? <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">configured</div>
+                      : <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">not configured</div>
               }
               {TESTABLE_STEPS.includes(activeStep) && testState.status !== 'loading' && (
                 <button
