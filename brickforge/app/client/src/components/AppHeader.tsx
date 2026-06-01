@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useSession } from '@/contexts/SessionContext';
+import { useAppConfig } from '@/contexts/AppConfigContext';
 import { useTheme } from 'next-themes';
 import { Sparkles } from 'lucide-react';
 
@@ -15,6 +16,7 @@ const CUSTOMER_NAME = 'Airport Check-in Command Center';
 export function AppHeader() {
   const { session, loading } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
+  const { logoUrl } = useAppConfig();
 
   const displayName =
     session?.user?.preferredUsername ||
@@ -27,9 +29,13 @@ export function AppHeader() {
     <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-background px-3 py-2">
       <div className="flex items-center gap-3">
         <SidebarToggle />
-        <span className="font-semibold tracking-tight text-foreground text-base">
-
-        </span>
+        {logoUrl && (
+          <img
+            src={logoUrl}
+            alt="Company logo"
+            className="max-h-7 max-w-[100px] object-contain"
+          />
+        )}
       </div>
       <div className="flex flex-1 items-center justify-center px-4">
         <span className="font-bold text-muted-foreground text-lg">

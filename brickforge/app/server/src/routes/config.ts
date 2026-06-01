@@ -30,5 +30,8 @@ configRouter.get('/', (_req: Request, res: Response) => {
     features.voice = false;
   }
 
-  res.json({ features });
+  // Custom logo URL (string, not boolean — sent as separate field)
+  const logoUrl = process.env.PROJECT_LOGO_URL?.trim() || null;
+
+  res.json({ features, logoUrl });
 });

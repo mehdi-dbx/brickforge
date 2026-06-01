@@ -7,6 +7,7 @@ interface ConfigResponse {
     chatHistory: boolean;
     [key: string]: boolean;
   };
+  logoUrl?: string | null;
 }
 
 interface AppConfigContextType {
@@ -16,6 +17,8 @@ interface AppConfigContextType {
   chatHistoryEnabled: boolean;
   /** Check if a dynamic feature toggle is enabled (defaults to false until config loads). */
   featureEnabled: (name: string) => boolean;
+  /** Custom logo URL configured via setup panel (null until loaded). */
+  logoUrl: string | null;
 }
 
 const AppConfigContext = createContext<AppConfigContextType | undefined>(
@@ -46,6 +49,7 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
     // Default to true until loaded to avoid breaking existing behavior
     chatHistoryEnabled: data?.features.chatHistory ?? true,
     featureEnabled,
+    logoUrl: data?.logoUrl ?? null,
   };
 
   return (

@@ -19,3 +19,5 @@ env:
     value: "{PROJECT_UNITY_CATALOG_SCHEMA}"
   - name: DATABRICKS_WAREHOUSE_ID
     value: "{DATABRICKS_WAREHOUSE_ID}"
+  - name: PROJECT_LOGO_URL
+    value: "{PROJECT_LOGO_URL}"

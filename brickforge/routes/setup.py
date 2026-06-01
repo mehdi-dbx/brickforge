@@ -403,6 +403,53 @@ async def my_ip():
         return {"ip": None, "error": str(e)}
 
 
+# ── Brand logo search ─────────────────────────────────────────────────────────
+
+@router.get("/api/setup/brand")
+async def brand_search(name: str = ""):
+    """Search for a company logo via Brandfetch API."""
+    import urllib.request, urllib.parse
+    name = name.strip()
+    if not name:
+        return JSONResponse({"error": "name required"}, status_code=400)
+    config = _get_config()
+    api_key = os.environ.get("BRANDFETCH_API_KEY", "").strip() or (config.get("BRANDFETCH_API_KEY") or "")
+    if not api_key:
+        return JSONResponse({"error": "BRANDFETCH_API_KEY not configured — paste a logo URL directly instead"}, status_code=503)
+    try:
+        # Search by company name
+        url = f"https://api.brandfetch.io/v2/search/{urllib.parse.quote(name)}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+        if not isinstance(data, list) or not data:
+            return JSONResponse({"error": "no results"}, status_code=404)
+        first = data[0]
+        logo_url = first.get("icon")
+        # Fallback: Brand API by domain for logo formats
+        if not logo_url and first.get("domain"):
+            domain = str(first["domain"]).split("//")[-1].split("/")[0].lower()
+            brand_url = f"https://api.brandfetch.io/v2/brands/domain/{urllib.parse.quote(domain)}"
+            brand_req = urllib.request.Request(brand_url, headers={"Authorization": f"Bearer {api_key}"})
+            try:
+                with urllib.request.urlopen(brand_req, timeout=10) as brand_resp:
+                    brand_data = json.loads(brand_resp.read())
+                logos = brand_data.get("logos", [])
+                preferred = next((l for l in logos if l.get("type") in ("logo", "icon")), logos[0] if logos else None)
+                if preferred and preferred.get("formats"):
+                    fmt = preferred["formats"]
+                    svg = next((f for f in fmt if (f.get("format") or "").lower() == "svg"), None)
+                    best = svg or fmt[0]
+                    logo_url = best.get("src") or best.get("url")
+            except Exception:
+                pass
+        if not logo_url:
+            return JSONResponse({"error": "no logo found for this brand"}, status_code=404)
+        return {"logoUrl": logo_url, "name": first.get("name", name), "domain": first.get("domain", "")}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 TEST_SCRIPTS: dict[str, str] = {

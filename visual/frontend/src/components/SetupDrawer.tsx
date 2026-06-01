@@ -1359,6 +1359,10 @@ export function SetupDrawer({
   const [toolsLoading, setToolsLoading] = useState(false)
   const [featureKeyInput, setFeatureKeyInput] = useState('')
   const [featureKeySaving, setFeatureKeySaving] = useState(false)
+  const [logoUrlInput, setLogoUrlInput] = useState('')
+  const [logoSearchInput, setLogoSearchInput] = useState('')
+  const [logoSearching, setLogoSearching] = useState(false)
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [featureItems, setFeatureItems] = useState<FeatureItem[]>([])
   const [featuresDirty, setFeaturesDirty] = useState<Record<string, boolean>>({})  // key -> new enabled state
 
@@ -1376,7 +1380,7 @@ export function SetupDrawer({
     }
   }, [activeStep])
 
-  // Auto-test instance on selection + fetch tools for MCP/A2A
+  // Auto-test instance on selection + fetch tools for MCP/A2A + load logo URL
   useEffect(() => {
     setInstanceTest({ status: 'idle', message: '' })
     setInstanceTools(null)
@@ -1390,6 +1394,19 @@ export function SetupDrawer({
           .then(data => { if (data.tools) setInstanceTools(data.tools); })
           .catch(() => {})
           .finally(() => setToolsLoading(false))
+      }
+      // Load current logo URL when LOGO panel opens
+      if (selectedInstanceKey === 'PROJECT_TOOL_LOGO') {
+        fetch('/api/env').then(r => r.json()).then((entries: { key: string; value: string }[]) => {
+          const entry = entries.find((e: { key: string }) => e.key === 'PROJECT_LOGO_URL')
+          if (entry?.value) {
+            setLogoUrlInput(entry.value)
+            setLogoPreviewUrl(entry.value)
+          } else {
+            setLogoUrlInput('')
+            setLogoPreviewUrl(null)
+          }
+        }).catch(() => {})
       }
       return () => clearTimeout(timer)
     }
@@ -2196,6 +2213,133 @@ export function SetupDrawer({
                   </div>
                   <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
                     writes OPENAI_API_KEY to .env.local
+                  </div>
+                </div>
+              )}
+
+              {/* Logo feature: API key + company search + direct URL */}
+              {activeStep === 'features' && selectedInstanceKey === 'PROJECT_TOOL_LOGO' && (
+                <div className="mt-4">
+                  {/* Brandfetch API key */}
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">brandfetch api key</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={featureKeyInput}
+                      onChange={(e) => setFeatureKeyInput(e.target.value)}
+                      placeholder="pk_..."
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                    />
+                    <button
+                      disabled={!featureKeyInput.trim() || featureKeySaving}
+                      onClick={async () => {
+                        setFeatureKeySaving(true)
+                        try {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ BRANDFETCH_API_KEY: featureKeyInput.trim() }),
+                          })
+                          setFeatureKeyInput('')
+                          onRefresh()
+                        } catch {}
+                        setFeatureKeySaving(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {featureKeySaving ? 'saving...' : 'save'}
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono leading-relaxed">
+                    get your free API key at{' '}
+                    <a href="https://brandfetch.com/developers" target="_blank" rel="noopener noreferrer" className="underline text-dbx-blue dark:text-dbx-green hover:opacity-80">brandfetch.com/developers</a>
+                    {' '}— sign up, go to dashboard, copy your API key (starts with pk_). free tier: 500K searches/month. optional — you can paste a logo URL directly below instead.
+                  </div>
+
+                  {/* Search by company name */}
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2 mt-4">search by company name</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={logoSearchInput}
+                      onChange={(e) => setLogoSearchInput(e.target.value)}
+                      placeholder="Amadeus, Delta, ..."
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                      onKeyDown={(e) => { if (e.key === 'Enter' && logoSearchInput.trim()) { e.preventDefault(); document.getElementById('logo-search-btn')?.click() } }}
+                    />
+                    <button
+                      id="logo-search-btn"
+                      disabled={!logoSearchInput.trim() || logoSearching}
+                      onClick={async () => {
+                        setLogoSearching(true)
+                        try {
+                          const r = await fetch(`/api/setup/brand?name=${encodeURIComponent(logoSearchInput.trim())}`)
+                          const data = await r.json()
+                          if (r.ok && data.logoUrl) {
+                            setLogoUrlInput(data.logoUrl)
+                            setLogoPreviewUrl(data.logoUrl)
+                          } else {
+                            setLogoPreviewUrl(null)
+                            alert(data.error || 'No logo found')
+                          }
+                        } catch { alert('Search failed') }
+                        setLogoSearching(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {logoSearching ? 'searching...' : 'search'}
+                    </button>
+                  </div>
+
+                  {/* Direct URL input */}
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2 mt-3">or paste logo url</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={logoUrlInput}
+                      onChange={(e) => {
+                        setLogoUrlInput(e.target.value)
+                        if (e.target.value.trim()) setLogoPreviewUrl(e.target.value.trim())
+                      }}
+                      placeholder="https://example.com/logo.svg"
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                    />
+                    <button
+                      disabled={!logoUrlInput.trim() || featureKeySaving}
+                      onClick={async () => {
+                        setFeatureKeySaving(true)
+                        try {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ PROJECT_LOGO_URL: logoUrlInput.trim() }),
+                          })
+                          setLogoPreviewUrl(logoUrlInput.trim())
+                          onRefresh()
+                        } catch {}
+                        setFeatureKeySaving(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {featureKeySaving ? 'saving...' : 'save'}
+                    </button>
+                  </div>
+
+                  {/* Preview */}
+                  {logoPreviewUrl && (
+                    <div className="mt-3 flex items-center gap-3 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 p-3">
+                      <img
+                        src={logoPreviewUrl}
+                        alt="logo preview"
+                        className="max-h-10 max-w-[120px] object-contain"
+                        onError={() => setLogoPreviewUrl(null)}
+                      />
+                      <span className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">{logoPreviewUrl.length > 60 ? logoPreviewUrl.slice(0, 60) + '...' : logoPreviewUrl}</span>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
+                    writes PROJECT_LOGO_URL to .env.local — displayed in the chat app header
                   </div>
                 </div>
               )}

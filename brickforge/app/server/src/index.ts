@@ -193,6 +193,24 @@ app.post('/api/events/task-created', (req, res) => {
   res.status(204).send();
 });
 
+// Image upload: convert to data URL for AI SDK consumption (gated by PROJECT_TOOL_IMAGE)
+app.post('/api/files/upload', upload.single('file'), (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: 'file required' });
+  }
+  if (!file.mimetype.startsWith('image/')) {
+    return res.status(400).json({ error: 'only image files are accepted' });
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return res.status(413).json({ error: 'image must be under 10 MB' });
+  }
+  const base64 = file.buffer.toString('base64');
+  const url = `data:${file.mimetype};base64,${base64}`;
+  console.log(`[files/upload] ${file.originalname} ${file.mimetype} ${file.size} bytes`);
+  res.json({ url, pathname: file.originalname || 'upload', contentType: file.mimetype });
+});
+
 // Audio transcription via OpenAI Whisper (proxies to keep API key server-side)
 app.post('/api/audio/transcribe', upload.single('file'), async (req, res) => {
   const file = req.file;

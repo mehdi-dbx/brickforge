@@ -159,8 +159,9 @@ function PureMultimodalInput({
     ],
   );
 
-  // Voice-to-text via custom hook (decoupled, toggled by PROJECT_TOOL_VOICE)
+  // Feature toggles (decoupled, driven by PROJECT_TOOL_* env vars)
   const voiceEnabled = featureEnabled('voice');
+  const imageEnabled = featureEnabled('image');
   const { voiceState, startRecording, stopRecording, abortRecording } = useVoice(submitForm, voiceEnabled);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -261,14 +262,17 @@ function PureMultimodalInput({
           />
         )}
 
-      <input
-        type="file"
-        className="-top-4 -left-4 pointer-events-none fixed size-0.5 opacity-0"
-        ref={fileInputRef}
-        multiple
-        onChange={handleFileChange}
-        tabIndex={-1}
-      />
+      {imageEnabled && (
+        <input
+          type="file"
+          className="-top-4 -left-4 pointer-events-none fixed size-0.5 opacity-0"
+          ref={fileInputRef}
+          multiple
+          accept="image/jpeg,image/png,image/gif,image/webp,image/heic"
+          onChange={handleFileChange}
+          tabIndex={-1}
+        />
+      )}
 
       <PromptInput
         className="rounded-xl border-2 border-primary bg-background p-3 shadow-xs transition-all duration-200 focus-within:border-primary hover:border-primary/80"
@@ -349,16 +353,19 @@ function PureMultimodalInput({
               </div>
             )}
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0"
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach file"
-          >
-            <Paperclip className="h-4 w-4 text-muted-foreground" />
-          </Button>
+          {imageEnabled && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={status !== 'ready' || uploadQueue.length > 0}
+              aria-label="Attach image"
+            >
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          )}
           {voiceEnabled && (voiceState === 'listening' ? (
             <button
               type="button"
@@ -419,7 +426,7 @@ function PureMultimodalInput({
             <PromptInputSubmit
               data-testid="send-button"
               status={status}
-              disabled={!input.trim() || uploadQueue.length > 0}
+              disabled={(!input.trim() && attachments.length === 0) || uploadQueue.length > 0}
               className="size-8 shrink-0 rounded-full bg-primary text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
             >
               <ArrowRight size={14} />
