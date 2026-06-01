@@ -200,8 +200,8 @@ function GenieList({ selected, onSelect, onConfirm }: { selected: string; onSele
   )
 }
 
-function KaPickerList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (name: string) => void; onConfirm?: () => void }) {
-  const [endpoints, setEndpoints] = useState<{ name: string; type: string }[]>([])
+function KaPickerList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (endpoint: string, displayName: string) => void; onConfirm?: () => void }) {
+  const [endpoints, setEndpoints] = useState<{ name: string; endpoint: string; type: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   useEffect(() => {
@@ -212,22 +212,25 @@ function KaPickerList({ selected, onSelect, onConfirm }: { selected: string; onS
       .catch(() => setEndpoints([]))
       .finally(() => setLoading(false))
   }, [])
-  if (loading) return <Spinner label="scanning endpoints..." />
-  if (endpoints.length === 0) return <InfoBox>No agent/KA endpoints found on this workspace.</InfoBox>
+  if (loading) return <Spinner label="scanning Knowledge Assistants..." />
+  if (endpoints.length === 0) return <InfoBox>No Knowledge Assistants found on this workspace.</InfoBox>
   const filtered = filter.trim()
-    ? endpoints.filter(ep => ep.name.toLowerCase().includes(filter.toLowerCase()))
+    ? endpoints.filter(ep => ep.name.toLowerCase().includes(filter.toLowerCase()) || ep.endpoint.toLowerCase().includes(filter.toLowerCase()))
     : endpoints
   return (
     <>
-      <Label>available KA endpoints</Label>
+      <Label>available Knowledge Assistants</Label>
       <FilterInput value={filter} onChange={setFilter} count={endpoints.length} />
       {filtered.map(ep => (
-        <PickRow key={ep.name} active={selected === ep.name}
-          onClick={() => onSelect(ep.name)}
-          onDoubleClick={() => { onSelect(ep.name); onConfirm?.() }}>
+        <PickRow key={ep.endpoint} active={selected === ep.endpoint}
+          onClick={() => onSelect(ep.endpoint, ep.name)}
+          onDoubleClick={() => { onSelect(ep.endpoint, ep.name); onConfirm?.() }}>
           <Dot color="green" />
-          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{ep.name}</span>
-          <Tag color="purple">agent</Tag>
+          <div className="flex-1 min-w-0">
+            <div className="font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{ep.name}</div>
+            <div className="font-mono text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 truncate">{ep.endpoint}</div>
+          </div>
+          <Tag color="purple">KA</Tag>
         </PickRow>
       ))}
       <NoMatches visible={!!filter && filtered.length === 0} />
@@ -235,27 +238,27 @@ function KaPickerList({ selected, onSelect, onConfirm }: { selected: string; onS
   )
 }
 
-function LakebaseList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (name: string) => void; onConfirm?: () => void }) {
-  const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=lakebase')
-  const instances = (data as { id: string; name: string; state: string }[]) || []
+
+function MlflowList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (id: string) => void; onConfirm?: () => void }) {
+  const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=mlflow')
+  const experiments = (data as { id: string; name: string; state: string }[]) || []
   const [filter, setFilter] = useState('')
-  if (loading) return <Spinner label="loading lakebase instances…" />
+  if (loading) return <Spinner label="loading mlflow experiments…" />
   if (error)   return <ErrMsg msg={error} />
-  if (instances.length === 0) return <InfoBox>No Lakebase instances found -- use "create instance" instead.</InfoBox>
+  if (experiments.length === 0) return <InfoBox>No MLflow experiments found -- use "create new experiment" instead.</InfoBox>
   const filtered = filter.trim()
-    ? instances.filter(i => i.name.toLowerCase().includes(filter.toLowerCase()))
-    : instances
+    ? experiments.filter(e => e.name.toLowerCase().includes(filter.toLowerCase()) || e.id.includes(filter))
+    : experiments
   return (
     <>
-      <Label>available lakebase instances</Label>
-      <FilterInput value={filter} onChange={setFilter} count={instances.length} />
-      {filtered.map(i => (
-        <PickRow key={i.name} active={selected === i.name}
-          onClick={() => onSelect(i.name)}
-          onDoubleClick={() => { onSelect(i.name); onConfirm?.() }}>
-          <Dot color={i.state === 'AVAILABLE' ? 'green' : i.state === 'CREATING' ? 'amber' : 'red'} />
-          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{i.name}</span>
-          <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{i.state}</span>
+      <Label>available mlflow experiments</Label>
+      <FilterInput value={filter} onChange={setFilter} count={experiments.length} />
+      {filtered.map(e => (
+        <PickRow key={e.id} active={selected === e.id}
+          onClick={() => onSelect(e.id)}
+          onDoubleClick={() => { onSelect(e.id); onConfirm?.() }}>
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{e.name}</span>
+          <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono flex-shrink-0">{e.id}</span>
         </PickRow>
       ))}
       <NoMatches visible={!!filter && filtered.length === 0} />
@@ -275,34 +278,161 @@ interface FeatureItem {
   configured: boolean
 }
 
-function FeatureList({ toggles, onToggle }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void }) {
+function FeatureToggleRow({ f, onToggle, children }: { f: FeatureItem; onToggle: (key: string, enabled: boolean) => void; children?: React.ReactNode }) {
+  return (
+    <div className="mb-1.5">
+      <button
+        onClick={() => onToggle(f.key, !f.enabled)}
+        className={`
+          w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all duration-150
+          ${f.enabled
+            ? 'border-dbx-blue/40 dark:border-dbx-green/40 bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+            : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-600'}
+          ${children && f.enabled ? 'rounded-b-none' : ''}
+        `}
+      >
+        <div className={`w-8 h-4 rounded-full flex-shrink-0 relative transition-colors ${f.enabled ? '' : 'bg-dbx-gray-300 dark:bg-dbx-gray-600'}`}
+          style={f.enabled ? { backgroundColor: '#00A972', boxShadow: '0 0 8px rgba(0, 169, 114, 0.5)' } : undefined}>
+          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${f.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-medium font-mono text-dbx-gray-800 dark:text-dbx-gray-100">{f.label}</div>
+          <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">{f.desc}</div>
+        </div>
+        <span className={`text-[10px] font-mono flex-shrink-0 ${f.enabled ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
+          {f.enabled ? 'on' : 'off'}
+        </span>
+      </button>
+      {children && f.enabled && (
+        <div className="border border-t-0 border-dbx-blue/40 dark:border-dbx-green/40 rounded-b-lg px-3 py-2.5 bg-dbx-blue-bg/50 dark:bg-dbx-green-bg/5">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LakebaseConfig({ selected, onSelect, onCreateName }: { selected: string; onSelect: (name: string) => void; onCreateName: (name: string) => void }) {
+  const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=lakebase')
+  const instances = (data as { id: string; name: string; state: string }[]) || []
+  const [mode, setMode] = useState<'pick' | 'create' | 'manual'>('pick')
+  const [manualName, setManualName] = useState(selected)
+  const [createName, setCreateName] = useState('')
+  const [filter, setFilter] = useState('')
+
+  const filtered = filter.trim()
+    ? instances.filter(i => i.name.toLowerCase().includes(filter.toLowerCase()))
+    : instances
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">lakebase instance required for memory</div>
+      {selected && <div className="text-[10px] font-mono text-dbx-blue dark:text-dbx-green">[+] selected: {selected}</div>}
+      <div className="flex gap-1">
+        {(['pick', 'create', 'manual'] as const).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-2 py-0.5 text-[10px] font-mono rounded-md border transition-colors ${mode === m
+              ? 'border-dbx-blue dark:border-dbx-green text-dbx-blue dark:text-dbx-green bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+              : 'border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300'}`}>
+            {m === 'pick' ? 'pick existing' : m === 'create' ? 'create new' : 'enter name'}
+          </button>
+        ))}
+      </div>
+      {mode === 'pick' && (
+        loading ? <Spinner label="loading lakebase instances..." /> :
+        error ? <ErrMsg msg={error} /> :
+        instances.length === 0 ? <InfoBox>No instances found -- try "create new" or "enter name".</InfoBox> :
+        <>
+          <FilterInput value={filter} onChange={setFilter} count={instances.length} />
+          <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+            {filtered.map(i => (
+              <PickRow key={i.name} active={selected === i.name}
+                onClick={() => { onSelect(i.name); setManualName(i.name) }}>
+                <Dot color={i.state === 'AVAILABLE' ? 'green' : i.state === 'CREATING' ? 'amber' : 'red'} />
+                <span className="flex-1 font-mono text-[12px] text-dbx-gray-800 dark:text-dbx-gray-100">{i.name}</span>
+                <span className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{i.state}</span>
+              </PickRow>
+            ))}
+            <NoMatches visible={!!filter && filtered.length === 0} />
+          </div>
+        </>
+      )}
+      {mode === 'create' && (
+        <div className="flex gap-1.5 items-center">
+          <input value={createName} onChange={e => setCreateName(e.target.value)} placeholder="my-lakebase-instance"
+            className="flex-1 px-2 py-1 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100" />
+          <button onClick={() => { if (createName.trim()) onCreateName(createName.trim()) }}
+            disabled={!createName.trim()}
+            className="px-2.5 py-1 text-[11px] font-mono rounded-md bg-dbx-blue dark:bg-dbx-green text-white disabled:opacity-40 transition-opacity">
+            create
+          </button>
+        </div>
+      )}
+      {mode === 'manual' && (
+        <input value={manualName} onChange={e => { setManualName(e.target.value); onSelect(e.target.value) }} placeholder="instance-name"
+          className="px-2 py-1 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100" />
+      )}
+    </div>
+  )
+}
+
+function FeatureList({ toggles, onToggle, lakebaseName, onLakebaseSelect, onLakebaseCreate }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void; lakebaseName: string; onLakebaseSelect: (name: string) => void; onLakebaseCreate: (name: string) => void }) {
   if (toggles.length === 0) return <InfoBox>No features available.</InfoBox>
   return (
     <>
       <Label>agent features</Label>
       {toggles.map(f => (
-        <button
-          key={f.key}
-          onClick={() => onToggle(f.key, !f.enabled)}
-          className={`
-            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border mb-1.5 text-left transition-all duration-150
-            ${f.enabled
-              ? 'border-dbx-blue/40 dark:border-dbx-green/40 bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
-              : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-600'}
-          `}
-        >
-          {/* Toggle indicator */}
-          <div className={`w-8 h-4 rounded-full flex-shrink-0 relative transition-colors ${f.enabled ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300 dark:bg-dbx-gray-600'}`}>
-            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${f.enabled ? 'left-[18px]' : 'left-0.5'}`} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium font-mono text-dbx-gray-800 dark:text-dbx-gray-100">{f.label}</div>
-            <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">{f.desc}</div>
-          </div>
-          <span className={`text-[10px] font-mono flex-shrink-0 ${f.enabled ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
-            {f.enabled ? 'on' : 'off'}
-          </span>
-        </button>
+        <FeatureToggleRow key={f.key} f={f} onToggle={onToggle}>
+          {f.key === 'MEMORY' ? (
+            <LakebaseConfig selected={lakebaseName} onSelect={onLakebaseSelect} onCreateName={onLakebaseCreate} />
+          ) : undefined}
+        </FeatureToggleRow>
+      ))}
+    </>
+  )
+}
+
+function KaConfig({ selected, onSelect }: { selected: string; onSelect: (endpoint: string, name: string) => void }) {
+  const [mode, setMode] = useState<'pick' | 'manual'>('pick')
+  const [manualVal, setManualVal] = useState(selected)
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">KA endpoint required</div>
+      {selected && <div className="text-[10px] font-mono text-dbx-blue dark:text-dbx-green">[+] selected: {selected}</div>}
+      <div className="flex gap-1">
+        {(['pick', 'manual'] as const).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-2 py-0.5 text-[10px] font-mono rounded-md border transition-colors ${mode === m
+              ? 'border-dbx-blue dark:border-dbx-green text-dbx-blue dark:text-dbx-green bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+              : 'border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300'}`}>
+            {m === 'pick' ? 'pick existing' : 'enter manually'}
+          </button>
+        ))}
+      </div>
+      {mode === 'pick' && (
+        <div className="max-h-40 overflow-y-auto">
+          <KaPickerList selected={selected} onSelect={onSelect} />
+        </div>
+      )}
+      {mode === 'manual' && (
+        <input value={manualVal} onChange={e => { setManualVal(e.target.value); onSelect(e.target.value, e.target.value) }} placeholder="ka-endpoint-name"
+          className="px-2 py-1 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100" />
+      )}
+    </div>
+  )
+}
+
+function BricksList({ toggles, onToggle, kaEndpoint, kaName, onKaSelect }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void; kaEndpoint: string; kaName: string; onKaSelect: (endpoint: string, name: string) => void }) {
+  if (toggles.length === 0) return <InfoBox>No bricks available.</InfoBox>
+  return (
+    <>
+      <Label>agent bricks</Label>
+      {toggles.map(f => (
+        <FeatureToggleRow key={f.key} f={f} onToggle={onToggle}>
+          {f.key === 'KA' ? (
+            <KaConfig selected={kaEndpoint} onSelect={onKaSelect} />
+          ) : undefined}
+        </FeatureToggleRow>
       ))}
     </>
   )
@@ -509,25 +639,59 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
 
 // ─── Dynamic table list (fetched from API) ───────────────────────────────────
 
-function SchemaTableList({ prefix }: { prefix: string }) {
+function SchemaTableList({ prefix, selectable, selected, onSelectionChange }: {
+  prefix: string
+  selectable?: boolean
+  selected?: Set<string>
+  onSelectionChange?: (selected: Set<string>) => void
+}) {
   const [tables, setTables] = useState<{ name: string; type: string }[]>([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     setLoading(true)
     fetch('/api/setup/schema-tables')
       .then(r => r.json())
-      .then(data => setTables(data.tables || []))
+      .then(data => {
+        const t = data.tables || []
+        setTables(t)
+        // Select all by default
+        if (selectable && onSelectionChange && (!selected || selected.size === 0)) {
+          onSelectionChange(new Set(t.map((x: { name: string }) => x.name)))
+        }
+      })
       .catch(() => setTables([]))
       .finally(() => setLoading(false))
   }, [])
   if (loading) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1 animate-pulse">loading tables...</div>
   if (tables.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no tables in schema</div>
+  const sel = selected || new Set<string>()
+  const allSelected = tables.every(t => sel.has(t.name))
+  const toggleAll = () => {
+    if (!onSelectionChange) return
+    onSelectionChange(allSelected ? new Set() : new Set(tables.map(t => t.name)))
+  }
+  const toggle = (name: string) => {
+    if (!onSelectionChange) return
+    const next = new Set(sel)
+    next.has(name) ? next.delete(name) : next.add(name)
+    onSelectionChange(next)
+  }
   return (
     <>
-      <div className="text-[12px] font-mono text-dbx-gray-400 py-1">{tables.length} table(s) in {prefix || 'schema'}</div>
+      <div className="flex items-center gap-2 py-1">
+        {selectable && (
+          <input type="checkbox" checked={allSelected} onChange={toggleAll}
+            className="accent-blue-500 w-3.5 h-3.5 cursor-pointer" />
+        )}
+        <span className="text-[12px] font-mono text-dbx-gray-400">{sel.size}/{tables.length} table(s) in {prefix || 'schema'}</span>
+      </div>
       {tables.map(t => (
-        <div key={t.name} className="flex items-center gap-2 py-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+        <div key={t.name} className="flex items-center gap-2 py-1 cursor-pointer" onClick={() => selectable && toggle(t.name)}>
+          {selectable
+            ? <input type="checkbox" checked={sel.has(t.name)} onChange={() => toggle(t.name)}
+                className="accent-blue-500 w-3.5 h-3.5 cursor-pointer" />
+            : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+          }
           <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t.name}` : t.name}</span>
         </div>
       ))}
@@ -537,25 +701,58 @@ function SchemaTableList({ prefix }: { prefix: string }) {
 
 // ─── Dynamic routine list (functions + procedures from API) ─────────────────
 
-function SchemaRoutineList({ prefix }: { prefix: string }) {
+function SchemaRoutineList({ prefix, selectable, selected, onSelectionChange }: {
+  prefix: string
+  selectable?: boolean
+  selected?: Set<string>
+  onSelectionChange?: (selected: Set<string>) => void
+}) {
   const [funcs, setFuncs] = useState<{ name: string; type: string }[]>([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     setLoading(true)
     fetch('/api/setup/schema-functions')
       .then(r => r.json())
-      .then(data => setFuncs(data.functions || []))
+      .then(data => {
+        const f = data.functions || []
+        setFuncs(f)
+        if (selectable && onSelectionChange && (!selected || selected.size === 0)) {
+          onSelectionChange(new Set(f.map((x: { name: string }) => x.name)))
+        }
+      })
       .catch(() => setFuncs([]))
       .finally(() => setLoading(false))
   }, [])
   if (loading) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1 animate-pulse">loading functions...</div>
   if (funcs.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no functions in schema</div>
+  const sel = selected || new Set<string>()
+  const allSelected = funcs.every(f => sel.has(f.name))
+  const toggleAll = () => {
+    if (!onSelectionChange) return
+    onSelectionChange(allSelected ? new Set() : new Set(funcs.map(f => f.name)))
+  }
+  const toggle = (name: string) => {
+    if (!onSelectionChange) return
+    const next = new Set(sel)
+    next.has(name) ? next.delete(name) : next.add(name)
+    onSelectionChange(next)
+  }
   return (
     <>
-      <div className="text-[12px] font-mono text-dbx-gray-400 py-1">{funcs.length} function(s) in {prefix || 'schema'}</div>
+      <div className="flex items-center gap-2 py-1">
+        {selectable && (
+          <input type="checkbox" checked={allSelected} onChange={toggleAll}
+            className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+        )}
+        <span className="text-[12px] font-mono text-dbx-gray-400">{sel.size}/{funcs.length} function(s) in {prefix || 'schema'}</span>
+      </div>
       {funcs.map(f => (
-        <div key={f.name} className="flex items-center gap-2 py-0.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+        <div key={f.name} className="flex items-center gap-2 py-0.5 cursor-pointer" onClick={() => selectable && toggle(f.name)}>
+          {selectable
+            ? <input type="checkbox" checked={sel.has(f.name)} onChange={() => toggle(f.name)}
+                className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+            : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+          }
           <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${f.name}` : f.name}</span>
         </div>
       ))}
@@ -1106,9 +1303,8 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
     case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || ''
     case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
     case 'genie':     return ''
-    case 'ka':        return ''
+    case 'bricks':    return ''
     case 'vs':        return v.PROJECT_VS_INDEX || ''
-    case 'lakebase':  return v.LAKEBASE_INSTANCE_NAME || ''
     case 'mlflow':    return v.MLFLOW_EXPERIMENT_ID || ''
     case 'deploy':    return v.DBX_APP_NAME || ''
     default:          return ''
@@ -1124,7 +1320,6 @@ const STEP_KEY_MAP: Record<string, string> = {
   schema: 'PROJECT_UNITY_CATALOG_SCHEMA',
   model: 'AGENT_MODEL_ENDPOINT',
   vs: 'PROJECT_VS_INDEX',
-  lakebase: 'LAKEBASE_INSTANCE_NAME',
   mlflow: 'MLFLOW_EXPERIMENT_ID',
   deploy: 'DBX_APP_NAME',
 }
@@ -1383,6 +1578,25 @@ export function SetupDrawer({
   const abortRef = useRef<AbortController | null>(null)
   const [lastExecOk, setLastExecOk] = useState(true)
   const [showPat, setShowPat] = useState(false)
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set())
+  const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(new Set())
+  const [selKaEndpoint, setSelKaEndpoint] = useState('')
+  const [selKaName, setSelKaName] = useState('')
+
+  // Persist table selection to config on change
+  const handleTableSelection = useCallback((sel: Set<string>) => {
+    setSelectedTables(sel)
+    fetch('/api/env', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ PROJECT_TABLES: Array.from(sel).join(',') }),
+    })
+  }, [])
+
+  // Persist function selection to config on change
+  const handleFunctionSelection = useCallback((sel: Set<string>) => {
+    setSelectedFunctions(sel)
+  }, [])
 
   // Reset exec status when step changes
   useEffect(() => { setLastExecOk(true) }, [activeStep])
@@ -1399,7 +1613,7 @@ export function SetupDrawer({
     wrappedExecDone(false)
   }, [wrappedExecDone])
 
-  const TESTABLE_STEPS: StepId[] = ['host', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'deploy']
+  const TESTABLE_STEPS: StepId[] = ['host', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'vs', 'mlflow', 'deploy']
   const testState: TestResult = testCache[activeStep] ?? { status: 'idle', message: '' }
   const setTestState = useCallback((r: TestResult) => onTestResult(activeStep, r), [activeStep, onTestResult])
 
@@ -1448,7 +1662,7 @@ export function SetupDrawer({
   const [apiPath, setApiPath]           = useState('/')
   const [apiDesc, setApiDesc]           = useState('')
   const [apiParams, setApiParams]       = useState('')
-  const [selLakebaseId, setSelLakebaseId] = useState('')
+  const [selMlflowId, setSelMlflowId]     = useState('')
   const [csvFiles, setCsvFiles]           = useState<File[]>([])
   const [csvUploading, setCsvUploading]   = useState(false)
   const csvInputRef                       = useRef<HTMLInputElement>(null)
@@ -1463,7 +1677,10 @@ export function SetupDrawer({
   const [logoSearching, setLogoSearching] = useState(false)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [featureItems, setFeatureItems] = useState<FeatureItem[]>([])
+  const [featureLakebaseName, setFeatureLakebaseName] = useState(currentValues.LAKEBASE_INSTANCE_NAME || '')
   const [featuresDirty, setFeaturesDirty] = useState<Record<string, boolean>>({})  // key -> new enabled state
+  const [brickItems, setBrickItems] = useState<FeatureItem[]>([])
+  const [bricksDirty, setBricksDirty] = useState<Record<string, boolean>>({})
 
   // Test a specific instance by env key
   const handleInstanceTest = useCallback(async (key: string) => {
@@ -1520,7 +1737,7 @@ export function SetupDrawer({
     setMcpSlug(''); setMcpHeader('')
     setAssetsSchema(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
     setCsvFiles([]); setConnectSchema('')
-    setFeaturesDirty({})
+    setFeaturesDirty({}); setBricksDirty({})
   }, [activeStep, selectedChoice, currentValues.PROJECT_UNITY_CATALOG_SCHEMA])
 
   // Fetch feature registry when cfg-features is selected
@@ -1532,16 +1749,25 @@ export function SetupDrawer({
       .catch(() => {})
   }, [choice])
 
+  // Fetch bricks registry when cfg-bricks is selected
+  useEffect(() => {
+    if (choice?.action !== 'cfg-bricks') return
+    fetch('/api/setup/resources?type=bricks')
+      .then(r => r.json())
+      .then(data => { if (data.items) setBrickItems(data.items) })
+      .catch(() => {})
+  }, [choice])
+
   // SSE runner
   useEffect(() => {
     if (phase !== 'execute' || !choice) return
     let action = choice.action
     const params: Record<string, string> = {}
 
-    // Features: save all toggled features sequentially
+    // Features: save all toggled features + lakebase if memory enabled
     if (action === 'cfg-features') {
       const dirty = Object.entries(featuresDirty)
-      if (dirty.length === 0) { onExecDone(true); onRefresh(); return }
+      if (dirty.length === 0 && !featureLakebaseName) { onExecDone(true); onRefresh(); return }
       ;(async () => {
         for (const [key, enabled] of dirty) {
           await fetch('/api/setup/exec', {
@@ -1550,7 +1776,43 @@ export function SetupDrawer({
             body: JSON.stringify({ action: 'save-feature-toggle', params: { key, enabled: enabled ? 'true' : 'false' } }),
           })
         }
+        // Save lakebase instance name when memory is enabled
+        const memoryEnabled = featureItems.find(f => f.key === 'MEMORY')?.enabled
+        if (memoryEnabled && featureLakebaseName.trim()) {
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-lakebase', params: { name: featureLakebaseName.trim() } }),
+          })
+        }
         setFeaturesDirty({})
+        onExecDone(true)
+        onRefresh()
+      })()
+      return
+    }
+    // Bricks: save all toggled bricks + KA endpoint if KA enabled
+    if (action === 'cfg-bricks') {
+      const dirty = Object.entries(bricksDirty)
+      ;(async () => {
+        for (const [key, enabled] of dirty) {
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-brick-toggle', params: { key, enabled: enabled ? 'true' : 'false' } }),
+          })
+        }
+        // Save KA endpoint when KA brick is enabled
+        const kaEnabled = brickItems.find(b => b.key === 'KA')?.enabled
+        if (kaEnabled && selKaEndpoint) {
+          const slug = selKaName.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'DEFAULT'
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-multi-instance', params: { prefix: 'PROJECT_KA_', slug, url: selKaEndpoint } }),
+          })
+        }
+        setBricksDirty({})
         onExecDone(true)
         onRefresh()
       })()
@@ -1560,10 +1822,22 @@ export function SetupDrawer({
     if (action === 'cfg-warehouse' && selWhId)    { action = 'save-warehouse'; Object.assign(params, { id: selWhId, name: selWhName }) }
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
     if (action === 'cfg-genie'     && selGenieId) { action = 'save-genie';     Object.assign(params, { id: selGenieId, name: selGenieName }) }
-    if (action === 'cfg-lakebase'  && selLakebaseId) { action = 'save-lakebase'; Object.assign(params, { name: selLakebaseId }) }
-    if (action === 'pick-ka'       && manualVal) { action = 'save-manual'; Object.assign(params, { key: 'PROJECT_KA_DEFAULT', value: manualVal }) }
+    if (action === 'cfg-mlflow'    && selMlflowId)   { action = 'save-mlflow';   Object.assign(params, { id: selMlflowId }) }
+    if (action === 'pick-ka' && selKaEndpoint) {
+      const slug = selKaName.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'DEFAULT'
+      action = 'save-multi-instance'
+      Object.assign(params, { prefix: 'PROJECT_KA_', slug, url: selKaEndpoint })
+    }
     // "Pick from existing" for functions: just confirm, no provisioning
-    if (action === 'exec-functions' && activeStep === 'functions') { onExecDone(true); onRefresh(); return }
+    // "Pick from existing" for functions: save selection to config
+    if (action === 'exec-functions' && activeStep === 'functions') {
+      fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_FUNCTIONS: Array.from(selectedFunctions).join(',') }),
+      }).then(() => { onExecDone(true); onRefresh() })
+      return
+    }
     if (action === 'exec-genie'    && genieName)  { Object.assign(params, { name: genieName }) }
     // Host: cfg-profile saves host from selected profile
     if (action === 'cfg-profile' && activeStep === 'host' && selProfile) { action = 'save-host'; Object.assign(params, { profile: selProfile }) }
@@ -1693,7 +1967,7 @@ export function SetupDrawer({
 
   // ── Choose ─────────────────────────────────────────────────────────────────
   // Steps that require host to be configured first
-  const NEEDS_HOST = new Set(['warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'vs', 'lakebase', 'mlflow', 'grants', 'deploy', 'git'])
+  const NEEDS_HOST = new Set(['warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'bricks', 'vs', 'mlflow', 'grants', 'deploy', 'git'])
   const hostMissing = NEEDS_HOST.has(activeStep) && !currentValues.DATABRICKS_HOST
 
   function renderChoose() {
@@ -1741,7 +2015,7 @@ export function SetupDrawer({
               <>
                 <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                   <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">tables</div>
-                  <SchemaTableList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
+                  <SchemaTableList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} selectable selected={selectedTables} onSelectionChange={handleTableSelection} />
                 </div>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'data' }))}
@@ -1754,7 +2028,7 @@ export function SetupDrawer({
             {activeStep === 'functions' && (
               <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                 <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">routines</div>
-                <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
+                <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
               </div>
             )}
             {activeStep === 'ka' && (
@@ -1796,12 +2070,13 @@ export function SetupDrawer({
 
     function canRun() {
       if (action === 'cfg-features')  return true
+      if (action === 'cfg-bricks')    return true
       if (action === 'cfg-model')     return !!selEndpoint
       if (action === 'cfg-profile')   return !!selProfile
       if (action === 'cfg-warehouse') return !!selWhId
       if (action === 'cfg-catalog')   return !!selCatalog && !!catSchema
       if (action === 'cfg-genie')     return !!selGenieId
-      if (action === 'cfg-lakebase')  return !!selLakebaseId
+      if (action === 'cfg-mlflow')    return !!selMlflowId
       if (action === 'exec-genie')    return !!genieName
       if (action === 'cfg-new')         return !!manualVal.trim()
       if (action === 'cfg-deploy-name') return !!manualVal.trim()
@@ -1809,7 +2084,7 @@ export function SetupDrawer({
       if (action === 'upload-csv')     return csvFiles.length > 0 && !csvUploading
       if (action === 'connect-tables') return /^[\w-]+\.[\w-]+$/.test(connectSchema.trim())
       if (action === 'cfg-ka')        return kaDocsReady
-      if (action === 'pick-ka')      return !!manualVal
+      if (action === 'pick-ka')      return !!selKaEndpoint
       if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
@@ -1824,7 +2099,18 @@ export function SetupDrawer({
       body = <FeatureList toggles={featureItems} onToggle={(key, enabled) => {
         setFeatureItems(prev => prev.map(f => f.key === key ? { ...f, enabled } : f))
         setFeaturesDirty(prev => ({ ...prev, [key]: enabled }))
-      }} />
+      }} lakebaseName={featureLakebaseName} onLakebaseSelect={setFeatureLakebaseName}
+        onLakebaseCreate={(name) => {
+          setFeatureLakebaseName(name)
+          // Fire exec-lakebase to create the instance
+          fetch('/api/setup/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'exec-lakebase', params: {} }) })
+        }} />
+    else if (action === 'cfg-bricks')
+      body = <BricksList toggles={brickItems} onToggle={(key, enabled) => {
+        setBrickItems(prev => prev.map(b => b.key === key ? { ...b, enabled } : b))
+        setBricksDirty(prev => ({ ...prev, [key]: enabled }))
+      }} kaEndpoint={selKaEndpoint} kaName={selKaName} onKaSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} />
     else if (action === 'cfg-model')
       body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-profile')
@@ -1835,15 +2121,14 @@ export function SetupDrawer({
       body = <CatalogPicker catalog={selCatalog} schema={catSchema} onCatalog={setSelCatalog} onSchema={setCatSchema} />
     else if (action === 'cfg-genie')
       body = <GenieList selected={selGenieId} onSelect={(id, name) => { setSelGenieId(id); setSelGenieName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
-    else if (action === 'cfg-lakebase')
-      body = <LakebaseList selected={selLakebaseId} onSelect={setSelLakebaseId} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'cfg-mlflow')
+      body = <MlflowList selected={selMlflowId} onSelect={setSelMlflowId} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'pick-ka')
-      body = <KaPickerList selected={manualVal} onSelect={setManualVal} onConfirm={() => setTimeout(onContinue, 0)} />
+      body = <KaPickerList selected={selKaEndpoint} onSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'exec-functions')
       body = (<>
-        <Label>functions in Unity Catalog</Label>
-        <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
-        <InfoBox>These functions are available for the agent to use. Click continue to confirm.</InfoBox>
+        <Label>select functions for the agent</Label>
+        <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
       </>)
     else if (action === 'exec-genie')
       body = (<><Label>genie room name</Label><Input value={genieName} onChange={setGenieName} placeholder="Checkin Metrics" /></>)
@@ -2079,7 +2364,7 @@ export function SetupDrawer({
                 : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'}
             `}
           >
-            {action === 'cfg-features' ? 'save features →' : action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
+            {action === 'cfg-features' ? 'save features →' : action === 'cfg-bricks' ? 'save bricks →' : action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
           </button>
           <button
             onClick={onBack}

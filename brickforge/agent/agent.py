@@ -202,7 +202,8 @@ async def init_agent(
     # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
     chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
     from agent.memory_tools import create_memory_tools
-    memory_tools = create_memory_tools(store, user_id) if store and user_id else []
+    memory_enabled = os.environ.get("PROJECT_TOOL_MEMORY", "false").strip().lower() != "false"
+    memory_tools = create_memory_tools(store, user_id) if memory_enabled and store and user_id else []
     if memory_tools:
         _log.info("Memory tools enabled for user '%s'", user_id)
     tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + forge_tools + chart_tools + memory_tools + [get_current_time] + domain_tools

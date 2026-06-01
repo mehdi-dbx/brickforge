@@ -31,13 +31,12 @@ STEP_ENV_KEYS: dict[str, list[str]] = {
     "model":     ["AGENT_MODEL_ENDPOINT"],
     "prompt":    [],
     "genie":     [],
-    "ka":        [],
+    "bricks":    [],
     "vs":        ["PROJECT_VS_INDEX"],
     "mcp":       [],
     "api":       [],
     "a2a":       [],
     "features":  [],
-    "lakebase":  ["LAKEBASE_INSTANCE_NAME"],
     "mlflow":    ["MLFLOW_EXPERIMENT_ID"],
     "grants":    [],
     "deploy":    ["DBX_APP_NAME"],
@@ -48,6 +47,11 @@ STEP_ENV_KEYS: dict[str, list[str]] = {
 # Each entry: env-key suffix -> {label, desc, default}
 # The full env key is PROJECT_TOOL_<KEY>.
 FEATURE_REGISTRY = {
+    "MEMORY": {
+        "label": "Memory",
+        "desc": "Persistent user memory across conversations via Lakebase (requires LAKEBASE_INSTANCE_NAME)",
+        "default": "false",
+    },
     "CHART": {
         "label": "Graph plotting",
         "desc": "Agent can generate interactive charts (area, line, bar, pie) inline in chat",
@@ -65,9 +69,35 @@ FEATURE_REGISTRY = {
     },
 }
 
+# ── Bricks registry (Agent Bricks) ───────────────────────────────────────────
+# Each entry: key suffix -> {label, desc, default}
+# The full env key is PROJECT_BRICK_<KEY>.
+BRICKS_REGISTRY = {
+    "KA": {
+        "label": "Knowledge Assistant",
+        "desc": "RAG endpoint backed by your documents -- answers questions with cited sources",
+        "default": "false",
+    },
+    "INFO_EXTRACTION": {
+        "label": "Information Extraction",
+        "desc": "Extract structured data from unstructured text (entities, dates, amounts, relationships)",
+        "default": "false",
+    },
+    "DOC_PARSING": {
+        "label": "Document Parsing",
+        "desc": "Parse and chunk PDFs, Word docs, and HTML into structured content for downstream tools",
+        "default": "false",
+    },
+    "TEXT_CLASSIFICATION": {
+        "label": "Text Classification",
+        "desc": "Classify text into categories (sentiment, intent, topic, urgency)",
+        "default": "false",
+    },
+}
+
 MULTI_INSTANCE_PREFIXES = {
     "genie": "PROJECT_GENIE_",
-    "ka": "PROJECT_KA_",
+    "bricks": "PROJECT_BRICK_",
     "vs": "PROJECT_VS_",
     "mcp": "PROJECT_MCP_",
     "a2a": "PROJECT_A2A_",
@@ -128,12 +158,13 @@ async def setup_status():
                     files = []
                 values = {"PROMPT_FILES": ", ".join(files)}
 
+
             # Multi-instance steps
             if step in MULTI_INSTANCE_PREFIXES:
                 prefix = MULTI_INSTANCE_PREFIXES[step]
                 instances = config.list_by_prefix(prefix)
 
-                # Features: inject registry defaults for unconfigured features
+                # Features: inject registry defaults for unconfigured, then sort to match registry order
                 if step == "features":
                     configured_keys = {i["key"] for i in instances}
                     for key, meta in FEATURE_REGISTRY.items():
@@ -145,6 +176,36 @@ async def setup_status():
                                 "enabled": meta["default"].lower() == "true",
                                 "label": meta["label"].lower(),
                             })
+                    # Sort to match FEATURE_REGISTRY declaration order (MEMORY first)
+                    registry_order = {f"PROJECT_TOOL_{k}": i for i, k in enumerate(FEATURE_REGISTRY)}
+                    instances.sort(key=lambda x: registry_order.get(x["key"], 999))
+
+                # Bricks: inject registry defaults, nest sub-entries under parent brick
+                if step == "bricks":
+                    configured_keys = {i["key"] for i in instances}
+                    # Collect sub-entries per brick (e.g. PROJECT_KA_* under KA)
+                    brick_children: dict[str, list] = {}
+                    ka_instances = config.list_by_prefix("PROJECT_KA_")
+                    brick_children["KA"] = ka_instances
+
+                    for key, meta in BRICKS_REGISTRY.items():
+                        env_key = f"PROJECT_BRICK_{key}"
+                        if env_key not in configured_keys:
+                            instances.append({
+                                "key": env_key,
+                                "value": meta["default"],
+                                "enabled": meta["default"].lower() == "true",
+                                "label": meta["label"].lower(),
+                                "children": brick_children.get(key, []),
+                            })
+                        else:
+                            # Add children + override label from registry
+                            for inst in instances:
+                                if inst["key"] == env_key:
+                                    inst["children"] = brick_children.get(key, [])
+                                    inst["label"] = meta["label"].lower()
+                    registry_order = {f"PROJECT_BRICK_{k}": i for i, k in enumerate(BRICKS_REGISTRY)}
+                    instances.sort(key=lambda x: registry_order.get(x["key"], 999))
 
                 if step == "vs":
                     instances = [i for i in instances if "INDEX" in i["key"]]
@@ -207,10 +268,20 @@ async def toggle_key(request: Request):
     config = _get_config()
     body = await request.json()
     key = body.get("key", "")
-    allowed_prefixes = ("PROJECT_GENIE_", "PROJECT_KA_", "PROJECT_VS_", "PROJECT_MCP_", "PROJECT_API_", "PROJECT_A2A_", "PROJECT_TOOL_")
+    allowed_prefixes = ("PROJECT_GENIE_", "PROJECT_KA_", "PROJECT_VS_", "PROJECT_MCP_", "PROJECT_API_", "PROJECT_A2A_", "PROJECT_TOOL_", "PROJECT_BRICK_")
     if not any(key.startswith(p) for p in allowed_prefixes):
         return JSONResponse({"error": "not a toggleable key"}, status_code=400)
     result = config.toggle(key)
+    # Registry defaults: key may not exist in config yet -- create it
+    if not result:
+        for prefix, registry in [("PROJECT_TOOL_", FEATURE_REGISTRY), ("PROJECT_BRICK_", BRICKS_REGISTRY)]:
+            if key.startswith(prefix):
+                suffix = key.replace(prefix, "")
+                if suffix in registry:
+                    new_val = "false" if registry[suffix]["default"].lower() == "true" else "true"
+                    config.set_many({key: new_val})
+                    result = True
+                break
     return {"ok": result}
 
 
@@ -331,6 +402,14 @@ try:
   print(json.dumps(out))
 except Exception: print('[]')
 """,
+        "mlflow": """
+import mlflow, json
+from mlflow.tracking import MlflowClient
+c = MlflowClient()
+exps = c.search_experiments(order_by=['last_update_time DESC'], max_results=50)
+out = [{'id': e.experiment_id, 'name': e.name, 'state': e.lifecycle_stage} for e in exps if e.lifecycle_stage == 'active']
+print(json.dumps(out))
+""",
     }
 
     # Features: return registry merged with current config (no subprocess needed)
@@ -343,7 +422,31 @@ except Exception: print('[]')
             env_key = f"PROJECT_TOOL_{key}"
             entry = env_map.get(env_key)
             if entry:
-                enabled = entry["enabled"] and entry["value"].strip().lower() not in ("false", "0", "")
+                enabled = entry["value"].strip().lower() not in ("false", "0", "")
+            else:
+                enabled = meta["default"].lower() == "true"
+            items.append({
+                "key": key,
+                "env_key": env_key,
+                "label": meta["label"],
+                "desc": meta["desc"],
+                "default": meta["default"],
+                "enabled": enabled,
+                "configured": env_key in env_map,
+            })
+        return {"items": items}
+
+    # Bricks: return registry merged with current config (no subprocess needed)
+    if type == "bricks":
+        config = _get_config()
+        entries = config.list()
+        env_map = {e["key"]: e for e in entries}
+        items = []
+        for key, meta in BRICKS_REGISTRY.items():
+            env_key = f"PROJECT_BRICK_{key}"
+            entry = env_map.get(env_key)
+            if entry:
+                enabled = entry["value"].strip().lower() not in ("false", "0", "")
             else:
                 enabled = meta["default"].lower() == "true"
             items.append({
@@ -526,19 +629,6 @@ try:
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 """.strip(),
-    "lakebase": """
-from databricks.sdk import WorkspaceClient; import os
-name = os.environ.get('LAKEBASE_INSTANCE_NAME','').strip()
-if not name: print('[x] LAKEBASE_INSTANCE_NAME not set'); exit(1)
-w = WorkspaceClient()
-try:
-    inst = w.database.get_database_instance(name=name)
-    state = str(getattr(inst, 'state', 'UNKNOWN')).upper()
-    if 'AVAILABLE' in state or 'ACTIVE' in state: print('[+] available — ' + name)
-    else: print('[x] ' + name + ' — ' + state); exit(1)
-except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
-""".strip(),
     "deploy": """
 from databricks.sdk import WorkspaceClient; import os
 app_name = os.environ.get('DBX_APP_NAME', '').strip()
@@ -642,7 +732,7 @@ except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 """.strip()
 
-    elif step == "ka":
+    elif step == "bricks":
         instances = config.list_by_prefix("PROJECT_KA_")
         first_active = next((i for i in instances if i["enabled"]), None)
         env_key = key or (first_active["key"] if first_active else "PROJECT_KA_DEFAULT")
@@ -658,6 +748,21 @@ try:
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 """.strip()
+
+    elif step == "features":
+        # Feature toggles: just report current state
+        env_key = key or ""
+        if env_key:
+            feat_key = env_key.replace("PROJECT_TOOL_", "")
+            meta = FEATURE_REGISTRY.get(feat_key)
+            val = config.get(env_key) or (meta["default"] if meta else "false")
+            enabled = val.strip().lower() not in ("false", "0", "")
+            label = meta["label"] if meta else feat_key.lower()
+            if enabled:
+                return {"ok": True, "message": f"{label} enabled"}
+            else:
+                return {"ok": True, "message": f"{label} disabled"}
+        return {"ok": True, "message": "features configured"}
 
     if not script:
         return {"ok": False, "message": f"no test for step: {step}"}
@@ -727,6 +832,22 @@ async def serving_endpoints_list(filter: str = ""):
         os.environ.update(sub)
         try:
             w = WorkspaceClient()
+            if filter == "ka":
+                # Use KA API for human-readable names (SDK or REST fallback)
+                try:
+                    if hasattr(w, 'knowledge_assistants'):
+                        kas = list(w.knowledge_assistants.list_knowledge_assistants())
+                        results = [{"name": ka.display_name or ka.name or "?", "endpoint": ka.endpoint_name or "", "type": "ka"} for ka in kas if ka.endpoint_name]
+                    else:
+                        # REST fallback for older SDK
+                        import json as _json
+                        resp = w.api_client.do("GET", "/api/2.0/knowledge-assistants")
+                        kas = resp.get("knowledge_assistants", [])
+                        results = [{"name": ka.get("display_name", ka.get("name", "?")), "endpoint": ka.get("endpoint_name", ""), "type": "ka"} for ka in kas if ka.get("endpoint_name")]
+                    if results:
+                        return {"endpoints": results, "count": len(results)}
+                except Exception:
+                    pass  # Fall back to serving endpoints below
             eps = list(w.serving_endpoints.list())
             results = []
             for ep in eps:
@@ -739,7 +860,7 @@ async def serving_endpoints_list(filter: str = ""):
                     continue
                 if filter == "fm" and not (is_external or is_foundation):
                     continue
-                results.append({"name": ep.name, "type": ep_type})
+                results.append({"name": ep.name, "endpoint": ep.name, "type": ep_type})
         finally:
             os.environ.clear()
             os.environ.update(old_env)
@@ -819,7 +940,7 @@ async def upload_csv(files: list[UploadFile] = File(...)):
 
 # ── Exec (SSE) ────────────────────────────────────────────────────────────────
 
-NO_AUTH_ACTIONS = {"save-deploy-name", "forge-bridge", "save-feature-toggle"}
+NO_AUTH_ACTIONS = {"save-deploy-name", "forge-bridge", "save-feature-toggle", "save-brick-toggle"}
 
 
 @router.post("/api/setup/exec")
@@ -924,6 +1045,25 @@ async def setup_exec(request: Request):
             os.environ[env_key] = enabled
             state = "enabled" if enabled.lower() == "true" else "disabled"
             label = FEATURE_REGISTRY[key]["label"]
+            yield sse_line(f"[+] {label} ({env_key}) {state}\n")
+            logger.log(f"[+] {env_key} = {enabled}")
+            logger.finish(True)
+            yield sse_done(True)
+            return
+
+        if action == "save-brick-toggle":
+            key = params.get("key", "")
+            enabled = params.get("enabled", "true")
+            if not key or key not in BRICKS_REGISTRY:
+                yield sse_line(f"[x] unknown brick: {key}\n", "err")
+                logger.finish(False, 1)
+                yield sse_done(False, 1)
+                return
+            env_key = f"PROJECT_BRICK_{key}"
+            config.set_many({env_key: enabled})
+            os.environ[env_key] = enabled
+            state = "enabled" if enabled.lower() == "true" else "disabled"
+            label = BRICKS_REGISTRY[key]["label"]
             yield sse_line(f"[+] {label} ({env_key}) {state}\n")
             logger.log(f"[+] {env_key} = {enabled}")
             logger.finish(True)
@@ -1039,6 +1179,18 @@ async def setup_exec(request: Request):
                 return
             config.set_many({"LAKEBASE_INSTANCE_NAME": lb_name})
             yield sse_line(f"[+] LAKEBASE_INSTANCE_NAME = {lb_name}\n")
+            logger.finish(True)
+            yield sse_done(True)
+            return
+
+        if action == "save-mlflow":
+            exp_id = params.get("id", "")
+            if not exp_id:
+                logger.finish(False, 1)
+                yield sse_done(False, 1)
+                return
+            config.set_many({"MLFLOW_EXPERIMENT_ID": exp_id})
+            yield sse_line(f"[+] MLFLOW_EXPERIMENT_ID = {exp_id}\n")
             logger.finish(True)
             yield sse_done(True)
             return
@@ -1202,9 +1354,9 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             "exec-tables": [PYTHON,"-c", _tables_script()],
             "exec-tables-uploaded": [PYTHON,"-c", _tables_uploaded_script()],
             "exec-functions": [PYTHON,"-c", _functions_script()],
-            "exec-lakebase": [PYTHON,"data/init/create_lakebase.py"],
-            "exec-mlflow": [PYTHON,"data/init/create_mlflow_experiment.py"],
-            "exec-grants": [PYTHON,"deploy/grant/run_all_grants.py"],
+            "exec-lakebase": [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_lakebase.py")],
+            "exec-mlflow": [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_mlflow_experiment.py")],
+            "exec-grants": [PYTHON, str(PACKAGE_ROOT / "deploy" / "grant" / "run_all_grants.py")],
             "exec-ka": [PYTHON,"-c", _ka_script()],
         }
 

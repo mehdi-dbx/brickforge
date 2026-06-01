@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Globe, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, BookOpen, Search, Plug, Zap, Bot, ToggleRight, HardDrive, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, ChevronRight, type LucideIcon } from 'lucide-react'
+import { Globe, Database, LayoutGrid, Table2, FunctionSquare, Sparkles, MessageSquareText, Wand2, Blocks, Search, Plug, Zap, Bot, ToggleRight, FlaskConical, ShieldCheck, Rocket, GitBranch, Power, Plus, Trash2, ZoomIn, ZoomOut, Maximize2, ChevronRight, type LucideIcon } from 'lucide-react'
 import type { StepId, StepStatus, StepState, StepInstance } from '../types'
 import { SETUP_STEPS } from '../setupSteps'
 
@@ -14,20 +14,19 @@ const STEP_ICON: Record<StepId, LucideIcon> = {
   model:     Sparkles,
   prompt:    MessageSquareText,
   genie:     Wand2,
-  ka:        BookOpen,
+  bricks:    Blocks,
   vs:        Search,
   mcp:       Plug,
   api:       Zap,
   a2a:       Bot,
   features:  ToggleRight,
-  lakebase:  HardDrive,
   mlflow:    FlaskConical,
   grants:    ShieldCheck,
   deploy:    Rocket,
   git:       GitBranch,
 }
 
-const MULTI_INSTANCE_STEPS: StepId[] = ['genie', 'ka', 'vs', 'mcp', 'api', 'a2a', 'features']
+const MULTI_INSTANCE_STEPS: StepId[] = ['genie', 'bricks', 'vs', 'mcp', 'api', 'a2a', 'features']
 
 interface SetupDagProps {
   stepStates: Record<StepId, StepState>
@@ -65,13 +64,12 @@ function subLabel(id: StepId, state: StepState): string {
     case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || 'not set'
     case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
     case 'genie':     return 'not configured'
-    case 'ka':        return 'not configured'
+    case 'bricks':    return 'not configured'
     case 'vs':        return v.PROJECT_VS_INDEX || 'not configured'
     case 'mcp':       return 'not configured'
     case 'api':       return 'not configured'
     case 'a2a':       return 'not configured'
     case 'features':  return 'not configured'
-    case 'lakebase':  return v.LAKEBASE_INSTANCE_NAME || 'not configured'
     case 'mlflow':    return v.MLFLOW_EXPERIMENT_ID || 'set'
     case 'grants':    return 'run to apply'
     case 'deploy':    return v.DBX_APP_NAME || 'not configured'
@@ -85,7 +83,7 @@ const ALL_STEPS: StepId[] = SETUP_STEPS.map(s => s.id)
 // Border color for multi-instance step types
 const INSTANCE_BORDER: Record<string, string> = {
   genie: 'border-dbx-amber',
-  ka:    'border-dbx-blue dark:border-dbx-blue',
+  bricks: 'border-dbx-blue dark:border-dbx-blue',
   vs:    'border-purple-400 dark:border-purple-500',
   mcp:   'border-emerald-400 dark:border-emerald-500',
   api:   'border-orange-400 dark:border-orange-500',
@@ -153,12 +151,12 @@ function InstanceRow({ inst, stepId, onToggle, onClick, onDelete }: { inst: Step
         onClick={() => onClick?.(inst.key)}
         className={`
         relative flex items-center gap-1.5 w-full px-2.5 py-[3px] rounded-md text-left font-mono cursor-pointer
-        border ${borderColor} ${inst.enabled ? 'bg-white/60 dark:bg-dbx-gray-800/60 hover:bg-white/80 dark:hover:bg-dbx-gray-800/80' : 'bg-dbx-gray-100/50 dark:bg-dbx-gray-900/50 opacity-50'}
+        border ${borderColor} ${inst.enabled ? 'bg-white/60 dark:bg-dbx-gray-800/60 hover:bg-white/80 dark:hover:bg-dbx-gray-800/80' : 'bg-dbx-gray-100/50 dark:bg-dbx-gray-900/50'}
         transition-all duration-150
       `}>
         <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inst.enabled ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300 dark:bg-dbx-gray-600'}`} />
         <div className="min-w-0 flex-1">
-          <div className={`text-[11px] font-medium leading-tight truncate ${inst.enabled ? 'text-dbx-gray-700 dark:text-dbx-gray-200' : 'text-dbx-gray-400 dark:text-dbx-gray-600 line-through'}`}>
+          <div className={`text-[11px] font-medium leading-tight truncate ${inst.enabled ? 'text-dbx-gray-700 dark:text-dbx-gray-200' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
             {inst.label}
           </div>
           <div className="text-[8px] leading-tight truncate text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">
@@ -172,7 +170,7 @@ function InstanceRow({ inst, stepId, onToggle, onClick, onDelete }: { inst: Step
             className={`
               flex-shrink-0 p-0.5 rounded transition-all duration-150
               ${inst.enabled
-                ? `text-dbx-gray-300 dark:text-dbx-gray-500 hover:text-dbx-red dark:hover:text-[#FF6B5A]`
+                ? `text-dbx-green hover:text-dbx-red dark:hover:text-[#FF6B5A]`
                 : `text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-green dark:hover:text-dbx-green`}
             `}
             title={inst.enabled ? 'Disable' : 'Enable'}
@@ -190,6 +188,14 @@ function InstanceRow({ inst, stepId, onToggle, onClick, onDelete }: { inst: Step
           </button>
         )}
       </div>
+      {/* Nested children (e.g. KA instances under KA brick) */}
+      {inst.children && inst.children.length > 0 && (
+        <div className="flex flex-col gap-0.5 ml-3 mt-0.5">
+          {inst.children.map(child => (
+            <InstanceRow key={child.key} inst={child} stepId={stepId} onToggle={onToggle} onClick={onClick} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
       {confirmOpen && (
         <ConfirmDialog
           title={`Remove ${inst.label}?`}
@@ -347,7 +353,7 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
                           instances.length === 0
                             ? 'text-dbx-gray-200 dark:text-dbx-gray-700 cursor-default'
                             : instances.some(i => i.enabled)
-                              ? 'text-dbx-gray-300 dark:text-dbx-gray-500 hover:text-dbx-red dark:hover:text-[#FF6B5A]'
+                              ? 'text-dbx-green hover:text-dbx-red dark:hover:text-[#FF6B5A]'
                               : 'text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-green dark:hover:text-dbx-green'
                         }`}
                         title={instances.length === 0 ? `No ${STEP_LABEL[id]} configured` : instances.some(i => i.enabled) ? `Disable all ${STEP_LABEL[id]}` : `Enable all ${STEP_LABEL[id]}`}

@@ -36,7 +36,7 @@ export interface GraphResponse {
 
 // ─── Setup types ──────────────────────────────────────────────────────────────
 
-export type StepId = 'host' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mcp' | 'api' | 'a2a' | 'features' | 'lakebase' | 'mlflow' | 'grants' | 'deploy' | 'git'
+export type StepId = 'host' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'bricks' | 'vs' | 'mcp' | 'api' | 'a2a' | 'features' | 'mlflow' | 'grants' | 'deploy' | 'git'
 export type StepStatus = 'done' | 'warning' | 'error' | 'missing' | 'unknown'
 export type SetupPhase = 'choose' | 'configure' | 'execute' | 'done'
 
@@ -86,6 +86,7 @@ export interface StepInstance {
   value: string      // e.g. space_id or endpoint name
   enabled: boolean   // true = active, false = commented out
   label: string      // derived slug from env key suffix
+  children?: StepInstance[]  // nested sub-entries (e.g. KA instances under KA brick)
 }
 
 export interface StepState {

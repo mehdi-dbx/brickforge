@@ -53,10 +53,17 @@ export function SetupView() {
 
   const handleActivate = useCallback((id: StepId) => {
     setActiveStep(id)
-    setPhase('choose')
-    setSelectedChoice(null)
     setExecLines([])
     setSelectedInstanceKey(null)
+    // Single-choice blocks: skip choose phase, go straight to configure
+    const step = SETUP_STEPS.find(s => s.id === id)
+    if (step && step.choices.length === 1) {
+      setSelectedChoice(0)
+      setPhase('configure')
+    } else {
+      setSelectedChoice(null)
+      setPhase('choose')
+    }
     refreshStatus()
   }, [refreshStatus])
 
@@ -105,7 +112,7 @@ export function SetupView() {
 
     // Actions that go straight to execute (no configure phase)
     const DIRECT_EXEC = new Set(['exec-assets', 'exec-tables',
-      'exec-lakebase', 'exec-mlflow', 'exec-grants',
+      'exec-mlflow', 'exec-grants',
       'exec-deploy-agent', 'exec-same', 'exec-git-push'])
     if (DIRECT_EXEC.has(action)) {
       setExecLines([])
