@@ -592,7 +592,7 @@ async def upload_csv(files: list[UploadFile] = File(...)):
             cols = [c.strip().strip('"').strip("'") for c in header_line.split(",") if c.strip()]
             # Sanitize column names to alphanumeric + underscores only
             cols = [_COL_NAME_RE.sub("_", c).strip("_") or f"col_{i}" for i, c in enumerate(cols)]
-            table_name = Path(safe_name).stem.replace("-", "_").replace(" ", "_").lower()
+            table_name = _COL_NAME_RE.sub("_", Path(safe_name).stem).strip("_").lower() or "unnamed_table"
             col_defs = ", ".join(f"`{c}` STRING" for c in cols)
             sql = f"CREATE TABLE IF NOT EXISTS ${{catalog}}.${{schema}}.{table_name} ({col_defs});\n"
             (init_dir / f"create_{table_name}.sql").write_text(sql)
