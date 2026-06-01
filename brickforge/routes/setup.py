@@ -457,7 +457,8 @@ if not csvs:
     try:
         tbls = list(w.tables.list(catalog_name=spec.split('.')[0], schema_name=spec.split('.')[1]))
         if tbls: print(f'[+] {len(tbls)} table(s) exist in {spec}'); exit(0)
-    except: pass
+    except Exception as e:
+        print(f'[~] could not list tables: {e}')
     print('[x] no CSVs found and no tables in schema'); exit(1)
 w = WorkspaceClient()
 found = 0
@@ -556,6 +557,11 @@ except Exception as e:
 
 # ── Upload CSV ────────────────────────────────────────────────────────────────
 
+MAX_CSV_SIZE = 100 * 1024 * 1024  # 100 MB
+
+_COL_NAME_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
 @router.post("/api/setup/upload-csv")
 async def upload_csv(files: list[UploadFile] = File(...)):
     """Accept user-uploaded CSV files and save them to data/upload/csv/."""
@@ -569,20 +575,30 @@ async def upload_csv(files: list[UploadFile] = File(...)):
         if not f.filename or not f.filename.lower().endswith(".csv"):
             uploaded.append({"name": f.filename or "?", "ok": False, "error": "not a .csv file"})
             continue
+        # Sanitize filename to prevent path traversal
+        safe_name = Path(f.filename).name
+        if ".." in safe_name or "/" in safe_name or "\\" in safe_name:
+            uploaded.append({"name": f.filename, "ok": False, "error": "invalid filename"})
+            continue
         try:
             content = await f.read()
-            dest = upload_dir / f.filename
+            if len(content) > MAX_CSV_SIZE:
+                uploaded.append({"name": safe_name, "ok": False, "error": f"file exceeds {MAX_CSV_SIZE // (1024*1024)}MB limit"})
+                continue
+            dest = upload_dir / safe_name
             dest.write_bytes(content)
             # Generate a minimal CREATE TABLE SQL from the CSV header
             header_line = content.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
             cols = [c.strip().strip('"').strip("'") for c in header_line.split(",") if c.strip()]
-            table_name = Path(f.filename).stem.replace("-", "_").replace(" ", "_").lower()
+            # Sanitize column names to alphanumeric + underscores only
+            cols = [_COL_NAME_RE.sub("_", c).strip("_") or f"col_{i}" for i, c in enumerate(cols)]
+            table_name = Path(safe_name).stem.replace("-", "_").replace(" ", "_").lower()
             col_defs = ", ".join(f"`{c}` STRING" for c in cols)
             sql = f"CREATE TABLE IF NOT EXISTS ${{catalog}}.${{schema}}.{table_name} ({col_defs});\n"
             (init_dir / f"create_{table_name}.sql").write_text(sql)
-            uploaded.append({"name": f.filename, "ok": True})
+            uploaded.append({"name": safe_name, "ok": True})
         except Exception as e:
-            uploaded.append({"name": f.filename or "?", "ok": False, "error": str(e)[:200]})
+            uploaded.append({"name": safe_name, "ok": False, "error": str(e)[:200]})
 
     return {"ok": all(u["ok"] for u in uploaded), "uploaded": uploaded}
 

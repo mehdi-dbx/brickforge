@@ -1412,7 +1412,8 @@ export function SetupDrawer({
           const upData = await upResp.json()
           setCsvUploading(false)
           if (!upData.ok) {
-            window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `[x] upload failed: ${upData.error || 'unknown'}`, stream: 'stderr' } }))
+            const failedFiles = (upData.uploaded || []).filter((u: any) => !u.ok).map((u: any) => `${u.name}: ${u.error || 'unknown'}`).join(', ')
+            window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `[x] upload failed: ${failedFiles || 'unknown'}`, stream: 'stderr' } }))
             wrappedExecDone(false)
             return
           }
@@ -1575,7 +1576,7 @@ export function SetupDrawer({
     if (!choice) return null
     const action = choice.action
 
-    const validSchema = /^\w+\.\w+$/.test(assetsSchema.trim())
+    const validSchema = /^[\w-]+\.[\w-]+$/.test(assetsSchema.trim())
 
     function canRun() {
       if (action === 'cfg-profile')   return !!selProfile
@@ -1588,13 +1589,13 @@ export function SetupDrawer({
       if (action === 'cfg-deploy-name') return !!manualVal.trim()
       if (action === 'exec-assets')     return validSchema
       if (action === 'upload-csv')     return csvFiles.length > 0 && !csvUploading
-      if (action === 'connect-tables') return /^\w+\.\w+$/.test(connectSchema.trim())
+      if (action === 'connect-tables') return /^[\w-]+\.[\w-]+$/.test(connectSchema.trim())
       if (action === 'cfg-ka')        return kaDocsReady
       if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
       if (action === 'manual' && activeStep === 'host') return /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
-      if (action === 'manual' && activeStep === 'schema') return /^\w+\.\w+$/.test(manualVal.trim())
+      if (action === 'manual' && activeStep === 'schema') return /^[\w-]+\.[\w-]+$/.test(manualVal.trim())
       if (action === 'manual')        return !!manualVal.trim()
       return true
     }
@@ -1686,7 +1687,7 @@ export function SetupDrawer({
         <Label>catalog.schema</Label>
         <InfoBox>Enter the Unity Catalog catalog.schema where your tables already exist. The project will use these tables without creating or modifying them.</InfoBox>
         <Input value={connectSchema} onChange={setConnectSchema} placeholder="my_catalog.my_schema" />
-        {connectSchema.trim() && !/^\w+\.\w+$/.test(connectSchema.trim()) && (
+        {connectSchema.trim() && !/^[\w-]+\.[\w-]+$/.test(connectSchema.trim()) && (
           <div className="mt-1 text-[11px] font-mono text-dbx-amber">format: catalog.schema</div>
         )}
       </>)
