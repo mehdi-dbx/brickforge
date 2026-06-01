@@ -1867,10 +1867,11 @@ export function SetupDrawer({
           <>
             {/* Line 1: current value — editable for schema step, read-only for others */}
             <div className="flex items-center gap-2 mt-1.5">
-              {activeStep === 'schema' ? (
-                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
-              ) : testState.status === 'loading'
+              {testState.status === 'loading'
                 ? <div className="text-[13px] font-mono text-dbx-blue dark:text-dbx-green truncate flex-1 animate-pulse">verifying…</div>
+                : activeStep === 'schema' ? (
+                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
+              )
                 : testState.status === 'fail'
                   ? <div className="text-[13px] font-mono text-dbx-amber truncate flex-1">please configure {step.label}</div>
                   : (keepLabel || activeStep === 'host')
