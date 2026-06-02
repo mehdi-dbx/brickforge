@@ -141,11 +141,13 @@ async def setup_status():
             if step == "tables":
                 schema_spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
                 status = "configured" if schema_spec and "." in schema_spec else "missing"
+                values["PROJECT_UNITY_CATALOG_SCHEMA"] = schema_spec
 
             # Functions: status based on whether schema is configured (test button does the real UC check)
             if step == "functions":
                 schema_spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
                 status = "configured" if schema_spec and "." in schema_spec else "missing"
+                values["PROJECT_UNITY_CATALOG_SCHEMA"] = schema_spec
 
             # Prompt: file-based
             if step == "prompt":

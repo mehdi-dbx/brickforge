@@ -701,8 +701,9 @@ function SchemaTableList({ prefix, selectable, selected, onSelectionChange }: {
 
 // ─── Dynamic routine list (functions + procedures from API) ─────────────────
 
-function SchemaRoutineList({ prefix, selectable, selected, onSelectionChange }: {
+function SchemaRoutineList({ prefix, host, selectable, selected, onSelectionChange }: {
   prefix: string
+  host?: string
   selectable?: boolean
   selected?: Set<string>
   onSelectionChange?: (selected: Set<string>) => void
@@ -744,7 +745,16 @@ function SchemaRoutineList({ prefix, selectable, selected, onSelectionChange }: 
           <input type="checkbox" checked={allSelected} onChange={toggleAll}
             className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
         )}
-        <span className="text-[12px] font-mono text-dbx-gray-400">{sel.size}/{funcs.length} function(s) in {prefix || 'schema'}</span>
+        <span className="text-[12px] font-mono text-dbx-gray-400">
+          {sel.size}/{funcs.length} function(s) in{' '}
+          {prefix && host ? (
+            <a href={`${host.replace(/\/$/, '')}/explore/data/${prefix.replace('.', '/')}?activeListType=FUNCTION`}
+              target="_blank" rel="noopener noreferrer"
+              className="text-dbx-blue dark:text-dbx-green hover:underline">
+              {prefix}
+            </a>
+          ) : (prefix || 'schema')}
+        </span>
       </div>
       {funcs.map(f => (
         <div key={f.name} className="flex items-center gap-2 py-0.5 cursor-pointer" onClick={() => selectable && toggle(f.name)}>
@@ -2028,7 +2038,7 @@ export function SetupDrawer({
             {activeStep === 'functions' && (
               <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                 <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">routines</div>
-                <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
+                <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
               </div>
             )}
             {activeStep === 'ka' && (
@@ -2128,7 +2138,7 @@ export function SetupDrawer({
     else if (action === 'exec-functions')
       body = (<>
         <Label>select functions for the agent</Label>
-        <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
+        <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
       </>)
     else if (action === 'exec-genie')
       body = (<><Label>genie room name</Label><Input value={genieName} onChange={setGenieName} placeholder="Checkin Metrics" /></>)
@@ -2422,7 +2432,12 @@ export function SetupDrawer({
                 <div className="w-12 h-12 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
                   <span className="text-[24px] text-dbx-blue dark:text-dbx-green leading-none">&#10003;</span>
                 </div>
-                <div className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100">configured</div>
+                <div className="text-[14px] font-semibold text-dbx-blue dark:text-dbx-green">configured</div>
+                {currentValues.PROJECT_UNITY_CATALOG_SCHEMA && (
+                  <div className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mt-0.5">
+                    {currentValues.PROJECT_UNITY_CATALOG_SCHEMA}
+                  </div>
+                )}
               </>
             )}
           </div>
