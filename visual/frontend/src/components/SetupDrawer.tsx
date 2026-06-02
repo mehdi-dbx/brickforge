@@ -1107,7 +1107,7 @@ function PromptGenerator({ onDone }: { onDone: () => void }) {
 
 // ─── Editable schema field ────────────────────────────────────────────────────
 
-function EditableSchemaField({ value, onSaved }: { value: string; onSaved?: () => void }) {
+function EditableSchemaField({ value, host, onSaved }: { value: string; host?: string; onSaved?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
@@ -1173,9 +1173,18 @@ function EditableSchemaField({ value, onSaved }: { value: string; onSaved?: () =
         </div>
       ) : (
         <div className="flex items-center gap-2 group">
-          <span className={`text-[12px] font-mono ${value ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400'}`}>
-            {value || 'not set'}
-          </span>
+          {value ? (
+            <a
+              href={`${(host || '').replace(/\/$/, '')}/explore/data/${value.replace('.', '/')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[12px] font-mono text-dbx-blue dark:text-dbx-green truncate hover:underline"
+            >
+              {value}
+            </a>
+          ) : (
+            <span className="text-[12px] font-mono text-dbx-gray-400">not set</span>
+          )}
           {saved && <span className="text-[10px] font-mono text-emerald-400 animate-fade-in">[+] saved</span>}
           <button
             onClick={() => setEditing(true)}
@@ -2539,7 +2548,7 @@ export function SetupDrawer({
               {testState.status === 'loading'
                 ? <div className="text-[13px] font-mono text-dbx-blue dark:text-dbx-green truncate flex-1 animate-pulse">verifying…</div>
                 : activeStep === 'schema' ? (
-                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
+                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
               )
                 : testState.status === 'fail'
                   ? <div className="text-[13px] font-mono text-dbx-amber truncate flex-1">please configure {step.label}</div>
