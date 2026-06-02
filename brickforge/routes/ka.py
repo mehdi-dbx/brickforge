@@ -76,8 +76,12 @@ async def upload_url(request: Request):
     if not url:
         return JSONResponse({"error": "url required"}, status_code=400)
 
+    filename = body.get("filename", "")
+
     env = build_sub_env(_get_config())
     env["UPLOAD_URL"] = url
+    if filename:
+        env["UPLOAD_FILENAME"] = filename
     try:
         result = subprocess.run(
             [sys.executable, "scripts/py/ka/volume_ops.py", "--mode=upload-url"],

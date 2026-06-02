@@ -449,6 +449,7 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [urlInput, setUrlInput] = useState('')
+  const [urlFilename, setUrlFilename] = useState('')
   const [urlUploading, setUrlUploading] = useState(false)
   const [feedback, setFeedback] = useState<{ text: string; ok: boolean }[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -496,16 +497,27 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
     }
   }
 
+  const ALLOWED_DOC_EXTS = ['.md', '.pdf', '.docx', '.txt', '.html', '.csv', '.json']
+  const urlFilenameValid = urlFilename.trim().length > 0 && ALLOWED_DOC_EXTS.some(ext => urlFilename.trim().toLowerCase().endsWith(ext))
+
+  const deriveFilename = (url: string) => {
+    try {
+      const path = new URL(url).pathname
+      const last = decodeURIComponent(path.split('/').pop() || '')
+      return last && last !== '/' ? last : ''
+    } catch { return '' }
+  }
+
   const handleUrlUpload = async () => {
     const url = urlInput.trim()
-    if (!url) return
+    if (!url || !urlFilenameValid) return
     setUrlUploading(true)
     setFeedback([])
     try {
       const resp = await fetch('/api/ka/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, filename: urlFilename.trim() }),
       })
       const data = await resp.json()
       const steps = (data.steps || []).map((s: string) => ({
@@ -514,7 +526,7 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
       }))
       steps.push({ text: data.ok ? `[+] ${data.name}` : `[x] ${data.name} -- ${data.error || 'failed'}`, ok: data.ok })
       setFeedback(steps)
-      if (data.ok) setUrlInput('')
+      if (data.ok) { setUrlInput(''); setUrlFilename('') }
       fetchDocs()
     } catch (err) {
       setFeedback([{ text: `[x] fetch failed: ${err}`, ok: false }])
@@ -598,26 +610,47 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
           {uploading ? 'uploading...' : 'upload local files'}
         </button>
 
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Link className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-dbx-gray-400" />
-            <input
-              type="text"
-              value={urlInput}
-              onChange={e => setUrlInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleUrlUpload() }}
-              placeholder="paste URL..."
-              disabled={urlUploading || !volumePath}
-              className="w-full bg-white dark:bg-dbx-gray-900 font-mono text-[11px] text-dbx-gray-600 dark:text-dbx-gray-300 outline-none border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg pl-7 pr-3 py-2 focus:border-dbx-red dark:focus:border-[#FF6B5A] transition-colors disabled:opacity-50"
-            />
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Link className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-dbx-gray-400" />
+              <input
+                type="text"
+                value={urlInput}
+                onChange={e => { setUrlInput(e.target.value); setUrlFilename(deriveFilename(e.target.value)) }}
+                onKeyDown={e => { if (e.key === 'Enter' && urlFilenameValid) handleUrlUpload() }}
+                placeholder="paste URL..."
+                disabled={urlUploading || !volumePath}
+                className="w-full bg-white dark:bg-dbx-gray-900 font-mono text-[11px] text-dbx-gray-600 dark:text-dbx-gray-300 outline-none border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg pl-7 pr-3 py-2 focus:border-dbx-red dark:focus:border-[#FF6B5A] transition-colors disabled:opacity-50"
+              />
+            </div>
+            <button
+              onClick={handleUrlUpload}
+              disabled={!urlInput.trim() || !urlFilenameValid || urlUploading || !volumePath}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-gray-400 dark:hover:border-dbx-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {urlUploading ? '...' : 'fetch'}
+            </button>
           </div>
-          <button
-            onClick={handleUrlUpload}
-            disabled={!urlInput.trim() || urlUploading || !volumePath}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-gray-400 dark:hover:border-dbx-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {urlUploading ? '...' : 'fetch'}
-          </button>
+          {urlInput.trim() && (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={urlFilename}
+                onChange={e => setUrlFilename(e.target.value)}
+                placeholder="document-name.pdf"
+                disabled={urlUploading}
+                className={`flex-1 bg-white dark:bg-dbx-gray-900 font-mono text-[11px] outline-none border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 ${
+                  urlFilename.trim() && !urlFilenameValid
+                    ? 'border-dbx-amber text-dbx-amber'
+                    : 'border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-600 dark:text-dbx-gray-300 focus:border-dbx-red dark:focus:border-[#FF6B5A]'
+                }`}
+              />
+              {urlFilename.trim() && !urlFilenameValid && (
+                <span className="text-[9px] font-mono text-dbx-amber flex-shrink-0">.md .pdf .docx .txt .html .csv .json</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1701,7 +1734,7 @@ export function SetupDrawer({
   const [csvFiles, setCsvFiles]           = useState<File[]>([])
   const [csvUploading, setCsvUploading]   = useState(false)
   const csvInputRef                       = useRef<HTMLInputElement>(null)
-  const [connectSchema, setConnectSchema] = useState('')
+  const [connectSchema, setConnectSchema] = useState(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
   const [instanceTest, setInstanceTest] = useState<TestResult>({ status: 'idle', message: '' })
   const [instanceTools, setInstanceTools] = useState<{ name: string; description: string }[] | null>(null)
   const [toolsLoading, setToolsLoading] = useState(false)

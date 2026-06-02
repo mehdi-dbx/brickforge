@@ -161,12 +161,21 @@ def mode_upload_url(url: str) -> None:
         print(json.dumps({"ok": False, "error": "PROJECT_UNITY_CATALOG_SCHEMA not set", "steps": []}))
         return
 
-    # Derive filename from URL
-    parsed = urlparse(url)
-    url_path = unquote(parsed.path)
-    filename = url_path.split("/")[-1] if "/" in url_path else "downloaded_file"
-    if not filename or filename == "/":
-        filename = "downloaded_file.pdf"
+    # Filename: prefer UPLOAD_FILENAME env var, fall back to URL-derived
+    ALLOWED_EXTS = {'.md', '.pdf', '.docx', '.txt', '.html', '.csv', '.json'}
+    filename = os.environ.get("UPLOAD_FILENAME", "").strip()
+    if not filename:
+        parsed = urlparse(url)
+        url_path = unquote(parsed.path)
+        filename = url_path.split("/")[-1] if "/" in url_path else "downloaded_file"
+        if not filename or filename == "/":
+            filename = "downloaded_file.pdf"
+
+    # Validate extension
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTS:
+        print(json.dumps({"ok": False, "name": filename, "error": f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTS))}", "steps": []}))
+        return
 
     steps.append(f"[~] downloading {filename}...")
     sys.stderr.write(steps[-1] + "\n")
