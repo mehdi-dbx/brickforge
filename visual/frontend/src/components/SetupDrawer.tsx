@@ -1580,22 +1580,57 @@ export function SetupDrawer({
   const [showPat, setShowPat] = useState(false)
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set())
   const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(new Set())
+  const tablesHydrated = useRef(false)
+  const funcsHydrated = useRef(false)
   const [selKaEndpoint, setSelKaEndpoint] = useState('')
   const [selKaName, setSelKaName] = useState('')
 
-  // Persist table selection to config on change
+  // Hydrate table/function selection from saved config
+  useEffect(() => {
+    fetch('/api/env')
+      .then(r => r.json())
+      .then((entries: { key: string; value: string }[]) => {
+        const tables = entries.find(e => e.key === 'PROJECT_TABLES')?.value
+        if (tables && tables.trim()) {
+          setSelectedTables(new Set(tables.split(',').filter(Boolean)))
+          tablesHydrated.current = true
+        }
+        const funcs = entries.find(e => e.key === 'PROJECT_FUNCTIONS')?.value
+        if (funcs && funcs.trim()) {
+          setSelectedFunctions(new Set(funcs.split(',').filter(Boolean)))
+          funcsHydrated.current = true
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Persist table selection to config on change (skip auto-select saves before hydration)
   const handleTableSelection = useCallback((sel: Set<string>) => {
     setSelectedTables(sel)
-    fetch('/api/env', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ PROJECT_TABLES: Array.from(sel).join(',') }),
-    })
+    if (tablesHydrated.current) {
+      fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_TABLES: Array.from(sel).join(',') }),
+      })
+    } else {
+      // First call is auto-select-all from SchemaTableList, mark as hydrated
+      tablesHydrated.current = true
+    }
   }, [])
 
   // Persist function selection to config on change
   const handleFunctionSelection = useCallback((sel: Set<string>) => {
     setSelectedFunctions(sel)
+    if (funcsHydrated.current) {
+      fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_FUNCTIONS: Array.from(sel).join(',') }),
+      })
+    } else {
+      funcsHydrated.current = true
+    }
   }, [])
 
   // Reset exec status when step changes
