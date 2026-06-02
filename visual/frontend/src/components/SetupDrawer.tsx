@@ -645,7 +645,7 @@ function SchemaTableList({ prefix, selectable, selected, onSelectionChange }: {
   selected?: Set<string>
   onSelectionChange?: (selected: Set<string>) => void
 }) {
-  const [tables, setTables] = useState<{ name: string; type: string }[]>([])
+  const [tables, setTables] = useState<{ name: string; type: string; columns?: { name: string; type: string }[] }[]>([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     setLoading(true)
@@ -693,6 +693,9 @@ function SchemaTableList({ prefix, selectable, selected, onSelectionChange }: {
             : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
           }
           <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t.name}` : t.name}</span>
+          {t.columns && t.columns.length > 0 && (
+            <span className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 ml-auto">{t.columns.length} cols</span>
+          )}
         </div>
       ))}
     </>
