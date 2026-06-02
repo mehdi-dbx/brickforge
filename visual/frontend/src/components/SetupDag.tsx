@@ -87,7 +87,7 @@ const INSTANCE_BORDER: Record<string, string> = {
   vs:    'border-purple-400 dark:border-purple-500',
   mcp:   'border-emerald-400 dark:border-emerald-500',
   api:   'border-orange-400 dark:border-orange-500',
-  features: 'border-cyan-400 dark:border-cyan-500',
+  features: 'border-dbx-amber',
   a2a:   'border-cyan-400 dark:border-cyan-500',
 }
 
@@ -192,7 +192,7 @@ function InstanceRow({ inst, stepId, onToggle, onClick, onDelete }: { inst: Step
       {inst.children && inst.children.length > 0 && (
         <div className="flex flex-col gap-0.5 ml-3 mt-0.5">
           {inst.children.map(child => (
-            <InstanceRow key={child.key} inst={child} stepId={stepId} onToggle={onToggle} onClick={onClick} onDelete={onDelete} />
+            <InstanceRow key={child.key} inst={child} stepId={'genie' as StepId} onToggle={onToggle} onClick={onClick} onDelete={onDelete} />
           ))}
         </div>
       )}
