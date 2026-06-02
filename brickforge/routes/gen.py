@@ -32,7 +32,7 @@ def _sub_env():
 async def gen_status():
     config = _get_config()
     env = config.to_env_dict()
-    model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") or env.get("DATABRICKS_HOST"))
+    model_ready = bool(env.get("AGENT_MODEL") or env.get("AGENT_MODEL_ENDPOINT") or env.get("DATABRICKS_HOST"))
     manifest = None
     manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
     try:
@@ -312,7 +312,7 @@ async def gen_provision():
 async def routine_status():
     config = _get_config()
     env = config.to_env_dict()
-    model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") or env.get("DATABRICKS_HOST"))
+    model_ready = bool(env.get("AGENT_MODEL") or env.get("AGENT_MODEL_ENDPOINT") or env.get("DATABRICKS_HOST"))
     # Load table schemas for context
     table_schemas = None
     manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
