@@ -813,7 +813,21 @@ async def schema_tables():
         os.environ.update(sub)
         try:
             w = WorkspaceClient()
-            tables = [{"name": t.name, "type": str(t.table_type).split(".")[-1] if t.table_type else "TABLE"} for t in w.tables.list(catalog_name=cat, schema_name=sch) if t.name]
+            tables = []
+            for t in w.tables.list(catalog_name=cat, schema_name=sch):
+                if not t.name:
+                    continue
+                ttype = str(t.table_type).split(".")[-1] if t.table_type else "TABLE"
+                cols = []
+                try:
+                    detail = w.tables.get(full_name=f"{cat}.{sch}.{t.name}")
+                    cols = [
+                        {"name": c.name, "type": str(c.type_name).split(".")[-1] if c.type_name else "STRING"}
+                        for c in (detail.columns or [])
+                    ]
+                except Exception:
+                    pass
+                tables.append({"name": t.name, "type": ttype, "columns": cols})
         finally:
             os.environ.clear()
             os.environ.update(old_env)
