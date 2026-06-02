@@ -46,3 +46,5 @@ brickforge/app/client/dist/
 # dbc/output/
 .env copy.backup
 tmp/
+.claude/worktrees/
+.claude/mlflow/
