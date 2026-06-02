@@ -46,7 +46,7 @@ export const SETUP_STEPS: SetupStep[] = [
   },
   {
     id: 'functions',
-    label: 'UC Functions',
+    label: 'Functions',
     title: 'Functions & Procedures',
     help: 'Create UC functions and stored procedures that the agent uses as tools. Functions are parameterized queries registered in Unity Catalog. Procedures are mutation operations (UPDATE, INSERT). Generate them from your table schemas or upload SQL files.',
     choices: [
@@ -57,7 +57,7 @@ export const SETUP_STEPS: SetupStep[] = [
   },
   {
     id: 'model',
-    label: 'Model Endpoint',
+    label: 'Model',
     title: 'Agent Model Endpoint',
     help: 'Pick the LLM endpoint your agent will use for reasoning. Auto-detect scans this workspace for available Foundation Model endpoints. Cross-workspace is for advanced setups where the endpoint lives on a different workspace.',
     choices: [

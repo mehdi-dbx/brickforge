@@ -680,22 +680,49 @@ function SchemaTableList({ prefix, selectable, selected, onSelectionChange }: {
     <>
       <div className="flex items-center gap-2 py-1">
         {selectable && (
-          <input type="checkbox" checked={allSelected} onChange={toggleAll}
-            className="accent-blue-500 w-3.5 h-3.5 cursor-pointer" />
+          <StyledCheckbox checked={allSelected} color="blue" onChange={toggleAll} />
         )}
         <span className="text-[12px] font-mono text-dbx-gray-400">{sel.size}/{tables.length} table(s) in {prefix || 'schema'}</span>
       </div>
       {tables.map(t => (
         <div key={t.name} className="flex items-center gap-2 py-1 cursor-pointer" onClick={() => selectable && toggle(t.name)}>
           {selectable
-            ? <input type="checkbox" checked={sel.has(t.name)} onChange={() => toggle(t.name)}
-                className="accent-blue-500 w-3.5 h-3.5 cursor-pointer" />
+            ? <StyledCheckbox checked={sel.has(t.name)} color="green" onChange={() => toggle(t.name)} />
             : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
           }
           <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t.name}` : t.name}</span>
         </div>
       ))}
     </>
+  )
+}
+
+// ─── Custom styled checkbox (SVG fine-line checkmark) ───────────────────────
+
+function StyledCheckbox({ checked, color, onChange }: {
+  checked: boolean
+  color: 'blue' | 'green'
+  onChange: () => void
+}) {
+  const border = checked
+    ? color === 'blue' ? 'border-blue-500' : 'border-emerald-500'
+    : 'border-dbx-gray-400'
+  const bg = checked
+    ? color === 'blue' ? 'bg-blue-500/10' : 'bg-emerald-500/10'
+    : 'bg-transparent'
+  const stroke = color === 'blue' ? '#3b82f6' : '#10b981'
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onChange() }}
+      className={`w-3.5 h-3.5 rounded-[3px] border ${border} ${bg} flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors`}
+    >
+      {checked && (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 5.2 L4.2 7.4 L8 2.6" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
   )
 }
 
@@ -741,16 +768,14 @@ function SchemaRoutineList({ prefix, selectable, selected, onSelectionChange }: 
     <>
       <div className="flex items-center gap-2 py-1">
         {selectable && (
-          <input type="checkbox" checked={allSelected} onChange={toggleAll}
-            className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+          <StyledCheckbox checked={allSelected} color="blue" onChange={toggleAll} />
         )}
         <span className="text-[12px] font-mono text-dbx-gray-400">{sel.size}/{funcs.length} function(s) in {prefix || 'schema'}</span>
       </div>
       {funcs.map(f => (
         <div key={f.name} className="flex items-center gap-2 py-0.5 cursor-pointer" onClick={() => selectable && toggle(f.name)}>
           {selectable
-            ? <input type="checkbox" checked={sel.has(f.name)} onChange={() => toggle(f.name)}
-                className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+            ? <StyledCheckbox checked={sel.has(f.name)} color="green" onChange={() => toggle(f.name)} />
             : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
           }
           <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${f.name}` : f.name}</span>
