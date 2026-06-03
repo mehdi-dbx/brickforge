@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.available_agents_for_redeploymen
 )
 RETURNS TABLE(agent_id STRING, name STRING, zone STRING, counter STRING, at_counter STRING)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT agent_id, name, zone, counter, at_counter
     FROM __SCHEMA_QUALIFIED__.checkin_agents

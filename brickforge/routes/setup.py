@@ -28,7 +28,7 @@ STEP_ENV_KEYS: dict[str, list[str]] = {
     "schema":    ["PROJECT_UNITY_CATALOG_SCHEMA"],
     "tables":    [],
     "functions": [],
-    "model":     ["AGENT_MODEL_ENDPOINT"],
+    "model":     ["AGENT_MODEL"],
     "prompt":    [],
     "genie":     [],
     "bricks":    [],
@@ -101,7 +101,7 @@ BRICKS_REGISTRY = {
 }
 
 MULTI_INSTANCE_PREFIXES = {
-    "genie": "PROJECT_GENIE_",
+    # "genie" removed — uses PROJECT_GENIE_SPACES (comma-separated) instead of prefix pattern
     "bricks": "PROJECT_BRICK_",
     "vs": "PROJECT_VS_",
     "mcp": "PROJECT_MCP_",
@@ -140,7 +140,7 @@ async def setup_status():
             # Model: same-workspace mode
             if step == "model" and not all_set and env.get("DATABRICKS_HOST", "").strip():
                 status = "configured"
-                values["AGENT_MODEL_ENDPOINT"] = env["DATABRICKS_HOST"].rstrip("/") + " (same workspace)"
+                values["AGENT_MODEL"] = env["DATABRICKS_HOST"].rstrip("/") + " (same workspace)"
 
             # Tables: status based on whether schema is configured (test button does the real UC check)
             if step == "tables":
@@ -165,6 +165,21 @@ async def setup_status():
                     files = []
                 values = {"PROMPT_FILES": ", ".join(files)}
 
+
+            # Genie: comma-separated PROJECT_GENIE_SPACES
+            if step == "genie":
+                raw = env.get("PROJECT_GENIE_SPACES", "").strip()
+                space_ids = [s.strip() for s in raw.split(",") if s.strip()] if raw else []
+                status = "configured" if space_ids else "missing"
+                instances = [
+                    {"key": f"PROJECT_GENIE_SPACES[{i}]", "value": sid, "enabled": True, "label": f"space {i}"}
+                    for i, sid in enumerate(space_ids, 1)
+                ]
+                count = len(space_ids)
+                label = f"{count} configured" if count else "not configured"
+                values = {"PROJECT_GENIE_SPACES": raw}
+                steps[step] = {"status": status, "values": values, "instances": instances, "label": label}
+                continue
 
             # Multi-instance steps
             if step in MULTI_INSTANCE_PREFIXES:
@@ -275,7 +290,7 @@ async def toggle_key(request: Request):
     config = _get_config()
     body = await request.json()
     key = body.get("key", "")
-    allowed_prefixes = ("PROJECT_GENIE_", "PROJECT_KA_", "PROJECT_VS_", "PROJECT_MCP_", "PROJECT_API_", "PROJECT_A2A_", "PROJECT_TOOL_", "PROJECT_BRICK_")
+    allowed_prefixes = ("PROJECT_GENIE_SPACES", "PROJECT_KA_", "PROJECT_VS_", "PROJECT_MCP_", "PROJECT_API_", "PROJECT_A2A_", "PROJECT_TOOL_", "PROJECT_BRICK_", "PROJECT_FUNCTIONS")
     if not any(key.startswith(p) for p in allowed_prefixes):
         return JSONResponse({"error": "not a toggleable key"}, status_code=400)
     result = config.toggle(key)
@@ -602,10 +617,10 @@ except Exception as e:
 """.strip(),
     "model": """
 import os, urllib.request, json, ssl, time
-endpoint = os.environ.get('AGENT_MODEL_ENDPOINT','').strip()
+endpoint = os.environ.get('AGENT_MODEL','').strip()
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
 if not endpoint:
-    print('[x] AGENT_MODEL_ENDPOINT not set'); exit(1)
+    print('[x] AGENT_MODEL not set'); exit(1)
 # Resolve bare endpoint name to full URL
 if not endpoint.startswith('http'):
     if not host: print('[x] no host to resolve endpoint name'); exit(1)
@@ -724,18 +739,18 @@ async def setup_test(step: str = "", key: str = ""):
     script = TEST_SCRIPTS.get(step)
 
     if step == "genie":
-        instances = config.list_by_prefix("PROJECT_GENIE_")
-        first_active = next((i for i in instances if i["enabled"]), None)
-        env_key = key or (first_active["key"] if first_active else "PROJECT_GENIE_DEFAULT")
-        script = f"""
+        # Test first Genie space from PROJECT_GENIE_SPACES
+        script = """
 from databricks.sdk import WorkspaceClient; import os
-sid = os.environ.get('{env_key}','').strip()
-if not sid: print('[x] {env_key} not set'); exit(1)
+raw = os.environ.get('PROJECT_GENIE_SPACES','').strip()
+if not raw: print('[x] PROJECT_GENIE_SPACES not set'); exit(1)
+space_ids = [s.strip() for s in raw.split(',') if s.strip()]
 w = WorkspaceClient()
-try:
-    sp = w.genie.get_space(space_id=sid); print('[+] found — ' + getattr(sp, 'title', sid))
-except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
+for sid in space_ids:
+    try:
+        sp = w.genie.get_space(space_id=sid); print('[+] ' + sid[:12] + '... — ' + getattr(sp, 'title', sid))
+    except Exception as e:
+        print('[x] ' + sid[:12] + '... — ' + str(e)[:100]); exit(1)
 """.strip()
 
     elif step == "bricks":
@@ -808,41 +823,48 @@ MAX_CSV_SIZE = 100 * 1024 * 1024  # 100 MB
 _COL_NAME_RE = re.compile(r"[^a-zA-Z0-9_]")
 
 
+def _list_schema_tables(config) -> list[dict]:
+    """List tables with columns from the configured UC schema. Returns [] on failure."""
+    env = {e["key"]: e["value"] for e in config.list()}
+    spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+    if not spec or "." not in spec:
+        return []
+    cat, sch = spec.split(".", 1)
+    from databricks.sdk import WorkspaceClient
+    from brickforge.lib.env_utils import build_sub_env
+    sub = build_sub_env(config)
+    old_env = dict(os.environ)
+    os.environ.update(sub)
+    try:
+        w = WorkspaceClient()
+        tables = []
+        for t in w.tables.list(catalog_name=cat, schema_name=sch):
+            if not t.name:
+                continue
+            ttype = str(t.table_type).split(".")[-1] if t.table_type else "TABLE"
+            cols = []
+            try:
+                detail = w.tables.get(full_name=f"{cat}.{sch}.{t.name}")
+                cols = [
+                    {"name": c.name, "type": str(c.type_name).split(".")[-1] if c.type_name else "STRING"}
+                    for c in (detail.columns or [])
+                ]
+            except Exception:
+                pass
+            tables.append({"name": t.name, "type": ttype, "columns": cols})
+        return tables
+    finally:
+        os.environ.clear()
+        os.environ.update(old_env)
+
+
 @router.get("/api/setup/schema-tables")
 async def schema_tables():
     """List tables in the configured UC schema. On-demand, not called on page load."""
     config = _get_config()
-    env = {e["key"]: e["value"] for e in config.list()}
-    spec = env.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
-    if not spec or "." not in spec:
-        return {"tables": [], "count": 0, "schema": ""}
-    cat, sch = spec.split(".", 1)
+    spec = {e["key"]: e["value"] for e in config.list()}.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
     try:
-        from databricks.sdk import WorkspaceClient
-        from brickforge.lib.env_utils import build_sub_env
-        sub = build_sub_env(config)
-        old_env = dict(os.environ)
-        os.environ.update(sub)
-        try:
-            w = WorkspaceClient()
-            tables = []
-            for t in w.tables.list(catalog_name=cat, schema_name=sch):
-                if not t.name:
-                    continue
-                ttype = str(t.table_type).split(".")[-1] if t.table_type else "TABLE"
-                cols = []
-                try:
-                    detail = w.tables.get(full_name=f"{cat}.{sch}.{t.name}")
-                    cols = [
-                        {"name": c.name, "type": str(c.type_name).split(".")[-1] if c.type_name else "STRING"}
-                        for c in (detail.columns or [])
-                    ]
-                except Exception:
-                    pass
-                tables.append({"name": t.name, "type": ttype, "columns": cols})
-        finally:
-            os.environ.clear()
-            os.environ.update(old_env)
+        tables = _list_schema_tables(config)
         return {"tables": tables, "count": len(tables), "schema": spec}
     except Exception as e:
         return {"tables": [], "count": 0, "schema": spec, "error": str(e)[:200]}
@@ -1153,7 +1175,7 @@ async def setup_exec(request: Request):
                 logger.finish(False, 1)
                 yield sse_done(False, 1)
                 return
-            config.set_many({"AGENT_MODEL_ENDPOINT": ep_name})
+            config.set_many({"AGENT_MODEL": ep_name})
             # Comment out cross-workspace token (same-workspace mode)
             env_file = config.get("ENV_FILE") or str(PROJECT_ROOT / ".env.local")
             try:
@@ -1166,7 +1188,7 @@ async def setup_exec(request: Request):
             except FileNotFoundError:
                 pass
             yield sse_line(f"[+] same-workspace mode\n")
-            yield sse_line(f"[+] AGENT_MODEL_ENDPOINT = {ep_name}\n")
+            yield sse_line(f"[+] AGENT_MODEL = {ep_name}\n")
             logger.finish(True)
             yield sse_done(True)
             return
@@ -1187,14 +1209,17 @@ async def setup_exec(request: Request):
 
         if action == "save-genie":
             genie_id = params.get("id", "")
-            genie_name = params.get("name", "")
             if not genie_id:
                 logger.finish(False, 1)
                 yield sse_done(False, 1)
                 return
-            slug = re.sub(r"[^A-Z0-9]", "_", genie_name.upper()) if genie_name else "DEFAULT"
-            config.set_many({f"PROJECT_GENIE_{slug}": genie_id})
-            yield sse_line(f"[+] PROJECT_GENIE_{slug} = {genie_id}\n")
+            existing = config.get("PROJECT_GENIE_SPACES") or ""
+            existing_ids = set(existing.split(",")) if existing else set()
+            existing_ids.discard("")
+            existing_ids.add(genie_id)
+            new_value = ",".join(sorted(existing_ids))
+            config.set_many({"PROJECT_GENIE_SPACES": new_value})
+            yield sse_line(f"[+] PROJECT_GENIE_SPACES = {new_value}\n")
             logger.finish(True)
             yield sse_done(True)
             return
@@ -1299,7 +1324,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             genie_name = params.get("name", "Project Data")
             sub_env["GENIE_ROOM_NAME"] = genie_name
             cmd = [PYTHON,"data/init/create_genie_space.py"]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             logger.finish(True)
             return
@@ -1310,7 +1335,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
                 config.set_many({"PROJECT_UNITY_CATALOG_SCHEMA": schema_spec})
                 sub_env["PROJECT_UNITY_CATALOG_SCHEMA"] = schema_spec
             cmd = [PYTHON,"data/init/create_all_assets.py"]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             logger.finish(True)
             return
@@ -1321,7 +1346,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
                 json.dump(config_dict, f, indent=2)
                 tmp_path = f.name
             cmd = [PYTHON,"deploy/deploy_agent_app.py", "--config", tmp_path]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             try:
                 os.unlink(tmp_path)
@@ -1342,7 +1367,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
                 json.dump(config_dict, f, indent=2)
                 tmp_path = f.name
             cmd = [PYTHON,"deploy/git_push.py", "--repo-url", repo_url, "--config", tmp_path]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             try:
                 os.unlink(tmp_path)
@@ -1677,8 +1702,8 @@ if not host.startswith('http'): host = 'https://' + host
 endpoint = host.rstrip('/') + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
 w = _isolated_client('{profile}')
 t = w.tokens.create(comment='agent-forge-fm', lifetime_seconds=604800)
-write_env_entry(ENV_FILE, 'AGENT_MODEL_ENDPOINT', endpoint)
+write_env_entry(ENV_FILE, 'AGENT_MODEL', endpoint)
 write_env_entry(ENV_FILE, 'AGENT_MODEL_TOKEN', t.token_value)
-print('[+] AGENT_MODEL_ENDPOINT = ' + endpoint)
+print('[+] AGENT_MODEL = ' + endpoint)
 print('[+] AGENT_MODEL_TOKEN = ' + _redact(t.token_value))
 """.strip()

@@ -77,6 +77,12 @@ def parse_subprocess_error(stderr: str, stdout: str = "") -> str:
         host = host_match.group(1) if host_match else "the workspace"
         return f"Cannot reach {host}. Check the URL and your network connection." + LOG_HINT
 
+    # App limit reached
+    if "maximum limit" in raw and "apps" in raw:
+        m = re.search(r"reached the maximum limit of (\d+) apps", raw)
+        limit = m.group(1) if m else "max"
+        return f"Workspace has reached the {limit} app limit. Delete unused apps from the workspace or use a different workspace."
+
     # Catalog/schema not found
     if "does not exist" in raw:
         m = re.search(r"(Catalog|Schema|Table|Function)\s+'([^']+)'\s+does not exist", raw)

@@ -1051,7 +1051,7 @@ def _verify_endpoint_on_host(host: str, name: str) -> tuple[bool, str]:
 
 
 def verify_model_endpoint() -> tuple[bool, str]:
-    endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
+    endpoint = os.environ.get("AGENT_MODEL", "").strip()
     host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
     if not endpoint:
         if host:
@@ -1084,13 +1084,13 @@ def _fm_invocations_url(base_host: str) -> str:
 
 
 def _save_endpoint_and_token(key: str, cur: str, endpoint_url: str, token_val: str | None) -> None:
-    """Save AGENT_MODEL_ENDPOINT and optionally AGENT_MODEL_TOKEN to .env.local."""
+    """Save AGENT_MODEL and optionally AGENT_MODEL_TOKEN to .env.local."""
     if cur:
         comment_active_for_key(ENV_FILE, key)
     write_env_entry(ENV_FILE, key, endpoint_url)
     load_dotenv(ENV_FILE, override=True)
     load_env_for_key(key, endpoint_url)
-    print(f"  {OK} AGENT_MODEL_ENDPOINT set: {C}{endpoint_url}{W}")
+    print(f"  {OK} AGENT_MODEL set: {C}{endpoint_url}{W}")
     if token_val:
         comment_active_for_key(ENV_FILE, "AGENT_MODEL_TOKEN")
         write_env_entry(ENV_FILE, "AGENT_MODEL_TOKEN", token_val)
@@ -1105,15 +1105,15 @@ def _save_endpoint_and_token(key: str, cur: str, endpoint_url: str, token_val: s
 
 
 def run_resource_model_endpoint() -> bool:
-    """Interactive config for AGENT_MODEL_ENDPOINT with serving endpoint list as choices."""
+    """Interactive config for AGENT_MODEL with serving endpoint list as choices."""
     load_dotenv(ENV_FILE, override=True)
 
-    key = "AGENT_MODEL_ENDPOINT"
+    key = "AGENT_MODEL"
     active, inactive, _ = parse_env_file(ENV_FILE)
     cur = active.get(key, "").strip()
     inact = inactive.get(key, [])
 
-    section("AGENT_MODEL_ENDPOINT")
+    section("AGENT_MODEL")
 
     # ── Same workspace? ───────────────────────────────────────────────────────
     current_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
@@ -1352,8 +1352,8 @@ def run_resource_model_endpoint() -> bool:
 
 
 def _endpoint_is_url() -> bool:
-    """Return True if AGENT_MODEL_ENDPOINT is a cross-workspace URL (host differs from DATABRICKS_HOST)."""
-    ep = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
+    """Return True if AGENT_MODEL is a cross-workspace URL (host differs from DATABRICKS_HOST)."""
+    ep = os.environ.get("AGENT_MODEL", "").strip()
     if not ep or not (ep.startswith("http://") or ep.startswith("https://")):
         return False
     m = re.search(r"/serving-endpoints/", ep)
@@ -1366,7 +1366,7 @@ def run_resource_model_token() -> bool:
     load_dotenv(ENV_FILE, override=True)
 
     if not _endpoint_is_url():
-        ep = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
+        ep = os.environ.get("AGENT_MODEL", "").strip()
         if not ep:
             section("AGENT_MODEL_TOKEN")
             print(f"  {DIM}[-] Same-workspace mode — DATABRICKS_TOKEN used, no AGENT_MODEL_TOKEN needed{W}")
@@ -2243,7 +2243,7 @@ def run_check_only() -> None:
 
     section("Model Endpoint")
     ok, msg = verify_model_endpoint()
-    print(f"  {OK if ok else FAIL} AGENT_MODEL_ENDPOINT {C}({msg}){W}")
+    print(f"  {OK if ok else FAIL} AGENT_MODEL {C}({msg}){W}")
     if not ok:
         all_ok = False
     if _endpoint_is_url():
@@ -2434,7 +2434,7 @@ def run_resource_procedures() -> None:
 
 
 def run_step_model() -> None:
-    """Configure AGENT_MODEL_ENDPOINT and AGENT_MODEL_TOKEN."""
+    """Configure AGENT_MODEL and AGENT_MODEL_TOKEN."""
     run_resource_model_endpoint()
     load_dotenv(ENV_FILE, override=True)
     run_resource_model_token()
@@ -2489,7 +2489,7 @@ STEPS: list[tuple[str, str, object]] = [
     ("ka",          "Knowledge Assistants",           run_resource_ka),
     ("vs",          "Vector Search (KA fallback)",    run_resource_vs),
     ("mlflow",      "MLFLOW_EXPERIMENT_ID",           run_resource_mlflow),
-    ("model",       "AGENT_MODEL_ENDPOINT + TOKEN",   run_step_model),
+    ("model",       "AGENT_MODEL + TOKEN",   run_step_model),
     ("model-test",  "Foundation model connection test", run_resource_model_test),
     ("app-name",    "DBX_APP_NAME",                  run_resource_app_name),
     ("env-store",   "Env Store (optional)",           run_resource_env_store),

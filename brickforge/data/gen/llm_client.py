@@ -1,7 +1,8 @@
-"""LLM HTTP client for synthetic data generation.
+"""LLM client for synthetic data generation.
 
-Reuses the endpoint resolution pattern from eval/scorer.py —
-same-workspace fallback when AGENT_MODEL_ENDPOINT is not set.
+Uses the Databricks SDK to call serving endpoints by name —
+no URL construction needed. Reads model name from AGENT_MODEL env var,
+falls back to databricks-claude-sonnet-4-6.
 """
 from __future__ import annotations
 
@@ -9,60 +10,48 @@ import json
 import os
 import re
 
-import requests
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 
 
-def _resolve_endpoint() -> tuple[str, str]:
-    """Return (endpoint_url, bearer_token) from env vars."""
-    endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
-    host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
+_ws: WorkspaceClient | None = None
 
-    if not endpoint:
-        if not host:
-            raise EnvironmentError(
-                "AGENT_MODEL_ENDPOINT not set and DATABRICKS_HOST not set — "
-                "configure the model endpoint in Setup first"
-            )
-        endpoint = f"{host}/serving-endpoints/databricks-claude-sonnet-4-6/invocations"
 
-    token = (
-        os.environ.get("AGENT_MODEL_TOKEN", "").strip()
-        or os.environ.get("DATABRICKS_TOKEN", "").strip()
-    )
-    if not token:
-        raise EnvironmentError(
-            "No auth token found — set AGENT_MODEL_TOKEN or DATABRICKS_TOKEN"
-        )
-    return endpoint, token
+def _get_client() -> WorkspaceClient:
+    global _ws
+    if _ws is None:
+        _ws = WorkspaceClient()
+    return _ws
+
+
+def _get_model_name() -> str:
+    name = os.environ.get("AGENT_MODEL", "").strip()
+    if not name:
+        name = "databricks-claude-sonnet-4-6"
+    # If someone stored a full URL, extract the endpoint name from it
+    if name.startswith("http://") or name.startswith("https://"):
+        m = re.search(r"/serving-endpoints/([^/]+)/invocations", name)
+        if m:
+            name = m.group(1)
+    return name
 
 
 def call_llm(system: str, user: str, max_tokens: int = 4096) -> str:
-    """Call the model endpoint and return the assistant's text reply.
-
-    Raises on HTTP errors or missing content.
-    """
-    endpoint, token = _resolve_endpoint()
-
-    payload: dict = {
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
+    """Call the model endpoint and return the assistant's text reply."""
+    w = _get_client()
+    model = _get_model_name()
+    resp = w.serving_endpoints.query(
+        name=model,
+        messages=[
+            ChatMessage(role=ChatMessageRole.SYSTEM, content=system),
+            ChatMessage(role=ChatMessageRole.USER, content=user),
         ],
-        "max_tokens": max_tokens,
-    }
-
-    resp = requests.post(
-        endpoint,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=90,
+        max_tokens=max_tokens,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"].strip()
+    content = resp.choices[0].message.content  # type: ignore[union-attr]
+    if not content:
+        raise ValueError(f"Model {model} returned empty content")
+    return content.strip()
 
 
 def call_llm_json(system: str, user: str, max_tokens: int = 4096) -> dict:

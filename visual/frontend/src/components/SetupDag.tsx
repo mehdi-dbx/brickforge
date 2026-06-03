@@ -61,7 +61,7 @@ function subLabel(id: StepId, state: StepState): string {
     case 'host':      return v.DATABRICKS_HOST?.replace('https://', '') || 'set'
     case 'warehouse': return v.DATABRICKS_WAREHOUSE_ID || 'set'
     case 'schema':    return v.PROJECT_UNITY_CATALOG_SCHEMA || 'set'
-    case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || 'not set'
+    case 'model':     return v.AGENT_MODEL?.replace('https://', '') || 'not set'
     case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
     case 'genie':     return 'not configured'
     case 'bricks':    return 'not configured'

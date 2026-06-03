@@ -41,6 +41,7 @@ export function DataView() {
   const [useGen, setUseGen] = useState(false)
   const [useExisting, setUseExisting] = useState(true)
   const [existingTables, setExistingTables] = useState<DynTable[]>([])
+  const [selectedTableNames, setSelectedTableNames] = useState<Set<string> | null>(null)
 
   const fetchTables = () => {
     setLoading(true)
@@ -67,14 +68,22 @@ export function DataView() {
       })
       .catch(() => {})
     fetchTables()
+    // Fetch selected table names from config
+    fetch('/api/env')
+      .then(r => r.json())
+      .then((entries: { key: string; value: string }[]) => {
+        const val = entries.find(e => e.key === 'PROJECT_TABLES')?.value
+        if (val && val.trim()) setSelectedTableNames(new Set(val.split(',').filter(Boolean)))
+      })
+      .catch(() => {})
     // Fetch existing UC tables
     setLoadingExisting(true)
     fetch('/api/setup/schema-tables')
       .then(r => r.json())
       .then(data => {
-        const ucTables: DynTable[] = (data.tables || []).map((t: { name: string; type: string }) => ({
+        const ucTables: DynTable[] = (data.tables || []).map((t: { name: string; type: string; columns?: { name: string; type: string }[] }) => ({
           name: t.name,
-          columns: [],
+          columns: (t.columns || []).map(c => ({ name: c.name, type: c.type })),
           source: 'existing' as const,
         }))
         setExistingTables(ucTables)
@@ -102,18 +111,20 @@ export function DataView() {
 
   const hasGenerated = tables.some(t => t.source === 'generated')
 
-  // Combine local tables + existing UC tables
+  // Combine local tables + existing UC tables (filtered by selection)
   const allTables = useMemo(() => {
     const combined = [...tables]
     if (useExisting) {
-      // Add existing UC tables that aren't already in the local list
       const localNames = new Set(tables.map(t => t.name))
       for (const t of existingTables) {
-        if (!localNames.has(t.name)) combined.push(t)
+        if (localNames.has(t.name)) continue
+        // If user has a selection, only show selected tables
+        if (selectedTableNames && !selectedTableNames.has(t.name)) continue
+        combined.push(t)
       }
     }
     return combined
-  }, [tables, existingTables, useExisting])
+  }, [tables, existingTables, useExisting, selectedTableNames])
 
   const handleClearGenerated = async () => {
     setClearing(true)
@@ -223,7 +234,7 @@ export function DataView() {
 
         {/* Loading state */}
         {(loading || loadingExisting) && (
-          <div className="text-[12px] font-mono text-dbx-gray-400 animate-pulse">loading tables...</div>
+          <div className="text-[12px] font-mono animate-pulse" style={{ color: '#00A972' }}>loading tables...</div>
         )}
 
         {/* Error state */}

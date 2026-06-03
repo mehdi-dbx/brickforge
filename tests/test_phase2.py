@@ -17,7 +17,7 @@ from brickforge.lib.env_utils import build_sub_env, check_token_expiry, detect_c
 @pytest.fixture
 def env_file(tmp_path):
     f = tmp_path / ".env.local"
-    f.write_text("DATABRICKS_HOST=https://test.cloud.databricks.com\nDATABRICKS_TOKEN=dapi1234\n#DISABLED_KEY=old_value\nPROJECT_GENIE_DEFAULT=abc123\nPROJECT_GENIE_SALES=def456\n")
+    f.write_text("DATABRICKS_HOST=https://test.cloud.databricks.com\nDATABRICKS_TOKEN=dapi1234\n#DISABLED_KEY=old_value\nPROJECT_GENIE_SPACES=abc123,def456\nPROJECT_KA_DEFAULT=ka-test\nPROJECT_KA_SALES=ka-sales\n")
     return f
 
 
@@ -61,11 +61,11 @@ def test_local_toggle_key(local_config, env_file):
 
 
 def test_local_list_by_prefix(local_config):
-    instances = local_config.list_by_prefix("PROJECT_GENIE_")
+    instances = local_config.list_by_prefix("PROJECT_KA_")
     assert len(instances) == 2
     keys = {i["key"] for i in instances}
-    assert "PROJECT_GENIE_DEFAULT" in keys
-    assert "PROJECT_GENIE_SALES" in keys
+    assert "PROJECT_KA_DEFAULT" in keys
+    assert "PROJECT_KA_SALES" in keys
 
 
 def test_local_sensitive_pattern(local_config):

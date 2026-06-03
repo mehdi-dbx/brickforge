@@ -11,9 +11,11 @@ ALLOWED_TYPES = frozenset(
 )
 
 SYSTEM_PROMPT = """\
-You are a SQL architect designing functions and stored procedures for Databricks Unity Catalog.
+You design SQL routines for Databricks Unity Catalog. Be minimalist.
 
-Given the user's domain description and existing table schemas, design SQL routines that complement the data model.
+Given the user's domain description and table schemas, design ONLY the routines the user asked for.
+Do NOT invent extra routines. Do NOT add parameters the user didn't mention.
+Fewer routines is better. Simpler is better.
 
 Return ONLY a JSON object — no markdown, no explanation:
 {{
@@ -26,25 +28,19 @@ Return ONLY a JSON object — no markdown, no explanation:
         {{"name": "param_name", "sql_type": "SPARK_SQL_TYPE"}}
       ],
       "tables_referenced": ["table_name_1", "table_name_2"],
-      "instructions": "Detailed instructions for generating the SQL code"
+      "instructions": "Concise instructions for generating the SQL"
     }}
   ]
 }}
 
 Rules:
-- Design 3-8 routines total, balanced between functions and procedures
-- **Functions** (type: "function"): read-only SELECT query templates used by an AI agent to look up data
-  - These are query templates, NOT CREATE FUNCTION DDL
-  - They use {{param_name}} placeholders for user-supplied parameters
-  - They reference tables via __SCHEMA_QUALIFIED__ placeholder
-- **Procedures** (type: "procedure"): write operations (UPDATE, INSERT, DELETE) wrapped in CREATE OR REPLACE PROCEDURE
-  - Parameters use IN param_name TYPE syntax
-  - They reference tables via __SCHEMA_QUALIFIED__ placeholder
+- **Functions** (type: "function"): read-only SELECT queries. Use RETURN SELECT, not BEGIN...END.
+- **Procedures** (type: "procedure"): write operations (UPDATE, INSERT, DELETE) with BEGIN...END.
 - Names: lowercase snake_case, letters/digits/underscores only
-- Parameter sql_type must be one of: STRING, INT, BIGINT, DOUBLE, FLOAT, BOOLEAN, DATE, TIMESTAMP_NTZ
-- tables_referenced: list the table names this routine reads from or writes to
-- instructions: describe the business logic, filtering conditions, join logic, what to return/update
-- Make the routines practical for an AI agent assistant that queries data and takes actions"""
+- Parameter sql_type: STRING, INT, BIGINT, DOUBLE, FLOAT, BOOLEAN, DATE, TIMESTAMP_NTZ
+- tables_referenced: actual table names from the provided schemas. Do NOT reference tables that don't exist.
+- Keep parameters minimal. Only what's needed for the query.
+- instructions: brief, factual. Do not ask for exotic SQL features."""
 
 
 def _validate_name(name: str) -> str:

@@ -169,9 +169,8 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'DBX App Name / Deploy',
     help: 'Deploy the agent to Databricks Apps using the DAB bundle pipeline. Runs 7 stages: env validation, config sync (.env.local to databricks.yml), pre-flight checks (imports, bundle validate, model test), bundle deploy, service principal setup, UC grants, and app URL retrieval. Use "dry run" to validate without deploying.',
     choices: [
-      { title: 'Deploy Now',     desc: 'Bundle Agent + Chat UI, Upload To Workspace, Deploy As Databricks App',         action: 'exec-deploy-agent' },
       { title: 'Set App Name',   desc: 'Configure DBX_APP_NAME Before Deploying',                                       action: 'cfg-deploy-name' },
-      { title: 'Skip',           desc: 'Skip Deployment For Now',                                                        action: 'done' },
+      { title: 'Deploy Now',     desc: 'Bundle Agent + Chat UI, Upload To Workspace, Deploy As Databricks App',         action: 'exec-deploy-agent' },
     ],
   },
   {

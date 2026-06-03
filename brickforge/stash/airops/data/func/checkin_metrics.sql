@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.checkin_metrics(
 )
 RETURNS TABLE(flight_number STRING, zone STRING, departure_time TIMESTAMP_NTZ, delay_risk STRING, status STRING)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT flight_number, zone, departure_time, delay_risk, status
     FROM __SCHEMA_QUALIFIED__.flights

@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.border_officer_staffing(
 )
 RETURNS TABLE(at_post STRING, officer_count LONG, officer_names ARRAY<STRING>)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT at_post, COUNT(*) AS officer_count, COLLECT_LIST(name) AS officer_names
     FROM __SCHEMA_QUALIFIED__.border_officers

@@ -55,7 +55,7 @@ def create_sql_read_tool(
             args_sql = ", ".join(
                 f"'{_escape_sql_string(str(kwargs.get(p, '')))}'" for p in params
             )
-            stmt = f"SELECT * FROM TABLE({schema}.{safe_func}({args_sql}))"
+            stmt = f"SELECT * FROM {schema}.{safe_func}({args_sql})"
             columns, rows = execute_query(w, wh_id, stmt)
             return format_query_result(columns, rows)
         except Exception as e:
@@ -199,4 +199,64 @@ def discover_forge_tools(forge_config: dict) -> list:
         else:
             _log.warning("Unknown tool type '%s' for tool '%s'", tool_type, tool_name)
 
+    return tools
+
+
+def discover_uc_function_tools() -> list:
+    """Auto-discover UC functions from PROJECT_FUNCTIONS and register as tools.
+
+    Reads function names from PROJECT_FUNCTIONS env var (comma-separated),
+    fetches metadata from UC (params, types, comments), and creates sql_read
+    tools for TABLE_TYPE functions.
+    """
+    import os
+
+    raw = os.environ.get("PROJECT_FUNCTIONS", "").strip()
+    if not raw:
+        return []
+
+    schema_spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+    if not schema_spec or "." not in schema_spec:
+        _log.warning("PROJECT_FUNCTIONS set but PROJECT_UNITY_CATALOG_SCHEMA missing")
+        return []
+
+    cat, sch = schema_spec.split(".", 1)
+    selected = set(raw.split(","))
+
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+    except Exception as e:
+        _log.warning("Cannot connect to Databricks for UC function discovery: %s", e)
+        return []
+
+    tools = []
+    for func_info in w.functions.list(catalog_name=cat, schema_name=sch):
+        if not func_info.name or func_info.name not in selected:
+            continue
+
+        # Only register TABLE_TYPE functions as sql_read tools
+        dt = str(func_info.data_type) if func_info.data_type else ""
+        if "TABLE" not in dt:
+            _log.info("Skipping non-table UC function %s (type: %s)", func_info.name, dt)
+            continue
+
+        # Get full detail (list doesn't include params)
+        try:
+            detail = w.functions.get(name=f"{cat}.{sch}.{func_info.name}")
+        except Exception as e:
+            _log.warning("Cannot get detail for UC function %s: %s", func_info.name, e)
+            continue
+
+        params = []
+        if detail.input_params and detail.input_params.parameters:
+            params = [p.name for p in detail.input_params.parameters if p.name]
+
+        desc = detail.comment or f"Look up data from {func_info.name}"
+        tool_name = f"query_{func_info.name}"
+
+        t = create_sql_read_tool(tool_name, func_info.name, params, desc)
+        tools.append(t)
+
+    _log.info("Discovered %d UC function tool(s) from PROJECT_FUNCTIONS", len(tools))
     return tools

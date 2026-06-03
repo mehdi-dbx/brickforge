@@ -86,11 +86,11 @@ def generate_app_yaml(config: dict) -> str:
     env_lines = []
     # Dynamic env vars from config
     env_map = {
-        "AGENT_MODEL_ENDPOINT": config.get("AGENT_MODEL_ENDPOINT", ""),
+        "AGENT_MODEL": config.get("AGENT_MODEL", ""),
         "PROJECT_UNITY_CATALOG_SCHEMA": config.get("PROJECT_UNITY_CATALOG_SCHEMA", ""),
         "DATABRICKS_WAREHOUSE_ID": config.get("DATABRICKS_WAREHOUSE_ID", ""),
     }
-    # Add all PROJECT_GENIE_*, PROJECT_KA_*, PROJECT_VS_*, PROJECT_MCP_*, etc.
+    # Add all PROJECT_* env vars (GENIE_SPACES, KA, VS, MCP, FUNCTIONS, etc.)
     for key, value in sorted(config.items()):
         if key.startswith("PROJECT_") and value:
             env_map[key] = value
@@ -138,21 +138,21 @@ def generate_databricks_yml(config: dict) -> str:
     app_name = config.get("DBX_APP_NAME", "brickforge-agent")
     warehouse_id = config.get("DATABRICKS_WAREHOUSE_ID", "PLACEHOLDER")
 
-    # Genie space resources
+    # Genie space resources from PROJECT_GENIE_SPACES (comma-separated)
     genie_lines = ""
-    for key, value in sorted(config.items()):
-        if key.startswith("PROJECT_GENIE_") and value:
-            slug = key.replace("PROJECT_GENIE_", "").lower()
-            genie_lines += f"""\
-        - name: 'genie_space_{slug}'
+    raw_genie = config.get("PROJECT_GENIE_SPACES", "")
+    genie_ids = [s.strip() for s in raw_genie.split(",") if s.strip()] if raw_genie else []
+    for i, space_id in enumerate(genie_ids, 1):
+        genie_lines += f"""\
+        - name: 'genie_space_{i}'
           genie_space:
-            space_id: '{value}'
+            space_id: '{space_id}'
             permission: 'CAN_RUN'
 """
 
     # Serving endpoint resources
     endpoint_lines = ""
-    endpoint = config.get("AGENT_MODEL_ENDPOINT", "")
+    endpoint = config.get("AGENT_MODEL", "")
     if endpoint and not endpoint.startswith("http"):
         endpoint_lines += f"""\
         - name: 'serving_endpoint'

@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator, Optional
 import mlflow
 import uuid_utils
 from databricks.sdk import WorkspaceClient
-from databricks_langchain import AsyncCheckpointSaver, AsyncDatabricksStore, ChatDatabricks, DatabricksMCPServer, DatabricksMultiServerMCPClient
+from databricks_langchain import ChatDatabricks, DatabricksMCPServer, DatabricksMultiServerMCPClient
 from databricks_langchain.multi_server_mcp_client import MCPServer
 from langchain.agents import create_agent
 from mlflow.genai.agent_server import invoke, stream
@@ -29,7 +29,7 @@ from tools.generate_chart import generate_chart
 from tools.ka_factory import discover_ka_tools
 from tools.api_factory import discover_api_tools
 from tools.a2a_factory import discover_a2a_tools
-from tools.tool_factory import discover_forge_tools
+from tools.tool_factory import discover_forge_tools, discover_uc_function_tools
 
 import importlib
 import pkgutil
@@ -63,9 +63,20 @@ _MEMORY_SCHEMA = os.environ.get("LAKEBASE_AGENT_MEMORY_SCHEMA", "agent_memory").
 
 @asynccontextmanager
 async def lakebase_context():
-    """Yield (checkpointer, store) if Lakebase is configured, else (None, None)."""
+    """Yield (checkpointer, store) if Lakebase is configured and memory is enabled, else (None, None)."""
+    memory_enabled = os.environ.get("PROJECT_TOOL_MEMORY", "false").strip().lower() != "false"
+    if not memory_enabled:
+        _log.info("Memory disabled (PROJECT_TOOL_MEMORY) — running without checkpointing/memory")
+        yield None, None
+        return
     if not _LAKEBASE_INSTANCE:
         _log.info("LAKEBASE_INSTANCE_NAME not set — running without checkpointing/memory")
+        yield None, None
+        return
+    try:
+        from databricks_langchain import AsyncCheckpointSaver, AsyncDatabricksStore
+    except ImportError:
+        _log.warning("databricks-langchain[memory] not installed — running without checkpointing/memory")
         yield None, None
         return
     async with AsyncCheckpointSaver(
@@ -110,14 +121,16 @@ def _build_mcp_servers(workspace_client: WorkspaceClient) -> list[MCPServer]:
     """Build list of MCP server configs (does not connect yet)."""
     host_name = get_databricks_host_from_env()
     servers: list[MCPServer] = []
-    # Register all PROJECT_GENIE_* env vars as Databricks MCP servers
-    for key in sorted(os.environ):
-        if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
-            space_id = os.environ[key].strip()
-            slug = key.replace("PROJECT_GENIE_", "").lower()
+    # Register Genie spaces from PROJECT_GENIE_SPACES (comma-separated IDs)
+    genie_spaces = os.environ.get("PROJECT_GENIE_SPACES", "").strip()
+    if genie_spaces:
+        for i, space_id in enumerate(genie_spaces.split(","), 1):
+            space_id = space_id.strip()
+            if not space_id:
+                continue
             servers.append(
                 DatabricksMCPServer(
-                    name=f"genie-{slug}",
+                    name=f"genie-{i}",
                     url=f"{host_name}/api/2.0/mcp/genie/{space_id}",
                     workspace_client=workspace_client,
                 ),
@@ -198,7 +211,9 @@ async def init_agent(
     domain_tools = _discover_domain_tools()
     # .forge declarative tools (SQL read + action patterns from config)
     forge_tools = discover_forge_tools(dict(os.environ))
-    _log.info("Discovered %d domain, %d forge, %d KA, %d API, %d A2A tools", len(domain_tools), len(forge_tools), len(ka_tools), len(api_tools), len(a2a_tools))
+    # UC functions selected in Setup (PROJECT_FUNCTIONS env var)
+    uc_func_tools = discover_uc_function_tools()
+    _log.info("Discovered %d domain, %d forge, %d uc_func, %d KA, %d API, %d A2A tools", len(domain_tools), len(forge_tools), len(uc_func_tools), len(ka_tools), len(api_tools), len(a2a_tools))
     # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
     chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
     from agent.memory_tools import create_memory_tools
@@ -206,14 +221,14 @@ async def init_agent(
     memory_tools = create_memory_tools(store, user_id) if memory_enabled and store and user_id else []
     if memory_tools:
         _log.info("Memory tools enabled for user '%s'", user_id)
-    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + forge_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
-    endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
+    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + forge_tools + uc_func_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
+    endpoint = os.environ.get("AGENT_MODEL", "").strip()
     databricks_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
 
     # If not set, derive from project workspace (same-workspace mode)
     if not endpoint:
         if not databricks_host:
-            raise ValueError("AGENT_MODEL_ENDPOINT not set and DATABRICKS_HOST not set")
+            raise ValueError("AGENT_MODEL not set and DATABRICKS_HOST not set")
         endpoint = f"{databricks_host}/serving-endpoints/databricks-claude-sonnet-4-6/invocations"
 
     if endpoint.startswith("http://") or endpoint.startswith("https://"):

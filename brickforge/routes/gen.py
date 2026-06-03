@@ -243,7 +243,7 @@ def _sse_gen(cmd: list[str], stdin_data: str | None = None):
             await proc.wait()
             yield sse_done(proc.returncode == 0, proc.returncode or 0)
         else:
-            async for event in stream_subprocess(cmd, env=env, cwd=PROJECT_ROOT, detect_result=True):
+            async for event in stream_subprocess(cmd, env=env, cwd=PACKAGE_ROOT, detect_result=True):
                 yield event
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers={
@@ -315,7 +315,7 @@ async def routine_status():
     config = _get_config()
     env = config.to_env_dict()
     model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") and env.get("DATABRICKS_HOST"))
-    # Load table schemas for context
+    # Load table schemas for context: try gen manifest first, then existing UC tables
     table_schemas = None
     manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
     try:
@@ -323,6 +323,24 @@ async def routine_status():
         table_schemas = manifest.get("tables")
     except (FileNotFoundError, json.JSONDecodeError):
         pass
+    # Fall back to existing UC tables if no generated tables
+    if not table_schemas:
+        try:
+            from brickforge.routes.setup import _list_schema_tables
+            uc_tables = _list_schema_tables(config)
+            if uc_tables:
+                table_schemas = [
+                    {"name": t["name"], "columns": t.get("columns", [])}
+                    for t in uc_tables
+                ]
+        except Exception:
+            pass
+    # Filter by PROJECT_TABLES selection if set
+    if table_schemas:
+        selected = env.get("PROJECT_TABLES", "").strip()
+        if selected:
+            selected_set = set(selected.split(","))
+            table_schemas = [t for t in table_schemas if t["name"] in selected_set]
     return {"modelReady": model_ready, "tableSchemas": table_schemas}
 
 

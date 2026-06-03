@@ -82,7 +82,7 @@ export interface ExecLine {
 }
 
 export interface StepInstance {
-  key: string        // e.g. PROJECT_GENIE_<SLUG>
+  key: string        // e.g. PROJECT_GENIE_SPACES[1], PROJECT_KA_PASSENGERS
   value: string      // e.g. space_id or endpoint name
   enabled: boolean   // true = active, false = commented out
   label: string      // derived slug from env key suffix

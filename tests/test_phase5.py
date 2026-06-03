@@ -70,7 +70,7 @@ def test_save_workspace_sets_host_and_token():
 
 def test_exec_same_disables_model_keys():
     # Set model keys first
-    client.put("/api/env", json={"AGENT_MODEL_ENDPOINT": "https://test", "AGENT_MODEL_TOKEN": "tok"})
+    client.put("/api/env", json={"AGENT_MODEL": "https://test", "AGENT_MODEL_TOKEN": "tok"})
     r = client.post("/api/setup/exec", json={"action": "exec-same", "params": {}})
     events = _parse_sse(r.text)
     lines = [e["data"]["text"] for e in events if e["type"] == "line"]

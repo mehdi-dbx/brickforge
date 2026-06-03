@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.checkin_agents_by_counter_status
 )
 RETURNS TABLE(at_counter STRING, agent_count LONG, agent_ids ARRAY<STRING>, agent_names ARRAY<STRING>)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT at_counter, COUNT(*) AS agent_count,
            COLLECT_LIST(agent_id) AS agent_ids,

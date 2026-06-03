@@ -51,7 +51,7 @@ def main() -> None:
         print("Created experiment but no ID returned", file=sys.stderr)
         sys.exit(1)
 
-    env_path = ROOT / ".env.local"
+    env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
     lines = env_path.read_text().splitlines() if env_path.exists() else []
 
     def _upsert(lines: list[str], key: str, value: str) -> list[str]:

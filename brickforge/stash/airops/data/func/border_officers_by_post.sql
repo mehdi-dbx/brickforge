@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.border_officers_by_post(
 )
 RETURNS TABLE(status STRING, officer_count LONG, officer_ids ARRAY<STRING>, officer_names ARRAY<STRING>)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT at_post AS status, COUNT(*) AS officer_count,
            COLLECT_LIST(officer_id) AS officer_ids,

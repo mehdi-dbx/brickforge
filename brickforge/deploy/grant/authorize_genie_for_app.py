@@ -23,10 +23,9 @@ def main() -> int:
             space_id = m.group(1)
 
     if not space_id:
-        for key in sorted(os.environ):
-            if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
-                space_id = os.environ[key].strip()
-                break
+        raw = os.environ.get("PROJECT_GENIE_SPACES", "").strip()
+        if raw:
+            space_id = raw.split(",")[0].strip() or None
 
     if not space_id:
         print("No Genie space configured — skipping (optional)", file=sys.stderr)

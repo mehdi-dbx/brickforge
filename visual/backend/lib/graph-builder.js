@@ -38,7 +38,7 @@ function scanDir(dir, ext) {
 function buildGraph() {
   const appYaml  = readAppYaml()
   const envVars  = extractEnvVars(appYaml)
-  const endpoint = envVars['AGENT_MODEL_ENDPOINT'] || ''
+  const endpoint = envVars['AGENT_MODEL'] || ''
   const modelName = parseModelName(endpoint)
   const schema   = envVars['PROJECT_UNITY_CATALOG_SCHEMA'] || ''
   const [catalog, schemaName] = schema ? schema.split('.') : ['', '']

@@ -39,7 +39,7 @@ def _parse_model_name(endpoint: str) -> str:
 def build_graph() -> dict:
     app_yaml = _read_app_yaml()
     env_vars = _extract_env_vars(app_yaml)
-    endpoint = env_vars.get("AGENT_MODEL_ENDPOINT", "")
+    endpoint = env_vars.get("AGENT_MODEL", "")
     model_name = _parse_model_name(endpoint)
     schema = env_vars.get("PROJECT_UNITY_CATALOG_SCHEMA", "")
     parts = schema.split(".", 1) if schema else ["", ""]
@@ -72,7 +72,8 @@ def build_graph() -> dict:
     y += 160
 
     # Genie node
-    genie_keys = [k for k in env_vars if k.startswith("PROJECT_GENIE_")]
+    raw_genie = env_vars.get("PROJECT_GENIE_SPACES", "")
+    genie_keys = [s.strip() for s in raw_genie.split(",") if s.strip()] if raw_genie else []
     if genie_keys:
         nodes.append({
             "id": "genie", "type": "genie", "position": {"x": 380, "y": y},

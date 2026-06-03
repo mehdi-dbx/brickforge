@@ -4,7 +4,7 @@ Creates databricks.yml and app.yaml from templates if they don't exist.
 
 Updates:
   - databricks.yml: sql_warehouse.id, genie_space.space_id, serving_endpoint.name, ka_endpoint.name, app name
-  - app.yaml: AGENT_MODEL_ENDPOINT, PROJECT_UNITY_CATALOG_SCHEMA, DATABRICKS_WAREHOUSE_ID, PROJECT_KA_*
+  - app.yaml: AGENT_MODEL, PROJECT_UNITY_CATALOG_SCHEMA, DATABRICKS_WAREHOUSE_ID, PROJECT_KA_*
   - Databricks Secrets: pushes AGENT_MODEL_TOKEN to app scope (cross-workspace only)
 
 Usage:
@@ -259,14 +259,11 @@ def main() -> int:
             )
             changes.append(("sql_warehouse.id", "DATABRICKS_WAREHOUSE_ID", wh_id))
 
-    # genie_space.space_id + name <- first PROJECT_GENIE_* env var
-    genie_id = ""
-    genie_env_key = ""
-    for key in sorted(os.environ):
-        if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
-            genie_id = os.environ[key].strip()
-            genie_env_key = key
-            break
+    # genie_space.space_id <- first ID from PROJECT_GENIE_SPACES
+    raw_genie = os.environ.get("PROJECT_GENIE_SPACES", "").strip()
+    genie_ids = [s.strip() for s in raw_genie.split(",") if s.strip()] if raw_genie else []
+    genie_id = genie_ids[0] if genie_ids else ""
+    genie_env_key = "PROJECT_GENIE_SPACES"
     if genie_id and not _genie_space_exists(genie_id):
         print(f"  {FAIL} Genie space '{genie_id}' not found on workspace — fix {genie_env_key} in .env.local")
         return 1
@@ -289,13 +286,13 @@ def main() -> int:
             content = new_content
             changes.append(("genie_space resource", None, "removed (not configured)"))
 
-    # serving_endpoint <- AGENT_MODEL_ENDPOINT
+    # serving_endpoint <- AGENT_MODEL
     # Cross-workspace URL: remove serving_endpoint resource (can't grant on external workspace),
     #   push AGENT_MODEL_TOKEN to Databricks Secrets.
     # Same-workspace (not set or same-host URL): keep serving_endpoint with FM_MODEL name
     #   so the app SP gets CAN_QUERY; remove agent_model_token secret (not needed).
     # Local name: update serving_endpoint.name as usual.
-    endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
+    endpoint = os.environ.get("AGENT_MODEL", "").strip()
     databricks_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
     fm_model = "databricks-claude-sonnet-4-6"
 
@@ -350,7 +347,7 @@ def main() -> int:
         )
         if new_content != content:
             content = new_content
-            changes.append(("agent_model_token resource", "AGENT_MODEL_ENDPOINT", "removed (same-workspace mode)"))
+            changes.append(("agent_model_token resource", "AGENT_MODEL", "removed (same-workspace mode)"))
 
     elif endpoint and _is_cross_workspace:
         # Cross-workspace: remove serving_endpoint resource (can't grant on external workspace)
@@ -361,7 +358,7 @@ def main() -> int:
         )
         if new_content != content:
             content = new_content
-            changes.append(("serving_endpoint resource", "AGENT_MODEL_ENDPOINT", "removed (cross-workspace URL)"))
+            changes.append(("serving_endpoint resource", "AGENT_MODEL", "removed (cross-workspace URL)"))
 
         # Push AGENT_MODEL_TOKEN to Databricks Secrets
         model_token = os.environ.get("AGENT_MODEL_TOKEN", "").strip()
@@ -374,7 +371,7 @@ def main() -> int:
     elif endpoint and not _ep_name_from_url:
         # Local endpoint name (not a URL) — update serving_endpoint.name
         if not _endpoint_exists(endpoint):
-            print(f"  {FAIL} Serving endpoint '{endpoint}' not found on workspace — fix AGENT_MODEL_ENDPOINT in .env.local")
+            print(f"  {FAIL} Serving endpoint '{endpoint}' not found on workspace — fix AGENT_MODEL in .env.local")
             return 1
         m = re.search(r"serving_endpoint:\s*\n\s+name: '([^']*)'", content)
         if m and m.group(1) != endpoint:
@@ -384,7 +381,7 @@ def main() -> int:
                 content,
                 count=1,
             )
-            changes.append(("serving_endpoint.name", "AGENT_MODEL_ENDPOINT", endpoint))
+            changes.append(("serving_endpoint.name", "AGENT_MODEL", endpoint))
 
     # ka_endpoint.name <- first PROJECT_KA_* env var
     ka_endpoint = ""
@@ -439,7 +436,7 @@ def main() -> int:
     schema_spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
 
     # app.yaml env var sync
-    # AGENT_MODEL_ENDPOINT + AGENT_MODEL_TOKEN: only present when cross-workspace endpoint is set.
+    # AGENT_MODEL + AGENT_MODEL_TOKEN: only present when cross-workspace endpoint is set.
     # All others: always present, value updated from .env.local.
     if app_yml.exists():
         app_content = app_yml.read_text()
@@ -464,14 +461,14 @@ def main() -> int:
             entry = f'  - name: {name}\n    {key}: "{value}"\n'
             return content.replace("  - name: PROJECT_UNITY_CATALOG_SCHEMA", entry + "  - name: PROJECT_UNITY_CATALOG_SCHEMA", 1)
 
-        # AGENT_MODEL_ENDPOINT: always set explicitly in app.yaml.
+        # AGENT_MODEL: always set explicitly in app.yaml.
         # In same-workspace mode, use just the model name (not a full URL) so
         # agent.py takes the local-name path with default WorkspaceClient auth,
         # avoiding host-comparison mismatches at runtime.
         # AGENT_MODEL_TOKEN: only inject for cross-workspace (via Databricks Secrets).
         effective_endpoint = endpoint or fm_model
         if effective_endpoint:
-            new = _app_set(app_content, "AGENT_MODEL_ENDPOINT", effective_endpoint)
+            new = _app_set(app_content, "AGENT_MODEL", effective_endpoint)
             if _is_cross_workspace and not _app_has("AGENT_MODEL_TOKEN"):
                 new += '  # Secret injected via DAB resource agent_model_token (scope: agent-forge, key: AGENT_MODEL_TOKEN).\n'
                 new += '  - name: AGENT_MODEL_TOKEN\n    valueFrom: "agent_model_token"\n'
@@ -480,7 +477,7 @@ def main() -> int:
             if new != app_content:
                 app_content = new; app_changed = True
                 label = "cross-workspace" if _is_cross_workspace else "same-workspace (explicit)"
-                changes.append(("app.yaml  AGENT_MODEL_ENDPOINT", None, f"{effective_endpoint} ({label})"))
+                changes.append(("app.yaml  AGENT_MODEL", None, f"{effective_endpoint} ({label})"))
 
         # Standard value fields
         vs_index = os.environ.get("PROJECT_VS_INDEX", "").strip()
@@ -491,10 +488,12 @@ def main() -> int:
             ("PROJECT_VS_INDEX", vs_index),
             ("PROJECT_VS_ENDPOINT", vs_endpoint),
         ]
-        # Dynamically add all PROJECT_GENIE_* and PROJECT_KA_* vars
+        # Dynamically add all PROJECT_* vars (GENIE, KA, FUNCTIONS, TABLES, TOOL, MCP, API, A2A, etc.)
         for key in sorted(os.environ):
-            if (key.startswith("PROJECT_GENIE_") or key.startswith("PROJECT_KA_")) and os.environ[key].strip():
-                app_sync_vars.append((key, os.environ[key].strip()))
+            if key.startswith("PROJECT_") and key != "PROJECT_UNITY_CATALOG_SCHEMA" and os.environ[key].strip():
+                # Skip if already in the static list
+                if not any(k == key for k, _ in app_sync_vars):
+                    app_sync_vars.append((key, os.environ[key].strip()))
         for env_name, value in app_sync_vars:
             if not value:
                 # Remove if present (not configured)
@@ -526,16 +525,14 @@ def main() -> int:
         ("PROJECT_UNITY_CATALOG_SCHEMA ", schema_spec),
     ]
     # Dynamic genie/KA entries
-    for key in sorted(os.environ):
-        if key.startswith("PROJECT_GENIE_") and os.environ[key].strip():
-            config_items.append((f"{key:<32}", os.environ[key].strip()))
+    config_items.append(("PROJECT_GENIE_SPACES         ", os.environ.get("PROJECT_GENIE_SPACES", "").strip()))
     for key in sorted(os.environ):
         if key.startswith("PROJECT_KA_") and os.environ[key].strip():
             config_items.append((f"{key:<32}", os.environ[key].strip()))
     config_items.extend([
         ("PROJECT_VS_INDEX             ", os.environ.get("PROJECT_VS_INDEX", "").strip()),
         ("PROJECT_VS_ENDPOINT          ", os.environ.get("PROJECT_VS_ENDPOINT", "").strip()),
-        ("AGENT_MODEL_ENDPOINT         ", endpoint),
+        ("AGENT_MODEL         ", endpoint),
         ("DBX_APP_NAME                 ", app_name),
     ])
     for label, val in config_items:

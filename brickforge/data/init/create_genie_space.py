@@ -2,9 +2,8 @@
 """
 Create a Genie space with all tables from PROJECT_UNITY_CATALOG_SCHEMA.
 
-Prints space_id to stdout. Updates .env.local with PROJECT_GENIE_<SLUG>.
+Prints space_id to stdout. Appends to PROJECT_GENIE_SPACES in .env.local.
 GENIE_ROOM_NAME env var sets the space title (default: "PROJECT").
-GENIE_ENV_KEY env var overrides the env key name.
 
 Requires: PROJECT_UNITY_CATALOG_SCHEMA, DATABRICKS_WAREHOUSE_ID (or a warehouse in the workspace).
 """
@@ -64,12 +63,7 @@ def main():
     title = os.environ.get("GENIE_ROOM_NAME", "").strip() or "PROJECT"
     description = os.environ.get("GENIE_DESCRIPTION", "").strip() or "Natural language exploration of project data in Unity Catalog."
     sample_questions = []
-    # Derive env var name from GENIE_ENV_KEY (if set) or room name slug
-    env_var = os.environ.get("GENIE_ENV_KEY", "").strip()
-    if not env_var:
-        import re as _re
-        slug = _re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_").upper()
-        env_var = f"PROJECT_GENIE_{slug}"
+    env_var = "PROJECT_GENIE_SPACES"
 
     serialized = {
         "version": 2,
@@ -96,22 +90,22 @@ def main():
     )
     print(space.space_id)
 
-    env_path = ROOT / ".env.local"
+    # Append space_id to PROJECT_GENIE_SPACES (comma-separated)
+    env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
     import re as _re
-    new_val = f"{env_var}={space.space_id}"
-    lines = env_path.read_text().splitlines() if env_path.exists() else []
-    new_lines, replaced = [], False
-    for ln in lines:
-        m = _re.match(r"^(\s*)(#?\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=", ln)
-        if m and m.group(3) == env_var and not ln.strip().startswith("#"):
-            new_lines.append(new_val)
-            replaced = True
-        else:
-            new_lines.append(ln)
-    if not replaced:
-        new_lines.append(new_val)
-    env_path.write_text("\n".join(new_lines) + "\n")
-    print(f"Updated {env_path} with {env_var}={space.space_id}", file=sys.stderr)
+    existing = os.environ.get(env_var, "").strip()
+    existing_ids = set(existing.split(",")) if existing else set()
+    existing_ids.discard("")
+    existing_ids.add(space.space_id)
+    new_value = ",".join(sorted(existing_ids))
+
+    content = env_path.read_text() if env_path.exists() else ""
+    if _re.search(rf'^{env_var}=', content, _re.MULTILINE):
+        content = _re.sub(rf'^{env_var}=.*$', f'{env_var}={new_value}', content, flags=_re.MULTILINE)
+    else:
+        content += f"\n{env_var}={new_value}\n"
+    env_path.write_text(content)
+    print(f"Updated {env_path} with {env_var}={new_value}", file=sys.stderr)
 
 
 if __name__ == "__main__":

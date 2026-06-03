@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.checkin_performance_metrics(
 )
 RETURNS TABLE(zone STRING, avg_checkin_time DOUBLE, baseline DOUBLE, pct_change DOUBLE, window_mins INT, timestamp TIMESTAMP_NTZ, is_anomalous BOOLEAN)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     WITH latest_metrics AS (
         SELECT zone, MAX(recorded_at) AS latest_recorded_at

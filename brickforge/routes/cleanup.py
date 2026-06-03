@@ -39,13 +39,15 @@ if app_name:
         items.append({'id': f'app:{app_name}', 'category': 'apps', 'name': app_name})
     except: pass
 
-# Genie spaces
-for k, v in sorted(os.environ.items()):
-    if k.startswith('PROJECT_GENIE_') and v.strip():
-        try:
-            space = w.genie.get_space(space_id=v.strip())
-            items.append({'id': f'genie:{v.strip()}', 'category': 'genie', 'name': getattr(space, 'title', v)})
-        except: pass
+# Genie spaces from PROJECT_GENIE_SPACES
+raw_genie = os.environ.get('PROJECT_GENIE_SPACES', '').strip()
+for sid in (raw_genie.split(',') if raw_genie else []):
+    sid = sid.strip()
+    if not sid: continue
+    try:
+        space = w.genie.get_space(space_id=sid)
+        items.append({'id': f'genie:{sid}', 'category': 'genie', 'name': getattr(space, 'title', sid)})
+    except: pass
 
 # Tables, functions, procedures
 schema = os.environ.get('PROJECT_UNITY_CATALOG_SCHEMA','').strip()
@@ -62,7 +64,7 @@ if '.' in schema:
 
 # Env keys
 for k in ['DATABRICKS_HOST','DATABRICKS_TOKEN','DATABRICKS_WAREHOUSE_ID','PROJECT_UNITY_CATALOG_SCHEMA',
-          'AGENT_MODEL_ENDPOINT','AGENT_MODEL_TOKEN','DBX_APP_NAME','LAKEBASE_INSTANCE_NAME','MLFLOW_EXPERIMENT_ID']:
+          'AGENT_MODEL','AGENT_MODEL_TOKEN','DBX_APP_NAME','LAKEBASE_INSTANCE_NAME','MLFLOW_EXPERIMENT_ID']:
     if os.environ.get(k,'').strip():
         items.append({'id': f'env:{k}', 'category': 'env', 'name': k})
 

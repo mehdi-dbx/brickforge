@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.staffing_duties(
 )
 RETURNS TABLE(zone STRING, counter STRING, assigned_by_id STRING, assigned_at TIMESTAMP_NTZ)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT zone, counter, assigned_by_id, assigned_at
     FROM __SCHEMA_QUALIFIED__.checkin_agents

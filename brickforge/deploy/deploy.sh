@@ -127,11 +127,11 @@ fi
 [[ -n "${DATABRICKS_TOKEN:-}" ]] && ok "Auth via DATABRICKS_TOKEN"
 [[ -n "${DATABRICKS_CONFIG_PROFILE:-}" && -z "${DATABRICKS_TOKEN:-}" ]] && ok "Auth via profile ${C}${DATABRICKS_CONFIG_PROFILE}${W}"
 
-# AGENT_MODEL_ENDPOINT is optional — if not set, agent derives it from DATABRICKS_HOST (same-workspace mode)
-if [[ -n "${AGENT_MODEL_ENDPOINT:-}" ]]; then
-  info "${C}AGENT_MODEL_ENDPOINT${W} = ${DIM}${AGENT_MODEL_ENDPOINT:0:70}${W}"
+# AGENT_MODEL is optional — if not set, agent derives it from DATABRICKS_HOST (same-workspace mode)
+if [[ -n "${AGENT_MODEL:-}" ]]; then
+  info "${C}AGENT_MODEL${W} = ${DIM}${AGENT_MODEL:0:70}${W}"
 else
-  info "${C}AGENT_MODEL_ENDPOINT${W} ${DIM}not set — same-workspace mode (derived from DATABRICKS_HOST at runtime)${W}"
+  info "${C}AGENT_MODEL${W} ${DIM}not set — same-workspace mode (derived from DATABRICKS_HOST at runtime)${W}"
 fi
 
 # Dynamic resource detection (genie spaces, KA endpoints)
@@ -145,7 +145,7 @@ done < <(grep -E '^PROJECT_(GENIE|KA)_' "$ROOT/.env.local" 2>/dev/null | grep -v
 [[ $_ka_count -eq 0 ]] && info "No Knowledge Assistants configured (optional)"
 
 # Soft warnings (don't abort)
-[[ -z "${AGENT_MODEL_TOKEN:-}" && -n "${AGENT_MODEL_ENDPOINT:-}" ]] && warn "AGENT_MODEL_TOKEN not set — cross-workspace model token may be missing from secrets"
+[[ -z "${AGENT_MODEL_TOKEN:-}" && -n "${AGENT_MODEL:-}" ]] && warn "AGENT_MODEL_TOKEN not set — cross-workspace model token may be missing from secrets"
 [[ -z "${MLFLOW_EXPERIMENT_ID:-}" ]] && warn "MLFLOW_EXPERIMENT_ID not set — experiment tracking may not work"
 
 # ── Step 2: Config Sync ───────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ fi
 
 if ! run_step "Model endpoint connectivity" \
     uv run python scripts/py/test_agent_model.py; then
-  abort "Model endpoint unreachable — check AGENT_MODEL_ENDPOINT or verify the endpoint exists on DATABRICKS_HOST"
+  abort "Model endpoint unreachable — check AGENT_MODEL or verify the endpoint exists on DATABRICKS_HOST"
 fi
 
 if $DRY_RUN; then

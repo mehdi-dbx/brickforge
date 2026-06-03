@@ -1437,7 +1437,7 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
     case 'schema':    return v.PROJECT_UNITY_CATALOG_SCHEMA || ''
     case 'tables':    return v.TABLE_COUNT ? `${v.TABLE_COUNT} table(s)` : ''
     case 'functions': return v.ROUTINE_COUNT ? `${v.ROUTINE_COUNT} routine(s)` : ''
-    case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || ''
+    case 'model':     return v.AGENT_MODEL?.replace('https://', '') || ''
     case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
     case 'genie':     return ''
     case 'bricks':    return ''
@@ -1455,7 +1455,7 @@ const STEP_KEY_MAP: Record<string, string> = {
   auth: 'DATABRICKS_TOKEN',
   warehouse: 'DATABRICKS_WAREHOUSE_ID',
   schema: 'PROJECT_UNITY_CATALOG_SCHEMA',
-  model: 'AGENT_MODEL_ENDPOINT',
+  model: 'AGENT_MODEL',
   vs: 'PROJECT_VS_INDEX',
   mlflow: 'MLFLOW_EXPERIMENT_ID',
   deploy: 'DBX_APP_NAME',

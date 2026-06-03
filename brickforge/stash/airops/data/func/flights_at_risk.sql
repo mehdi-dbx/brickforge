@@ -5,7 +5,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.flights_at_risk(
 )
 RETURNS TABLE(flight_number STRING, departure_time TIMESTAMP_NTZ)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT flight_number, departure_time
     FROM __SCHEMA_QUALIFIED__.flights

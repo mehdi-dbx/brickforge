@@ -55,9 +55,9 @@ def test_status_model_same_workspace():
     data = r.json()
     model_step = data["steps"]["model"]
     env = data["env"]
-    if env.get("DATABRICKS_HOST") and not env.get("AGENT_MODEL_ENDPOINT"):
+    if env.get("DATABRICKS_HOST") and not env.get("AGENT_MODEL"):
         assert model_step["status"] == "configured"
-        assert "(same workspace)" in model_step["values"].get("AGENT_MODEL_ENDPOINT", "")
+        assert "(same workspace)" in model_step["values"].get("AGENT_MODEL", "")
 
 
 def test_status_multi_instance_genie():
@@ -91,9 +91,9 @@ def test_clear_step_disables_keys():
 
 
 def test_toggle_key():
-    # Set a genie key
-    client.put("/api/env", json={"PROJECT_GENIE_TEST": "test_genie_id"})
-    r = client.put("/api/setup/toggle", json={"key": "PROJECT_GENIE_TEST"})
+    # Set a genie spaces key
+    client.put("/api/env", json={"PROJECT_GENIE_SPACES": "test_genie_id"})
+    r = client.put("/api/setup/toggle", json={"key": "PROJECT_GENIE_SPACES"})
     assert r.status_code == 200
     assert r.json()["ok"] is True
 

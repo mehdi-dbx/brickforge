@@ -632,7 +632,7 @@ const STEP_ENV_KEYS = {
   schema:    ['PROJECT_UNITY_CATALOG_SCHEMA'],
   tables:    [],  // depends on schema being set + assets created
   functions: [],  // depends on schema + SQL files in func/proc dirs
-  model:     ['AGENT_MODEL_ENDPOINT'],
+  model:     ['AGENT_MODEL'],
   prompt:    [],  // file-based, not env-based
   genie:     [],  // multi-instance, handled by parseMultiInstanceKeys
   ka:        [],  // multi-instance, handled by parseMultiInstanceKeys
@@ -691,10 +691,10 @@ app.get('/api/setup/status', (_req, res) => {
       let status = keys.length === 0 ? 'unknown' : (allSet ? 'configured' : 'missing')
       let values = Object.fromEntries(keys.map(k => [k, env[k] || '']))
 
-      // Model: same-workspace mode — no AGENT_MODEL_ENDPOINT needed if host+token exist
+      // Model: same-workspace mode — no AGENT_MODEL needed if host+token exist
       if (step === 'model' && !allSet && env.DATABRICKS_HOST && env.DATABRICKS_HOST.trim()) {
         status = 'configured'
-        values.AGENT_MODEL_ENDPOINT = env.DATABRICKS_HOST.replace(/\/+$/, '') + ' (same workspace)'
+        values.AGENT_MODEL = env.DATABRICKS_HOST.replace(/\/+$/, '') + ' (same workspace)'
       }
 
       // Tables step: check if CSVs exist in default or gen
@@ -1349,9 +1349,9 @@ if not host.startswith('http'): host = 'https://' + host
 endpoint = host.rstrip('/') + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
 w = _isolated_client('${profileName}')
 t = w.tokens.create(comment='agent-forge-fm', lifetime_seconds=604800)
-write_env_entry(ENV_FILE, 'AGENT_MODEL_ENDPOINT', endpoint)
+write_env_entry(ENV_FILE, 'AGENT_MODEL', endpoint)
 write_env_entry(ENV_FILE, 'AGENT_MODEL_TOKEN', t.token_value)
-print('[+] AGENT_MODEL_ENDPOINT = ' + endpoint)
+print('[+] AGENT_MODEL = ' + endpoint)
 print('[+] AGENT_MODEL_TOKEN = ' + _redact(t.token_value))
 `.trim().replace(/\$\{profileName\}/g, profileName)])
       break
@@ -1371,10 +1371,10 @@ print('[+] Knowledge Assistant provisioned')
 
     case 'exec-same': {
       try {
-        config.disableMany(['AGENT_MODEL_ENDPOINT', 'AGENT_MODEL_TOKEN'])
+        config.disableMany(['AGENT_MODEL', 'AGENT_MODEL_TOKEN'])
         synthetic([
           '[+] same-workspace mode selected',
-          '[+] AGENT_MODEL_ENDPOINT commented out (will use DATABRICKS_HOST at runtime)',
+          '[+] AGENT_MODEL commented out (will use DATABRICKS_HOST at runtime)',
           '[+] AGENT_MODEL_TOKEN commented out',
           '[+] ready',
         ])
@@ -1649,7 +1649,7 @@ print(f'[+] {func_count} function(s) + {proc_count} procedure(s) ready in {spec}
   model: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import os, urllib.request, json, ssl, time
-endpoint = os.environ.get('AGENT_MODEL_ENDPOINT','').strip()
+endpoint = os.environ.get('AGENT_MODEL','').strip()
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
 if not endpoint: endpoint = host + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
 token = (os.environ.get('AGENT_MODEL_TOKEN','') or os.environ.get('DATABRICKS_TOKEN','')).strip()
@@ -2085,7 +2085,7 @@ app.get('/api/gen/status', (_req, res) => {
     for (const { key, value } of entries) env[key] = value
 
     const modelReady = !!(
-      (env.AGENT_MODEL_ENDPOINT && env.AGENT_MODEL_ENDPOINT.trim()) ||
+      (env.AGENT_MODEL && env.AGENT_MODEL.trim()) ||
       (env.DATABRICKS_HOST && env.DATABRICKS_HOST.trim())
     )
 
@@ -2348,7 +2348,7 @@ app.get('/api/gen/routine-status', (_req, res) => {
     for (const { key, value } of entries) env[key] = value
 
     const modelReady = !!(
-      (env.AGENT_MODEL_ENDPOINT && env.AGENT_MODEL_ENDPOINT.trim()) ||
+      (env.AGENT_MODEL && env.AGENT_MODEL.trim()) ||
       (env.DATABRICKS_HOST && env.DATABRICKS_HOST.trim())
     )
 

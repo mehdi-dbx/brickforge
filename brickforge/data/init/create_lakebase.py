@@ -63,7 +63,7 @@ def _wait_for_instance(name: str, timeout: int = 600) -> bool:
 
 def _update_env(key: str, value: str) -> None:
     """Write key=value to .env.local (replace if exists, append if not)."""
-    env_path = ROOT / ".env.local"
+    env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
     lines = env_path.read_text().splitlines() if env_path.exists() else []
     lines = [ln for ln in lines if not ln.strip().startswith(f"{key}=") and not ln.strip().startswith(f"#{key}=")]
     lines.append(f"{key}={value}")

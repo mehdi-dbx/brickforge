@@ -3,7 +3,6 @@ CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.border_terminal_details(
 )
 RETURNS TABLE(terminal_id STRING, status STRING, terminal_count LONG)
 LANGUAGE SQL
-SQL SECURITY INVOKER
 RETURN
     SELECT terminal_id, status, NULL AS terminal_count
     FROM __SCHEMA_QUALIFIED__.border_terminals

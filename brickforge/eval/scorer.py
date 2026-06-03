@@ -1,13 +1,13 @@
 """Custom MLflow scorer: cites_regulation_precisely.
 
-Uses the external FE workspace endpoint (databricks-claude-sonnet-4-6) as LLM judge.
-No personal Anthropic token consumed — uses AGENT_MODEL_ENDPOINT + AGENT_MODEL_TOKEN
-from .env.local, following the cross-workspace endpoint pattern.
+Uses the Databricks SDK to call the model endpoint as LLM judge.
+Reads model name from AGENT_MODEL env var.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -17,43 +17,38 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
-import requests
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 from mlflow.genai.scorers import scorer
 
-# ── Model endpoint — same-workspace fallback ─────────────────────────────────
-_ENDPOINT_URL = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
-_DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
+# ── Model — resolved once at import ──────────────────────────────────────────
+_MODEL = os.environ.get("AGENT_MODEL", "").strip() or "databricks-claude-sonnet-4-6"
+# Extract endpoint name from URL if needed
+if _MODEL.startswith("http://") or _MODEL.startswith("https://"):
+    _m = re.search(r"/serving-endpoints/([^/]+)/invocations", _MODEL)
+    if _m:
+        _MODEL = _m.group(1)
 
-if not _ENDPOINT_URL:
-    if not _DATABRICKS_HOST:
-        raise EnvironmentError("AGENT_MODEL_ENDPOINT not set and DATABRICKS_HOST not set")
-    _ENDPOINT_URL = f"{_DATABRICKS_HOST}/serving-endpoints/databricks-claude-sonnet-4-6/invocations"
+_ws: WorkspaceClient | None = None
 
-# Use AGENT_MODEL_TOKEN for cross-workspace; fall back to DATABRICKS_TOKEN for same-workspace
-_ENDPOINT_TOKEN = (
-    os.environ.get("AGENT_MODEL_TOKEN", "").strip()
-    or os.environ.get("DATABRICKS_TOKEN", "").strip()
-)
-if not _ENDPOINT_TOKEN:
-    raise EnvironmentError("No auth token found — set AGENT_MODEL_TOKEN or DATABRICKS_TOKEN")
 
-\
+def _get_client() -> WorkspaceClient:
+    global _ws
+    if _ws is None:
+        _ws = WorkspaceClient()
+    return _ws
+
 
 def _call_judge(prompt: str) -> tuple[float, str]:
-    """Call external FE endpoint as LLM judge. Returns (score, justification)."""
+    """Call model endpoint as LLM judge via SDK. Returns (score, justification)."""
     try:
-        resp = requests.post(
-            _ENDPOINT_URL,
-            headers={
-                "Authorization": f"Bearer {_ENDPOINT_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            json={"messages": [{"role": "user", "content": prompt}]},
-            timeout=30,
+        w = _get_client()
+        resp = w.serving_endpoints.query(
+            name=_MODEL,
+            messages=[ChatMessage(role=ChatMessageRole.USER, content=prompt)],
+            max_tokens=1024,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = (resp.choices[0].message.content or "").strip()  # type: ignore[union-attr]
         lines = text.split("\n", 1)
         verdict = lines[0].strip().upper()
         justification = lines[1].strip() if len(lines) > 1 else text
