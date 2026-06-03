@@ -34,6 +34,7 @@ export function DataView() {
   const [mode, setMode] = useState<DataMode>('tables')
   const [tables, setTables] = useState<DynTable[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingExisting, setLoadingExisting] = useState(true)
   const [error, setError] = useState('')
   const [clearing, setClearing] = useState(false)
   const [useDefault, setUseDefault] = useState(true)
@@ -67,6 +68,7 @@ export function DataView() {
       .catch(() => {})
     fetchTables()
     // Fetch existing UC tables
+    setLoadingExisting(true)
     fetch('/api/setup/schema-tables')
       .then(r => r.json())
       .then(data => {
@@ -78,6 +80,7 @@ export function DataView() {
         setExistingTables(ucTables)
       })
       .catch(() => {})
+      .finally(() => setLoadingExisting(false))
   }, [])
 
   const toggleFlag = async (flag: 'USE_DEFAULT_DATA' | 'USE_GEN_DATA', value: boolean) => {
@@ -219,7 +222,7 @@ export function DataView() {
         <div className="max-w-5xl mx-auto">
 
         {/* Loading state */}
-        {loading && (
+        {(loading || loadingExisting) && (
           <div className="text-[12px] font-mono text-dbx-gray-400 animate-pulse">loading tables...</div>
         )}
 
@@ -229,7 +232,7 @@ export function DataView() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && allTables.length === 0 && (
+        {!loading && !loadingExisting && !error && allTables.length === 0 && (
           <div className="text-center py-16 animate-fade-in">
             <div className="text-dbx-gray-300 dark:text-dbx-gray-600 mb-3">
               <Database className="w-8 h-8 mx-auto" />
@@ -248,7 +251,7 @@ export function DataView() {
         )}
 
         {/* Table cards grid */}
-        {!loading && !error && allTables.length > 0 && (
+        {!loading && !loadingExisting && !error && allTables.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {allTables.map(table => (
               <div
