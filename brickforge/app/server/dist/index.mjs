@@ -30821,37 +30821,36 @@ const configRouter = (0, import_express$2.Router)();
 * Returns feature flags based on environment configuration
 */
 configRouter.get("/", (_req, res$2) => {
-	res$2.json({ features: { chatHistory: isDatabaseAvailable() } });
+	const features = { chatHistory: isDatabaseAvailable() };
+	for (const [key$1, val] of Object.entries(process.env)) if (key$1.startsWith("PROJECT_TOOL_")) {
+		const slug = key$1.replace("PROJECT_TOOL_", "").toLowerCase();
+		features[slug] = !!val?.trim() && val.trim().toLowerCase() !== "false";
+	}
+	if (features.voice && !process.env.OPENAI_API_KEY?.trim()) features.voice = false;
+	const logoUrl = process.env.PROJECT_LOGO_URL?.trim() || null;
+	const appName = process.env.DBX_APP_NAME?.trim() || "";
+	const appTitle = appName ? appName.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Agent Forge";
+	res$2.json({
+		features,
+		logoUrl,
+		appTitle
+	});
 });
 
 //#endregion
 //#region src/routes/tables.ts
 var import_express$1 = require_express();
-const ALLOWED_TABLES = [
-	"checkin_metrics",
-	"flights",
-	"checkin_agents",
-	"border_officers",
-	"border_terminals"
-];
-const EMPTY_TABLES = /* @__PURE__ */ new Set();
 const tablesRouter = (0, import_express$1.Router)();
 tablesRouter.use(authMiddleware);
 /**
 * GET /api/tables/:tableName - Proxy to backend /tables/:tableName
 * Backend has Databricks auth; avoids DATABRICKS_* env in Node (not available when deployed).
+* Backend validates table access against UC schema. No hardcoded allowlist here.
 * Returns { columns: string[], rows: any[][] }
 */
 tablesRouter.get("/:tableName", requireAuth, async (req$2, res$2) => {
 	const tableName = req$2.params.tableName;
-	if (!ALLOWED_TABLES.includes(tableName)) return res$2.status(400).json({
-		error: "Table not allowed",
-		allowed: [...ALLOWED_TABLES]
-	});
-	if (EMPTY_TABLES.has(tableName)) return res$2.json({
-		columns: [],
-		rows: []
-	});
+	if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) return res$2.status(400).json({ error: "Invalid table name" });
 	let base = (process.env.API_PROXY || "").replace(/\/invocations\/?$/, "") || "http://127.0.0.1:8000";
 	if (base.startsWith("http://localhost:") || base.startsWith("https://localhost:")) base = base.replace("localhost", "127.0.0.1");
 	const url$2 = `${base}/tables/${tableName}`;
@@ -45012,7 +45011,7 @@ app.post("/api/events/task-created", (req$2, res$2) => {
 		type: "task_created",
 		assigned_to_id: assignedToId,
 		agent_name: body.agent_name ?? assignedToId,
-		manager_name: body.manager_name ?? "Check-in Manager"
+		manager_name: body.manager_name ?? "Manager"
 	});
 	let sent = 0;
 	for (const { res: clientRes, assignedTo } of taskEventClients) if (!assignedTo || assignedTo === assignedToId) try {
@@ -45023,6 +45022,20 @@ app.post("/api/events/task-created", (req$2, res$2) => {
 	}
 	console.log(`[task-events] task_created assigned_to_id=${assignedToId} clients=${taskEventClients.length} sent=${sent}`);
 	res$2.status(204).send();
+});
+app.post("/api/files/upload", upload.single("file"), (req$2, res$2) => {
+	const file = req$2.file;
+	if (!file) return res$2.status(400).json({ error: "file required" });
+	if (!file.mimetype.startsWith("image/")) return res$2.status(400).json({ error: "only image files are accepted" });
+	if (file.size > 10 * 1024 * 1024) return res$2.status(413).json({ error: "image must be under 10 MB" });
+	const base64 = file.buffer.toString("base64");
+	const url$2 = `data:${file.mimetype};base64,${base64}`;
+	console.log(`[files/upload] ${file.originalname} ${file.mimetype} ${file.size} bytes`);
+	res$2.json({
+		url: url$2,
+		pathname: file.originalname || "upload",
+		contentType: file.mimetype
+	});
 });
 app.post("/api/audio/transcribe", upload.single("file"), async (req$2, res$2) => {
 	const file = req$2.file;

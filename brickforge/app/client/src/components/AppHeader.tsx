@@ -11,12 +11,10 @@ import { useAppConfig } from '@/contexts/AppConfigContext';
 import { useTheme } from 'next-themes';
 import { Sparkles } from 'lucide-react';
 
-const CUSTOMER_NAME = 'Airport Check-in Command Center';
-
 export function AppHeader() {
   const { session, loading } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
-  const { logoUrl } = useAppConfig();
+  const { logoUrl, appTitle } = useAppConfig();
 
   const displayName =
     session?.user?.preferredUsername ||
@@ -39,7 +37,7 @@ export function AppHeader() {
       </div>
       <div className="flex flex-1 items-center justify-center px-4">
         <span className="font-bold text-muted-foreground text-lg">
-          {CUSTOMER_NAME}
+          {appTitle}
         </span>
       </div>
       <div className="flex items-center gap-2">
