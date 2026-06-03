@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-06-02T23:10:55.527953",
+  "routines": [
+    {
+      "name": "lookup_products_en_by_id",
+      "type": "function",
+      "description": "Looks up a product in products_en by id.",
+      "parameters": [
+        {
+          "name": "id",
+          "sql_type": "STRING"
+        }
+      ],
+      "tables_referenced": [
+        "products_en"
+      ],
+      "instructions": "Return SELECT * FROM products_en WHERE products_en.id = id."
+    }
+  ]
+}

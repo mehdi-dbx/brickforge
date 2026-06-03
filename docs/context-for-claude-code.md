@@ -1,6 +1,6 @@
 # BrickForge -- Context for Claude Code
 
-> Last updated: 2026-06-01
+> Last updated: 2026-06-03
 
 ## What this project is
 
@@ -104,7 +104,7 @@ brickforge/
     package.json       # npm workspaces monorepo
   tools/
     sql_executor.py    # Shared SQL execution (warehouse, query, format)
-    tool_factory.py    # Dynamic tool loading from config
+    tool_factory.py    # Dynamic tool loading from config + discover_uc_function_tools()
     ka_factory.py      # KA endpoint tool builder
     api_factory.py     # REST API tool builder
     a2a_factory.py     # Agent-to-agent tool builder
@@ -286,14 +286,25 @@ data/
   gen/               # Synthetic data generation (LLM-based)
     csv/             # Generated CSVs
     init/            # Generated DDL SQL
+    func/            # Generated UC function SQL files
     manifest.json    # Tracks generated tables
+    routine_manifest.json  # Tracks generated routines (functions/procedures)
     wizard-state.json
-    generate_tables.py  # CLI orchestrator
+    generate_tables.py  # CLI orchestrator for table generation
+    generate_routines.py  # CLI orchestrator for routine generation (with self-healing loop)
     schema_generator.py # Domain -> table schemas via LLM
     data_generator.py   # Schema -> synthetic rows via LLM
+    routine_schema_generator.py  # Table context -> routine specs via LLM
+    routine_sql_generator.py     # Routine specs -> Databricks SQL (hardened prompts + sanitizer)
+    routine_writer.py   # Write SQL files from generated routines
+    llm_client.py    # LLM client via WorkspaceClient().serving_endpoints.query()
+    databricks_sql_reference.md  # Compact Databricks SQL spec (auto-growing via learning loop)
   init/              # Python orchestrators
-    create_all_assets.py
+    create_all_assets.py      # Master orchestrator: schema -> tables -> genie -> functions -> procedures -> lakebase -> verify
     create_catalog_schema.py
+    create_genie_space.py     # Creates Genie space, appends to PROJECT_GENIE_SPACES in .env.local
+    create_all_functions.py   # Provisions all SQL functions from data/default/func/ + data/gen/func/
+    create_all_procedures.py  # Provisions all stored procedures
     create_lakebase.py
     create_mlflow_experiment.py
   py/                # Shared utilities
@@ -303,6 +314,42 @@ data/
 Data source flags in `.env.local`:
 - `USE_DEFAULT_DATA=true|false` -- include default tables
 - `USE_GEN_DATA=true|false` -- include generated tables
+
+## Robust SQL generation (5-layer defense)
+
+The routines wizard generates UC functions and stored procedures via LLM. Databricks SQL has strict syntax rules the LLM doesn't know natively. A 5-layer defense system prevents and auto-corrects SQL errors:
+
+| Layer | Name | Where | What |
+|-------|------|-------|------|
+| 0 | Hardened prompt | `routine_sql_generator.py` | "You write Databricks SQL only. Be minimalist. No exotic features." + explicit ban list |
+| 1 | Knowledge | `databricks_sql_reference.md` | Compact spec loaded into every LLM call. Auto-grows via Layer 4 |
+| 2 | Sanitizer | `_sanitize_sql()` in `routine_sql_generator.py` | Auto-fixes: strips SQL SECURITY INVOKER, fixes LIMIT params, reorders DEFAULT params, adds missing LANGUAGE SQL |
+| 3 | Self-healing | `_self_heal()` in `generate_routines.py` | On provision failure: capture error -> LLM corrects SQL -> sanitize -> retry (max 2) |
+| 4 | Learning | `_learn_constraint()` in `generate_routines.py` | On successful self-heal: append new constraint to `databricks_sql_reference.md` |
+
+Design doc: `docs/plan/robust-sql-generation.md`
+
+## UC function tool discovery
+
+`discover_uc_function_tools()` in `tools/tool_factory.py` reads `PROJECT_FUNCTIONS` env var (comma-separated function names), fetches UC metadata via `w.functions.get()`, and creates `sql_read` tools the agent can call. SQL pattern: `SELECT * FROM catalog.schema.func(params)`.
+
+After provisioning routines, `generate_routines.py` auto-appends function names to `PROJECT_FUNCTIONS` in `.env.local`. The deploy pipeline syncs all `PROJECT_*` env vars to the deployed app via `sync_databricks_yml_from_env.py`.
+
+## Env var conventions
+
+| Var | Format | Purpose |
+|-----|--------|---------|
+| `AGENT_MODEL` | endpoint name | Foundation Model API endpoint (e.g. `databricks-claude-sonnet-4-6`) |
+| `PROJECT_UNITY_CATALOG_SCHEMA` | `catalog.schema` | Target UC schema for all assets |
+| `PROJECT_GENIE_SPACES` | `id1,id2,id3` | Comma-separated Genie space IDs |
+| `PROJECT_FUNCTIONS` | `func1,func2` | Comma-separated UC function names |
+| `PROJECT_KA_*` | varies | Knowledge Assistant config (per KA) |
+| `PROJECT_TOOL_MEMORY` | `true/false` | Toggle Lakebase memory for agent |
+| `LAKEBASE_INSTANCE_NAME` | instance name | Lakebase instance for agent memory |
+| `MLFLOW_EXPERIMENT_ID` | experiment ID | MLflow experiment for eval |
+| `ENV_FILE` | absolute path | Points to correct .env.local (used by all init scripts) |
+
+All `PROJECT_*` vars are synced to the deployed Databricks App via `deploy/sync_databricks_yml_from_env.py`.
 
 ## Chat UI (agent app frontend)
 
@@ -351,7 +398,7 @@ cp -r dist/* ../../brickforge/static/
 ## Testing
 
 - **Unit tests**: `tests/test_phase1.py` through `test_phase8.py` (81+ tests)
-- **E2E**: Playwright (configured in `brickforge/app/`)
+- **E2E / UI testing**: Playwright MCP (`/play` skill) -- browser automation via `browser_evaluate`, `browser_click`, `browser_fill_form`, `browser_wait_for`. Screenshots are last resort (context-heavy). Prefer `browser_evaluate` with targeted JS selectors for state checks.
 - **Eval**: `eval/run_eval.py` -- MLflow GenAI eval with custom LLM judge scorer
 
 ## Key files for common tasks
@@ -362,6 +409,9 @@ cp -r dist/* ../../brickforge/static/
 | Add a test for a block | `brickforge/routes/setup.py` (TEST_SCRIPTS dict) |
 | Add an agent tool | `brickforge/tools/` + `brickforge/agent/agent.py` (tool wiring) |
 | Add seed data | `brickforge/data/default/csv/` + `data/default/init/` (DDL SQL) |
+| Add UC functions | `brickforge/data/default/func/` (SQL) or generate via routines wizard |
+| Change SQL generation | `brickforge/data/gen/routine_sql_generator.py` (prompts + sanitizer) |
+| Fix SQL syntax issues | `brickforge/data/gen/databricks_sql_reference.md` (add constraints) |
 | Change deploy behavior | `brickforge/deploy/deploy_agent_app.py` |
 | Change bridge auth | `brickforge/scripts/connect.sh` |
 | Change chat UI | `brickforge/app/client/src/` + rebuild |
@@ -382,17 +432,18 @@ cp -r dist/* ../../brickforge/static/
 
 ## EC2 dev box
 
-See `doc/plan/ec2-devbox.md` for reconnect runbook (instance ID, region, SSH key, IP ACL management).
+See `docs/plan/ec2-devbox.md` for reconnect runbook (instance ID, region, SSH key, IP ACL management).
 
 ## Design docs
 
 | Doc | Purpose |
 |-----|---------|
-| `doc/plan/saas-plan.md` | Full SaaS architecture blueprint |
-| `doc/plan/brickforge-software.html` | Visual HTML blueprint (open in browser) |
-| `doc/plan/deploy-logbook.md` | Build/deploy history with all walls and fixes |
-| `doc/plan/next-steps-20260526.md` | Pending E2E tests |
-| `doc/plan/python-backend-rewrite.md` | Express -> FastAPI rewrite plan |
-| `doc/plan/forge-package-self-contained.md` | Self-contained package restructure plan |
-| `doc/plan/ec2-devbox.md` | EC2 devbox reconnect runbook |
-| `doc/guide/brickforge-guide.md` | User-facing guide |
+| `docs/plan/saas-plan.md` | Full SaaS architecture blueprint |
+| `docs/plan/brickforge-software.html` | Visual HTML blueprint (open in browser) |
+| `docs/plan/deploy-logbook.md` | Build/deploy history with all walls and fixes |
+| `docs/plan/next-steps-20260526.md` | Pending E2E tests |
+| `docs/plan/python-backend-rewrite.md` | Express -> FastAPI rewrite plan |
+| `docs/plan/forge-package-self-contained.md` | Self-contained package restructure plan |
+| `docs/plan/ec2-devbox.md` | EC2 devbox reconnect runbook |
+| `docs/plan/robust-sql-generation.md` | 5-layer SQL generation defense system |
+| `docs/guide/brickforge-guide.md` | User-facing guide |
