@@ -316,6 +316,10 @@ echo "[3/4] done"
 echo "[4/4] starting agent..."
 export PYTHONPATH="$(pwd)"
 export CONFIG_FILE="$(pwd)/config.json"
+# Flatten config.json to shell exports so ALL processes (Python, Node workers) inherit them
+python lib/export_config_env.py
+. /tmp/_env_exports.sh
+rm -f /tmp/_env_exports.sh
 exec python -c "from agent.start_server import main; main()"
 """
     def _upload_text(path: str, content: str):

@@ -17,6 +17,7 @@ if _config_file and Path(_config_file).exists():
         _flat.pop("DATABRICKS_TOKEN", None)
         _flat.pop("DATABRICKS_CONFIG_PROFILE", None)
     os.environ.update(_flat)
+    print(f"[+] Loaded {len(_flat)} env vars from config.json (DBX_APP_NAME={_flat.get('DBX_APP_NAME', 'NOT SET')})")
 else:
     # Fallback: load .env.local if present (legacy)
     try:
