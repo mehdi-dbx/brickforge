@@ -735,9 +735,11 @@ except Exception as e:
 """.strip()
 
     elif step == "bricks":
-        if key and key.startswith("PROJECT_BRICK_"):
+        if key and key.startswith("PROJECT_BRICK_") and key != "PROJECT_BRICK_KA":
             val = config.get(key) or "false"
-            label = key.replace("PROJECT_BRICK_", "").lower()
+            suffix = key.replace("PROJECT_BRICK_", "")
+            meta = BRICKS_REGISTRY.get(suffix)
+            label = meta["label"] if meta else suffix.lower()
             enabled = val.strip().lower() not in ("false", "0", "")
             status = "enabled" if enabled else "disabled"
             return {"ok": True, "message": f"{label}: {status}"}
