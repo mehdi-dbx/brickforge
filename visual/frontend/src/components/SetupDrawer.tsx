@@ -2751,7 +2751,7 @@ export function SetupDrawer({
         return (
           <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
             <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 p-4 animate-slide-up">
-              <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">instance</div>
+              <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">{activeStep === 'genie' ? 'space' : 'instance'}</div>
               <div className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono mb-1">
                 {inst?.label || selectedInstanceKey}
               </div>
