@@ -119,19 +119,19 @@ def build_sub_env(config: ConfigProvider, extra_env: dict[str, str] | None = Non
     from brickforge import PACKAGE_ROOT, PROJECT_ROOT, USER_DIR
 
     env = dict(os.environ)
-    for entry in config.list():
-        env[entry["key"]] = entry["value"]
+    # Flatten structured config to flat env vars
+    env.update(config.flatten())
     if extra_env:
         env.update(extra_env)
     # PYTHONPATH: ensure subprocess can import from brickforge/ (tools, data, agent, etc.)
     env["PYTHONPATH"] = str(PACKAGE_ROOT)
     # BRICKFORGE_ROOT: absolute path to brickforge/ for file I/O in scripts
     env["BRICKFORGE_ROOT"] = str(PACKAGE_ROOT)
-    # ENV_FILE: absolute path to .env.local
+    # CONFIG_FILE: absolute path to config.json (for scripts that write back)
     if (PROJECT_ROOT / "pyproject.toml").exists():
-        env["ENV_FILE"] = str(PROJECT_ROOT / ".env.local")  # editable: repo root
+        env["CONFIG_FILE"] = str(PROJECT_ROOT / "config.json")  # editable: repo root
     else:
-        env["ENV_FILE"] = str(USER_DIR / ".env.local")  # pip: ~/.brickforge/
+        env["CONFIG_FILE"] = str(USER_DIR / "config.json")  # pip: ~/.brickforge/
     # If PAT token is set, remove SP OAuth vars to avoid SDK auth conflict
     if env.get("DATABRICKS_TOKEN") and env.get("DATABRICKS_CLIENT_ID"):
         env.pop("DATABRICKS_CLIENT_ID", None)

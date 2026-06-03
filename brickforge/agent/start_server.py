@@ -2,12 +2,31 @@ import os
 import subprocess
 from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import HTTPException
 from mlflow.genai.agent_server import AgentServer, setup_mlflow_git_based_version_tracking
 
-# Load env vars from .env then .env.local before importing the agent for proper auth
-load_dotenv(dotenv_path=os.environ.get("ENV_FILE", ".env.local"), override=True)
+# Load config.json and flatten to env vars (for deployed agent boot)
+_config_file = os.environ.get("CONFIG_FILE", "")
+if _config_file and Path(_config_file).exists():
+    import json as _json
+    from lib.config_provider import flatten as _flatten
+    _cfg = _json.loads(Path(_config_file).read_text())
+    _flat = _flatten(_cfg)
+    # On deployed apps, SP OAuth (CLIENT_ID) is injected by runtime -- don't override with PAT
+    if os.environ.get("DATABRICKS_CLIENT_ID"):
+        _flat.pop("DATABRICKS_TOKEN", None)
+        _flat.pop("DATABRICKS_CONFIG_PROFILE", None)
+    os.environ.update(_flat)
+else:
+    # Fallback: load .env.local if present (legacy)
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=os.environ.get("ENV_FILE", ".env.local"), override=True)
+    except ImportError:
+        pass
+
+print("[~] Note: UC permission grants may still be applying from the Setup App.")
+print("    If you see INSUFFICIENT_PERMISSIONS errors, wait 30s and retry.\n")
 
 # Need to import the agent to register the functions with the server
 import agent.agent  # noqa: E402

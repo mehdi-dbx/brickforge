@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 AGENT_APP_DIRS = [
     "agent",
     "tools",
+    "lib",
     "data/demo",
     "data/init",
     "data/gen",
@@ -63,7 +64,7 @@ def _should_exclude(rel_path: Path) -> bool:
 # ── app.yaml generation ──────────────────────────────────────────────────────
 
 AGENT_APP_YAML_TEMPLATE = """\
-command: ["bash", "-c", "pip install . && node app/server/dist/index.mjs"]
+command: ["bash", "start.sh"]
 
 env:
   - name: MLFLOW_TRACKING_URI
@@ -78,33 +79,16 @@ env:
     value: "http://127.0.0.1:3000"
   - name: CHAT_PROXY_TIMEOUT_SECONDS
     value: "300"
-{extra_env}"""
+"""
 
 
 def generate_app_yaml(config: dict) -> str:
-    """Generate Agent App app.yaml from project config dict."""
-    env_lines = []
-    # Dynamic env vars from config
-    env_map = {
-        "AGENT_MODEL": config.get("AGENT_MODEL", ""),
-        "PROJECT_UNITY_CATALOG_SCHEMA": config.get("PROJECT_UNITY_CATALOG_SCHEMA", ""),
-        "DATABRICKS_WAREHOUSE_ID": config.get("DATABRICKS_WAREHOUSE_ID", ""),
-    }
-    # Add all PROJECT_* env vars (GENIE_SPACES, KA, VS, MCP, FUNCTIONS, etc.)
-    for key, value in sorted(config.items()):
-        if key.startswith("PROJECT_") and value:
-            env_map[key] = value
-        if key == "LAKEBASE_INSTANCE_NAME" and value:
-            env_map[key] = value
-        if key == "MLFLOW_EXPERIMENT_ID" and value:
-            env_map[key] = value
+    """Generate Agent App app.yaml -- runtime constants only.
 
-    for key, value in sorted(env_map.items()):
-        if value:
-            env_lines.append(f'  - name: {key}\n    value: "{value}"')
-
-    extra = "\n".join(env_lines)
-    return AGENT_APP_YAML_TEMPLATE.format(extra_env=extra)
+    User config lives in config.json (shipped as file in bundle).
+    Agent reads config.json at boot via start_server.py.
+    """
+    return AGENT_APP_YAML_TEMPLATE
 
 
 # ── databricks.yml generation ────────────────────────────────────────────────
@@ -134,14 +118,23 @@ targets:
 
 
 def generate_databricks_yml(config: dict) -> str:
-    """Generate databricks.yml from project config dict."""
-    app_name = config.get("DBX_APP_NAME", "brickforge-agent")
-    warehouse_id = config.get("DATABRICKS_WAREHOUSE_ID", "PLACEHOLDER")
+    """Generate databricks.yml from structured config dict."""
+    # Support both structured (config.json) and flat (legacy) formats
+    if "workspace" in config:
+        # Structured config.json
+        app_name = (config.get("app") or {}).get("name", "brickforge-agent")
+        warehouse_id = (config.get("workspace") or {}).get("warehouse_id", "PLACEHOLDER")
+        genie_ids = (config.get("tools") or {}).get("genie_spaces", [])
+        endpoint = (config.get("model") or {}).get("endpoint", "")
+    else:
+        # Legacy flat dict
+        app_name = config.get("DBX_APP_NAME", "brickforge-agent")
+        warehouse_id = config.get("DATABRICKS_WAREHOUSE_ID", "PLACEHOLDER")
+        raw_genie = config.get("PROJECT_GENIE_SPACES", "")
+        genie_ids = [s.strip() for s in raw_genie.split(",") if s.strip()] if raw_genie else []
+        endpoint = config.get("AGENT_MODEL", "")
 
-    # Genie space resources from PROJECT_GENIE_SPACES (comma-separated)
     genie_lines = ""
-    raw_genie = config.get("PROJECT_GENIE_SPACES", "")
-    genie_ids = [s.strip() for s in raw_genie.split(",") if s.strip()] if raw_genie else []
     for i, space_id in enumerate(genie_ids, 1):
         genie_lines += f"""\
         - name: 'genie_space_{i}'
@@ -150,9 +143,7 @@ def generate_databricks_yml(config: dict) -> str:
             permission: 'CAN_RUN'
 """
 
-    # Serving endpoint resources
     endpoint_lines = ""
-    endpoint = config.get("AGENT_MODEL", "")
     if endpoint and not endpoint.startswith("http"):
         endpoint_lines += f"""\
         - name: 'serving_endpoint'
@@ -244,11 +235,14 @@ def build_agent_bundle(config: dict) -> bytes:
                 zf.writestr("requirements.txt", "\n".join(deps) + "\n")
                 print(f"  [!] requirements.txt (unpinned -- slow install)")
 
-        # Generate and add app.yaml
+        # Ship config.json as a file (agent reads it at boot)
+        zf.writestr("config.json", json.dumps(config, indent=2) + "\n")
+
+        # Generate and add app.yaml (minimal -- no user env vars)
         app_yaml = generate_app_yaml(config)
         zf.writestr("app.yaml", app_yaml)
 
-        # Generate and add databricks.yml
+        # Generate and add databricks.yml (resource permissions only)
         dbx_yml = generate_databricks_yml(config)
         zf.writestr("databricks.yml", dbx_yml)
 
@@ -264,7 +258,11 @@ def deploy(config: dict) -> dict:
     """
     w = WorkspaceClient()
     me = w.current_user.me()
-    app_name = config.get("DBX_APP_NAME", "brickforge-agent")
+    # Support structured (config.json) or flat (legacy) config
+    if "app" in config:
+        app_name = (config.get("app") or {}).get("name", "brickforge-agent")
+    else:
+        app_name = config.get("DBX_APP_NAME", "brickforge-agent")
 
     print(f"[~] Building agent bundle...")
     bundle_zip = build_agent_bundle(config)
@@ -316,6 +314,8 @@ else
 fi
 echo "[3/4] done"
 echo "[4/4] starting agent..."
+export PYTHONPATH="$(pwd)"
+export CONFIG_FILE="$(pwd)/config.json"
 exec python -c "from agent.start_server import main; main()"
 """
     def _upload_text(path: str, content: str):
@@ -323,14 +323,8 @@ exec python -c "from agent.start_server import main; main()"
         w.workspace.import_(path=path, content=b64_content, format=ImportFormat.RAW, overwrite=True)
 
     _upload_text(f"{workspace_dir}/start.sh", startup_script)
-
-    # Generate app.yaml that calls the startup script
-    app_yaml_for_deploy = generate_app_yaml(config).replace(
-        'command: ["bash", "-c", "pip install . && node app/server/dist/index.mjs"]',
-        'command: ["bash", "start.sh"]',
-    )
-    _upload_text(f"{workspace_dir}/app.yaml", app_yaml_for_deploy)
-    print(f"[+] app.yaml + start.sh uploaded")
+    _upload_text(f"{workspace_dir}/app.yaml", generate_app_yaml(config))
+    print(f"[+] app.yaml + start.sh + config.json uploaded")
 
     # Create or get the app
     print(f"[~] Creating/checking app '{app_name}'...")

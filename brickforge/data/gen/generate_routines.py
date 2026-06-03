@@ -263,27 +263,42 @@ def mode_provision_gen() -> None:
 
     print(f"[+] Provisioned {func_count} function(s) + {proc_count} procedure(s)")
 
-    # Auto-register provisioned functions in PROJECT_FUNCTIONS
+    # Auto-register provisioned functions in config
     provisioned_names = [f.stem for f in func_files + proc_files]
     if provisioned_names:
-        existing = os.environ.get("PROJECT_FUNCTIONS", "").strip()
-        existing_set = set(existing.split(",")) if existing else set()
-        existing_set.update(provisioned_names)
-        new_value = ",".join(sorted(existing_set - {""}))
-        env_file = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
-        try:
-            # Read, update or append, write back
-            content = env_file.read_text() if env_file.exists() else ""
-            import re
-            if re.search(r'^PROJECT_FUNCTIONS=', content, re.MULTILINE):
-                content = re.sub(r'^PROJECT_FUNCTIONS=.*$', f'PROJECT_FUNCTIONS={new_value}', content, flags=re.MULTILINE)
-            else:
-                content += f"\nPROJECT_FUNCTIONS={new_value}\n"
-            env_file.write_text(content)
-            os.environ["PROJECT_FUNCTIONS"] = new_value
-            print(f"[+] PROJECT_FUNCTIONS = {new_value}")
-        except Exception as e:
-            print(f"[~] Could not update PROJECT_FUNCTIONS: {e}")
+        config_file = os.environ.get("CONFIG_FILE", "")
+        if config_file:
+            try:
+                from lib.config_json import read_config, write_config
+                config = read_config()
+                funcs = config.setdefault("tools", {}).setdefault("functions", [])
+                for name in provisioned_names:
+                    if name not in funcs:
+                        funcs.append(name)
+                write_config(config)
+                os.environ["PROJECT_FUNCTIONS"] = ",".join(funcs)
+                print(f"[+] functions = {funcs}")
+            except Exception as e:
+                print(f"[~] Could not update config.json: {e}")
+        else:
+            # Fallback: write to .env.local (legacy)
+            existing = os.environ.get("PROJECT_FUNCTIONS", "").strip()
+            existing_set = set(existing.split(",")) if existing else set()
+            existing_set.update(provisioned_names)
+            new_value = ",".join(sorted(existing_set - {""}))
+            env_file = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
+            try:
+                content = env_file.read_text() if env_file.exists() else ""
+                import re
+                if re.search(r'^PROJECT_FUNCTIONS=', content, re.MULTILINE):
+                    content = re.sub(r'^PROJECT_FUNCTIONS=.*$', f'PROJECT_FUNCTIONS={new_value}', content, flags=re.MULTILINE)
+                else:
+                    content += f"\nPROJECT_FUNCTIONS={new_value}\n"
+                env_file.write_text(content)
+                os.environ["PROJECT_FUNCTIONS"] = new_value
+                print(f"[+] PROJECT_FUNCTIONS = {new_value}")
+            except Exception as e:
+                print(f"[~] Could not update PROJECT_FUNCTIONS: {e}")
 
     _emit_result({"ok": True, "functions": func_count, "procedures": proc_count})
 

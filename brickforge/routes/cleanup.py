@@ -99,7 +99,7 @@ import os, re, json, sys
 
 w = WorkspaceClient()
 ids = {json.dumps(ids)}
-env_file = Path('.env.local')
+config_path = os.environ.get('CONFIG_FILE', '')
 
 for item_id in ids:
     cat, name = item_id.split(':', 1)
@@ -117,19 +117,29 @@ for item_id in ids:
             w.functions.delete(name=name)
             print(f'[+] deleted routine: {{name}}')
         elif cat == 'env':
-            # Comment out in .env.local
-            if env_file.exists():
-                raw = env_file.read_text()
-                lines = []
-                for line in raw.split('\\n'):
-                    trimmed = line.strip()
-                    if trimmed.startswith('#'): lines.append(line); continue
-                    eq = trimmed.find('=')
-                    if eq >= 0 and trimmed[:eq].strip() == name:
-                        lines.append('#' + line)
-                    else:
-                        lines.append(line)
-                env_file.write_text('\\n'.join(lines))
+            # Disable in config.json
+            config_file = os.environ.get('CONFIG_FILE', '')
+            if config_file:
+                from lib.config_json import read_config, write_config
+                cfg = read_config()
+                # Try to disable via toggle pattern (multi-instance)
+                disabled = False
+                for section in ['ka', 'mcp', 'api', 'a2a']:
+                    tools = cfg.get('tools', {{}}).get(section, {{}})
+                    for slug, entry in tools.items():
+                        if isinstance(entry, dict):
+                            flat_key = name
+                            if flat_key.startswith('PROJECT_'):
+                                # Check if this slug matches
+                                if slug in flat_key:
+                                    entry['enabled'] = False
+                                    disabled = True
+                                    break
+                    if disabled: break
+                if not disabled:
+                    # Scalar: set to None
+                    pass
+                write_config(cfg)
             print(f'[+] disabled env: {{name}}')
         else:
             print(f'[~] unknown category: {{cat}}')

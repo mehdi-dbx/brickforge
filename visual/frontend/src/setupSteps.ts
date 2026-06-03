@@ -154,20 +154,10 @@ export const SETUP_STEPS: SetupStep[] = [
     ],
   },
   {
-    id: 'grants',
-    label: 'App Grants',
-    title: 'Run All Grants',
-    help: 'Grants UC permissions to the Databricks App service principal so the deployed app can access tables, execute stored procedures, and use the SQL warehouse. Run this after deploying the app -- the service principal is created at deploy time.',
-    choices: [
-      { title: 'Run Grant Script', desc: 'Apply All UC Permissions Automatically',               action: 'exec-grants' },
-      { title: 'View Issues',      desc: 'See Which Grants Are Missing',                         action: 'cfg-grants' },
-    ],
-  },
-  {
     id: 'deploy',
     label: 'Deploy App',
     title: 'DBX App Name / Deploy',
-    help: 'Deploy the agent to Databricks Apps using the DAB bundle pipeline. Runs 7 stages: env validation, config sync (.env.local to databricks.yml), pre-flight checks (imports, bundle validate, model test), bundle deploy, service principal setup, UC grants, and app URL retrieval. Use "dry run" to validate without deploying.',
+    help: 'Deploy the agent app to Databricks. Bundles code + config.json, uploads, deploys, then automatically runs all UC grants (tables, functions, warehouse, endpoints, genie, lakebase) for the app service principal.',
     choices: [
       { title: 'Set App Name',   desc: 'Configure DBX_APP_NAME Before Deploying',                                       action: 'cfg-deploy-name' },
       { title: 'Deploy Now',     desc: 'Bundle Agent + Chat UI, Upload To Workspace, Deploy As Databricks App',         action: 'exec-deploy-agent' },

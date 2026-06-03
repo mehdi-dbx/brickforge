@@ -1288,9 +1288,11 @@ function NoMatches({ visible }: { visible: boolean }) {
   return <div className="text-[12px] text-dbx-gray-400 font-mono py-2">no matches</div>
 }
 
-function Tag({ color, children }: { color: 'green' | 'purple'; children: React.ReactNode }) {
+function Tag({ color, children }: { color: 'green' | 'purple' | 'blue'; children: React.ReactNode }) {
   const cls = color === 'green'
     ? 'bg-dbx-blue-bg dark:bg-dbx-green-bg/10 text-dbx-blue-dk dark:text-dbx-green border border-dbx-blue/20 dark:border-dbx-green/20'
+    : color === 'blue'
+    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
     : 'bg-dbx-red-bg dark:bg-dbx-red-bg-dk text-dbx-red dark:text-[#FF6B5A] border border-dbx-red/20'
   return <span className={`text-[10px] rounded-full px-2 py-0.5 font-mono font-medium ${cls}`}>{children}</span>
 }
@@ -2222,7 +2224,7 @@ export function SetupDrawer({
                 <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
               </div>
             )}
-            {activeStep === 'ka' && (
+            {activeStep === 'bricks' && (
               <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'ka' }))}

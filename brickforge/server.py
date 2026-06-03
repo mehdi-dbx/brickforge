@@ -19,16 +19,16 @@ from brickforge.routes.projects import router as projects_router
 from brickforge.lib.graph_builder import build_graph
 
 DIST_DIR = Path(__file__).resolve().parent / "static"
-# Config file: ~/.brickforge/.env.local (pip install) or repo/.env.local (editable)
+# Config file: ~/.brickforge/config.json (pip install) or repo/config.json (editable)
 if (PROJECT_ROOT / "pyproject.toml").exists():
-    ENV_FILE = PROJECT_ROOT / ".env.local"  # editable install: repo root
+    CONFIG_FILE = PROJECT_ROOT / "config.json"  # editable install: repo root
 else:
-    ENV_FILE = USER_DIR / ".env.local"  # pip install: ~/.brickforge/
+    CONFIG_FILE = USER_DIR / "config.json"  # pip install: ~/.brickforge/
 PORT = int(os.environ.get("DATABRICKS_APP_PORT") or os.environ.get("VISUAL_PORT") or 9000)
 FORGE_MODE = os.environ.get("FORGE_MODE") == "true" or os.environ.get("DATABRICKS_APP_PORT") is not None
 
 # Config provider -- default to local, overridden in lifespan for FORGE mode
-config: ConfigProvider = LocalConfigProvider(ENV_FILE)
+config: ConfigProvider = LocalConfigProvider(CONFIG_FILE)
 
 
 @asynccontextmanager
@@ -38,12 +38,12 @@ async def lifespan(app: FastAPI):
     if FORGE_MODE:
         config = ForgeConfigProvider()
         await config.init()
-        schema = config.get("PROJECT_UNITY_CATALOG_SCHEMA")
+        schema = config.get("workspace.unity_catalog_schema")
         print(f"[forge] ForgeConfigProvider initialized" + (f" (schema: {schema})" if schema else " (bootstrap phase)"))
     else:
-        config = LocalConfigProvider(ENV_FILE)
+        config = LocalConfigProvider(CONFIG_FILE)
 
-    mode = "FORGE (SaaS)" if FORGE_MODE else "LOCAL (.env.local)"
+    mode = "FORGE (SaaS)" if FORGE_MODE else f"LOCAL ({CONFIG_FILE})"
     print(f"[config] mode: {mode}")
     print(f"[visual] http://localhost:{PORT}")
     yield

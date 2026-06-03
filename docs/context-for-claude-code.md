@@ -1,6 +1,6 @@
 # BrickForge -- Context for Claude Code
 
-> Last updated: 2026-06-01
+> Last updated: 2026-06-03 (config.json migration complete)
 
 ## What this project is
 
@@ -84,7 +84,8 @@ brickforge/
     cleanup.py         # Resource discovery + deletion (SSE)
     projects.py        # UC Volume project CRUD
   lib/
-    config_provider.py # ConfigProvider base + LocalConfigProvider + ForgeConfigProvider
+    config_provider.py # ConfigProvider base + LocalConfigProvider + ForgeConfigProvider + flatten()
+    config_json.py     # Subprocess helpers: read_config(), write_config() via CONFIG_FILE env var
     env_utils.py       # build_sub_env(), parse_subprocess_error(), detect_cloud(), logging
     graph_builder.py   # DAG node/edge builder for React Flow visualization
     sse.py             # sse_line(), sse_done(), ExecLogger, stream_subprocess()
@@ -104,8 +105,8 @@ brickforge/
     package.json       # npm workspaces monorepo
   tools/
     sql_executor.py    # Shared SQL execution (warehouse, query, format)
-    tool_factory.py    # Dynamic tool loading from config
-    ka_factory.py      # KA endpoint tool builder
+    tool_factory.py    # Dynamic tool loading from config + discover_uc_function_tools()
+    ka_factory.py      # KA endpoint tool builder (reads PROJECT_KA_*, does NOT check brick toggles yet -- see #44)
     api_factory.py     # REST API tool builder
     a2a_factory.py     # Agent-to-agent tool builder
     generate_chart.py  # Chart generation tool
@@ -218,20 +219,70 @@ eventSource.onmessage = (e) => appendLine(e.data)
 
 ## Config system
 
+### config.json (single source of truth)
+
+All configuration lives in `config.json` -- one file, one format, one read path. Replaced flat `.env.local` (key=value) entirely.
+
+- **Local mode**: `~/.brickforge/config.json` (pip) or `PROJECT_ROOT/config.json` (editable install)
+- **Deployed mode**: `config.json` inside UC Volume zip (`current.forge.zip`) via ForgeConfigProvider
+- **Deploy transport**: `config.json` shipped as file in the deploy bundle. app.yaml has zero user env vars.
+- **Agent boot**: `start_server.py` reads `config.json`, calls `flatten()` -> `os.environ.update()` before agent init
+
+### JSON structure (top-level sections)
+
+```
+config.json
+├── version: 1
+├── workspace: {host, token, config_profile, refresh_token, token_endpoint, client_id, client_secret, warehouse_id, unity_catalog_schema}
+├── model: {endpoint, token}
+├── app: {name, mlflow_experiment_id}
+├── tools
+│   ├── genie_spaces: [array of IDs]
+│   ├── functions: [array of names]
+│   ├── vector_search: {index, endpoint}
+│   ├── ka: {SLUG: {endpoint, enabled}}
+│   ├── mcp: {SLUG: {url, header, enabled}}
+│   ├── api: {SLUG: {conn, url, method, path, desc, params, header, enabled}}
+│   └── a2a: {SLUG: {url, header, enabled}}
+├── features: {MEMORY/CHART/VOICE/VISION/PERSONAS: {enabled}}
+├── bricks: {KA/INFO_EXTRACTION/DOC_PARSING/TEXT_CLASSIFICATION: {enabled}}
+├── data: {use_demo_data, use_gen_data, stash_dir}
+├── lakebase: {instance_name, agent_memory_schema}
+├── env_store: {host, token, catalog_volume_path}
+├── genie_room: {name, description}
+└── branding: {logo_url, brandfetch_api_key}
+```
+
 ### ConfigProvider abstraction
 
-- `LocalConfigProvider` -- reads/writes `.env.local` file (key=value format)
-- `ForgeConfigProvider` -- reads/writes Databricks workspace secrets (for deployed Setup App)
-- API: `list()`, `get(key)`, `set(key, value)`, `set_many()`, `disable()`, `disable_many()`
-- Sensitive fields auto-detected and redacted in logs (TOKEN, SECRET, PASSWORD, PAT, API_KEY)
+- `LocalConfigProvider(config_file)` -- reads/writes `config.json` on disk
+- `ForgeConfigProvider` -- in-memory JSON, flushed to UC Volume as `config.json` in zip. Migrates legacy `config.env` on first read.
+- **Structured API**: `get("workspace.host")`, `set("workspace.host", val)`, `get_section("tools.ka")`
+- **Legacy API** (still works, routes use it): `set_many({"DATABRICKS_HOST": val})`, `list_by_prefix("PROJECT_KA_")`, `toggle(key)`, `delete_key(key)` -- internally maps flat env vars to JSON paths
+- `flatten()` -- converts structured JSON to flat env var dict (for subprocess injection and deploy)
+- Enable/disable: multi-instance tools have `"enabled": boolean` in JSON. Disabled entries preserved but omitted from `flatten()` output.
+- KA double-gate: `PROJECT_KA_<SLUG>` only emitted if both `bricks.KA.enabled` AND `tools.ka.<SLUG>.enabled`
 
 ### Subprocess environment
 
 `build_sub_env()` in `lib/env_utils.py` builds env dict for subprocesses:
-- All config values injected as env vars
-- `PYTHONPATH` set to PACKAGE_ROOT (so subprocess can `import tools`, `import data`, etc.)
-- `ENV_FILE` set to absolute path of .env.local
+- Calls `config.flatten()` to convert JSON -> flat env vars
+- `PYTHONPATH` set to PACKAGE_ROOT
+- `CONFIG_FILE` set to absolute path of `config.json` (for scripts that write back)
 - Auth conflict resolution: removes SP OAuth vars when PAT is present
+
+### Init script writeback
+
+Scripts that create resources and update config (run as subprocesses):
+- Read `CONFIG_FILE` env var -> `lib/config_json.py` helpers (`read_config()`, `write_config()`)
+- `create_genie_space.py`: appends to `tools.genie_spaces[]`
+- `generate_routines.py`: appends to `tools.functions[]`
+- `create_lakebase.py`: sets `lakebase.instance_name`
+- `create_mlflow_experiment.py`: sets `app.mlflow_experiment_id`
+
+### Migration from .env.local
+
+`env_local_to_config_json(env_file)` in `config_provider.py` -- one-time migration function. Parses flat .env.local, groups by prefix, builds structured JSON. Handles commented lines -> `enabled: false`.
 
 ## Bridge auth flow
 
@@ -240,7 +291,7 @@ eventSource.onmessage = (e) => appendLine(e.data)
 3. Script opens browser for OAuth PKCE flow (pure Python, no Databricks CLI)
 4. Token exchanged, PAT created (7-day TTL, reuse check), encrypted
 5. Browser redirected to Setup App with token in URL fragment
-6. Setup App decrypts and saves to `.env.local`
+6. Setup App decrypts and saves to `config.json` (workspace section)
 
 Key features:
 - Auto-prepend https:// to workspace URLs
@@ -256,13 +307,17 @@ Triggered by `exec-deploy-agent` action in setup panel:
    - Python source: agent/, tools/, data/, conf/, eval/
    - Pre-built chat UI: app/client/dist.tar.gz, app/server/dist.tar.gz
    - pyproject.toml + requirements.txt (160 pinned deps)
-   - Generated app.yaml + databricks.yml from user config
+   - `config.json` -- full structured config (shipped as file, NOT as app.yaml env vars)
+   - `app.yaml` -- minimal: startup command + 6 runtime constants only
+   - `databricks.yml` -- resource permissions (genie spaces, warehouse, serving endpoint)
 
 2. Upload to workspace via `w.workspace.import_(format=ImportFormat.RAW)`
 
-3. Create/get DBX App via `w.apps.create(app=App(name=..., description=...))`
+3. `start.sh` on DBX Apps compute: unzip bundle, install deps, `export CONFIG_FILE=./config.json`, start agent
 
-4. Deploy via `w.apps.deploy(app_name, app_deployment=AppDeployment(source_code_path=...))`
+4. `start_server.py` at boot: reads `config.json`, calls `flatten()` -> `os.environ.update()`, then starts MLflow AgentServer
+
+`sync_databricks_yml_from_env.py` (560 lines) is deprecated -- no longer needed since config travels as a file.
 
 5. On DBX Apps compute (start.sh):
    ```bash
@@ -286,14 +341,25 @@ data/
   gen/               # Synthetic data generation (LLM-based)
     csv/             # Generated CSVs
     init/            # Generated DDL SQL
+    func/            # Generated UC function SQL files
     manifest.json    # Tracks generated tables
+    routine_manifest.json  # Tracks generated routines (functions/procedures)
     wizard-state.json
-    generate_tables.py  # CLI orchestrator
+    generate_tables.py  # CLI orchestrator for table generation
+    generate_routines.py  # CLI orchestrator for routine generation (with self-healing loop)
     schema_generator.py # Domain -> table schemas via LLM
     data_generator.py   # Schema -> synthetic rows via LLM
+    routine_schema_generator.py  # Table context -> routine specs via LLM
+    routine_sql_generator.py     # Routine specs -> Databricks SQL (hardened prompts + sanitizer)
+    routine_writer.py   # Write SQL files from generated routines
+    llm_client.py    # LLM client via WorkspaceClient().serving_endpoints.query()
+    databricks_sql_reference.md  # Compact Databricks SQL spec (auto-growing via learning loop)
   init/              # Python orchestrators
-    create_all_assets.py
+    create_all_assets.py      # Master orchestrator: schema -> tables -> genie -> functions -> procedures -> lakebase -> verify
     create_catalog_schema.py
+    create_genie_space.py     # Creates Genie space, appends to PROJECT_GENIE_SPACES in config
+    create_all_functions.py   # Provisions all SQL functions from data/default/func/ + data/gen/func/
+    create_all_procedures.py  # Provisions all stored procedures
     create_lakebase.py
     create_mlflow_experiment.py
   py/                # Shared utilities
@@ -303,6 +369,31 @@ data/
 Data source flags in `.env.local`:
 - `USE_DEMO_DATA=true|false` -- include demo tables (backward compat: USE_DEFAULT_DATA also accepted)
 - `USE_GEN_DATA=true|false` -- include generated tables
+
+## Robust SQL generation (5-layer defense)
+
+The routines wizard generates UC functions and stored procedures via LLM. Databricks SQL has strict syntax rules the LLM doesn't know natively. A 5-layer defense system prevents and auto-corrects SQL errors:
+
+| Layer | Name | Where | What |
+|-------|------|-------|------|
+| 0 | Hardened prompt | `routine_sql_generator.py` | "You write Databricks SQL only. Be minimalist." + explicit ban list |
+| 1 | Knowledge | `databricks_sql_reference.md` | Compact spec loaded into every LLM call. Auto-grows via Layer 4 |
+| 2 | Sanitizer | `_sanitize_sql()` in `routine_sql_generator.py` | Auto-fixes: strips SQL SECURITY INVOKER, fixes LIMIT params, reorders DEFAULT params |
+| 3 | Self-healing | `_self_heal()` in `generate_routines.py` | On provision failure: capture error -> LLM corrects -> sanitize -> retry (max 2) |
+| 4 | Learning | `_learn_constraint()` in `generate_routines.py` | On successful self-heal: append new constraint to reference doc |
+
+Design doc: `docs/plan/robust-sql-generation.md`
+
+## UC function tool discovery
+
+`discover_uc_function_tools()` in `tools/tool_factory.py` reads `PROJECT_FUNCTIONS` env var (comma-separated function names), fetches UC metadata via `w.functions.get()`, and creates `sql_read` tools the agent can call. SQL pattern: `SELECT * FROM catalog.schema.func(params)`.
+
+After provisioning routines, `generate_routines.py` auto-appends function names to `PROJECT_FUNCTIONS`. The deploy pipeline syncs all `PROJECT_*` env vars to the deployed app via `deploy_agent_app.py`.
+
+## Known issues
+
+- **#44**: Brick toggles (`PROJECT_BRICK_*`) not enforced at agent runtime -- tools load regardless of toggle state
+- **Ghost KA tools**: stale `PROJECT_KA_*` entries in config produce unexpected tools like `query_default_ka`
 
 ## Chat UI (agent app frontend)
 
@@ -351,7 +442,7 @@ cp -r dist/* ../../brickforge/static/
 ## Testing
 
 - **Unit tests**: `tests/test_phase1.py` through `test_phase8.py` (81+ tests)
-- **E2E**: Playwright (configured in `brickforge/app/`)
+- **E2E / UI testing**: Playwright MCP (`/play` skill) -- browser automation via `browser_evaluate`, `browser_click`, `browser_fill_form`, `browser_wait_for`. Screenshots are last resort (context-heavy). Prefer `browser_evaluate` with targeted JS selectors.
 - **Eval**: `eval/run_eval.py` -- MLflow GenAI eval with custom LLM judge scorer
 
 ## Key files for common tasks
@@ -362,6 +453,9 @@ cp -r dist/* ../../brickforge/static/
 | Add a test for a block | `brickforge/routes/setup.py` (TEST_SCRIPTS dict) |
 | Add an agent tool | `brickforge/tools/` + `brickforge/agent/agent.py` (tool wiring) |
 | Add seed data | `brickforge/data/demo/csv/` + `data/demo/init/` (DDL SQL) |
+| Add UC functions | `brickforge/data/demo/func/` (SQL) or generate via routines wizard |
+| Change SQL generation | `brickforge/data/gen/routine_sql_generator.py` (prompts + sanitizer) |
+| Fix SQL syntax issues | `brickforge/data/gen/databricks_sql_reference.md` (add constraints) |
 | Change deploy behavior | `brickforge/deploy/deploy_agent_app.py` |
 | Change bridge auth | `brickforge/scripts/connect.sh` |
 | Change chat UI | `brickforge/app/client/src/` + rebuild |
@@ -374,7 +468,7 @@ cp -r dist/* ../../brickforge/static/
 | Path | Purpose |
 |------|---------|
 | `~/.brickforge/` | Runtime dir: logs, config, stash cache |
-| `~/.brickforge/.env.local` | User config (pip install mode) |
+| `~/.brickforge/config.json` | User config (pip install mode) |
 | `~/.brickforge/brickforge_*.log` | Session log files |
 | `brickforge/static/` | Setup App frontend (pre-built) |
 | `brickforge/app/client/dist/` | Chat UI frontend (pre-built) |
@@ -382,17 +476,18 @@ cp -r dist/* ../../brickforge/static/
 
 ## EC2 dev box
 
-See `doc/plan/ec2-devbox.md` for reconnect runbook (instance ID, region, SSH key, IP ACL management).
+See `docs/plan/ec2-devbox.md` for reconnect runbook (instance ID, region, SSH key, IP ACL management).
 
 ## Design docs
 
 | Doc | Purpose |
 |-----|---------|
-| `doc/plan/saas-plan.md` | Full SaaS architecture blueprint |
-| `doc/plan/brickforge-software.html` | Visual HTML blueprint (open in browser) |
-| `doc/plan/deploy-logbook.md` | Build/deploy history with all walls and fixes |
-| `doc/plan/next-steps-20260526.md` | Pending E2E tests |
-| `doc/plan/python-backend-rewrite.md` | Express -> FastAPI rewrite plan |
-| `doc/plan/forge-package-self-contained.md` | Self-contained package restructure plan |
-| `doc/plan/ec2-devbox.md` | EC2 devbox reconnect runbook |
-| `doc/guide/brickforge-guide.md` | User-facing guide |
+| `docs/plan/saas-plan.md` | Full SaaS architecture blueprint |
+| `docs/plan/brickforge-software.html` | Visual HTML blueprint (open in browser) |
+| `docs/plan/deploy-logbook.md` | Build/deploy history with all walls and fixes |
+| `docs/plan/next-steps-20260526.md` | Pending E2E tests |
+| `docs/plan/python-backend-rewrite.md` | Express -> FastAPI rewrite plan |
+| `docs/plan/forge-package-self-contained.md` | Self-contained package restructure plan |
+| `docs/plan/ec2-devbox.md` | EC2 devbox reconnect runbook |
+| `docs/plan/robust-sql-generation.md` | 5-layer SQL generation defense system |
+| `docs/guide/brickforge-guide.md` | User-facing guide |

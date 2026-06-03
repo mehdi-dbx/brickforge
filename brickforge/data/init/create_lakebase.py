@@ -62,13 +62,22 @@ def _wait_for_instance(name: str, timeout: int = 600) -> bool:
 
 
 def _update_env(key: str, value: str) -> None:
-    """Write key=value to .env.local (replace if exists, append if not)."""
-    env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
-    lines = env_path.read_text().splitlines() if env_path.exists() else []
-    lines = [ln for ln in lines if not ln.strip().startswith(f"{key}=") and not ln.strip().startswith(f"#{key}=")]
-    lines.append(f"{key}={value}")
-    env_path.write_text("\n".join(lines) + "\n")
-    print(f"Updated {env_path} with {key}={value}", file=sys.stderr)
+    """Write key=value to config.json (or .env.local fallback)."""
+    config_file = os.environ.get("CONFIG_FILE", "")
+    if config_file:
+        from lib.config_json import read_config, write_config
+        config = read_config()
+        if key == "LAKEBASE_INSTANCE_NAME":
+            config.setdefault("lakebase", {})["instance_name"] = value
+        write_config(config)
+        print(f"Updated {config_file} with {key}={value}", file=sys.stderr)
+    else:
+        env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
+        lines = env_path.read_text().splitlines() if env_path.exists() else []
+        lines = [ln for ln in lines if not ln.strip().startswith(f"{key}=") and not ln.strip().startswith(f"#{key}=")]
+        lines.append(f"{key}={value}")
+        env_path.write_text("\n".join(lines) + "\n")
+        print(f"Updated {env_path} with {key}={value}", file=sys.stderr)
 
 
 def main():

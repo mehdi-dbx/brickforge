@@ -25,44 +25,55 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 os.chdir(ROOT)
 
-# Load .env.local if present
-env_file = ROOT / ".env.local"
-if env_file.exists():
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        eq = line.find("=")
-        if eq > 0:
-            os.environ.setdefault(line[:eq].strip(), line[eq + 1:])
+# Load config from config.json (preferred) or .env.local (legacy)
+config_file = os.environ.get("CONFIG_FILE", "")
+if config_file and Path(config_file).exists():
+    import json
+    sys.path.insert(0, str(ROOT))
+    from lib.config_provider import flatten
+    cfg = json.loads(Path(config_file).read_text())
+    for k, v in flatten(cfg).items():
+        os.environ.setdefault(k, v)
+else:
+    env_file = ROOT / ".env.local"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            eq = line.find("=")
+            if eq > 0:
+                os.environ.setdefault(line[:eq].strip(), line[eq + 1:])
 
 APP_NAME = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("DBX_APP_NAME", "")
 SCHEMA = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "")
 
 if not APP_NAME:
-    print("[x] DBX_APP_NAME not set. Pass app name as argument or set in .env.local", file=sys.stderr)
+    print("[x] DBX_APP_NAME not set. Pass app name as argument or set in config.json", file=sys.stderr)
     sys.exit(1)
 if not SCHEMA:
-    print("[x] PROJECT_UNITY_CATALOG_SCHEMA not set in .env.local", file=sys.stderr)
+    print("[x] PROJECT_UNITY_CATALOG_SCHEMA not set in config.json", file=sys.stderr)
     sys.exit(1)
 
 print(f"Running all grants for app: {APP_NAME} (schema: {SCHEMA})\n")
 
 GRANT_DIR = ROOT / "deploy" / "grant"
 
+PY = sys.executable
+
 STEPS = [
     ("1. Granting UC table access",
-     ["uv", "run", "python", str(GRANT_DIR / "grant_app_tables.py"), APP_NAME, "--schema", SCHEMA]),
+     [PY, str(GRANT_DIR / "grant_app_tables.py"), APP_NAME, "--schema", SCHEMA]),
     ("2. Granting UC functions/procedures access",
-     ["uv", "run", "python", str(GRANT_DIR / "grant_app_functions.py"), APP_NAME, "--schema", SCHEMA]),
+     [PY, str(GRANT_DIR / "grant_app_functions.py"), APP_NAME, "--schema", SCHEMA]),
     ("3. Granting CAN_USE on SQL warehouse",
-     ["uv", "run", "python", str(GRANT_DIR / "authorize_warehouse_for_app.py"), APP_NAME]),
+     [PY, str(GRANT_DIR / "authorize_warehouse_for_app.py"), APP_NAME]),
     ("4. Granting CAN_QUERY on serving endpoints",
-     ["uv", "run", "python", str(GRANT_DIR / "authorize_endpoint_for_app.py"), APP_NAME]),
+     [PY, str(GRANT_DIR / "authorize_endpoint_for_app.py"), APP_NAME]),
     ("5. Granting CAN_RUN on Genie space",
-     ["uv", "run", "python", str(GRANT_DIR / "authorize_genie_for_app.py")]),
+     [PY, str(GRANT_DIR / "authorize_genie_for_app.py")]),
     ("6. Granting Lakebase permissions",
-     ["uv", "run", "python", str(GRANT_DIR / "grant_lakebase_for_app.py"), APP_NAME]),
+     [PY, str(GRANT_DIR / "grant_lakebase_for_app.py"), APP_NAME]),
 ]
 
 

@@ -51,29 +51,37 @@ def main() -> None:
         print("Created experiment but no ID returned", file=sys.stderr)
         sys.exit(1)
 
-    env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
-    lines = env_path.read_text().splitlines() if env_path.exists() else []
+    config_file = os.environ.get("CONFIG_FILE", "")
+    if config_file:
+        from lib.config_json import read_config, write_config
+        config = read_config()
+        config.setdefault("app", {})["mlflow_experiment_id"] = experiment_id
+        write_config(config)
+        print(experiment_id)
+        print(f"Updated {config_file} with mlflow_experiment_id={experiment_id}", file=sys.stderr)
+    else:
+        env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
+        lines = env_path.read_text().splitlines() if env_path.exists() else []
 
-    def _upsert(lines: list[str], key: str, value: str) -> list[str]:
-        new_lines = []
-        replaced = False
-        for line in lines:
-            if line.strip().startswith(f"{key}="):
+        def _upsert(lines: list[str], key: str, value: str) -> list[str]:
+            new_lines = []
+            replaced = False
+            for line in lines:
+                if line.strip().startswith(f"{key}="):
+                    new_lines.append(f"{key}={value}")
+                    replaced = True
+                else:
+                    new_lines.append(line)
+            if not replaced:
                 new_lines.append(f"{key}={value}")
-                replaced = True
-            else:
-                new_lines.append(line)
-        if not replaced:
-            new_lines.append(f"{key}={value}")
-        return new_lines
+            return new_lines
 
-    lines = _upsert(lines, "MLFLOW_EXPERIMENT_ID", experiment_id)
-    lines = _upsert(lines, "MLFLOW_TRACKING_URI", "databricks")
-    lines = _upsert(lines, "MLFLOW_REGISTRY_URI", "databricks-uc")
-    env_path.write_text("\n".join(lines) + "\n")
-
-    print(experiment_id)
-    print(f"Updated {env_path} with MLFLOW_EXPERIMENT_ID, MLFLOW_TRACKING_URI, MLFLOW_REGISTRY_URI", file=sys.stderr)
+        lines = _upsert(lines, "MLFLOW_EXPERIMENT_ID", experiment_id)
+        lines = _upsert(lines, "MLFLOW_TRACKING_URI", "databricks")
+        lines = _upsert(lines, "MLFLOW_REGISTRY_URI", "databricks-uc")
+        env_path.write_text("\n".join(lines) + "\n")
+        print(experiment_id)
+        print(f"Updated {env_path} with MLFLOW_EXPERIMENT_ID", file=sys.stderr)
 
 
 if __name__ == "__main__":

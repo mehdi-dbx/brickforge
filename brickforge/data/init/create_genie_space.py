@@ -90,22 +90,32 @@ def main():
     )
     print(space.space_id)
 
-    # Append space_id to PROJECT_GENIE_SPACES (comma-separated)
-    env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
-    import re as _re
-    existing = os.environ.get(env_var, "").strip()
-    existing_ids = set(existing.split(",")) if existing else set()
-    existing_ids.discard("")
-    existing_ids.add(space.space_id)
-    new_value = ",".join(sorted(existing_ids))
-
-    content = env_path.read_text() if env_path.exists() else ""
-    if _re.search(rf'^{env_var}=', content, _re.MULTILINE):
-        content = _re.sub(rf'^{env_var}=.*$', f'{env_var}={new_value}', content, flags=_re.MULTILINE)
+    # Append space_id to config.json tools.genie_spaces[]
+    config_file = os.environ.get("CONFIG_FILE", "")
+    if config_file:
+        from lib.config_json import read_config, write_config
+        config = read_config()
+        spaces = config.setdefault("tools", {}).setdefault("genie_spaces", [])
+        if space.space_id not in spaces:
+            spaces.append(space.space_id)
+        write_config(config)
+        print(f"Updated {config_file} with genie_spaces={spaces}", file=sys.stderr)
     else:
-        content += f"\n{env_var}={new_value}\n"
-    env_path.write_text(content)
-    print(f"Updated {env_path} with {env_var}={new_value}", file=sys.stderr)
+        # Fallback: write to .env.local (legacy)
+        env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
+        import re as _re
+        existing = os.environ.get(env_var, "").strip()
+        existing_ids = set(existing.split(",")) if existing else set()
+        existing_ids.discard("")
+        existing_ids.add(space.space_id)
+        new_value = ",".join(sorted(existing_ids))
+        content = env_path.read_text() if env_path.exists() else ""
+        if _re.search(rf'^{env_var}=', content, _re.MULTILINE):
+            content = _re.sub(rf'^{env_var}=.*$', f'{env_var}={new_value}', content, flags=_re.MULTILINE)
+        else:
+            content += f"\n{env_var}={new_value}\n"
+        env_path.write_text(content)
+        print(f"Updated {env_path} with {env_var}={new_value}", file=sys.stderr)
 
 
 if __name__ == "__main__":

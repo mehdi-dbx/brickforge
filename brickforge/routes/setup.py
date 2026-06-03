@@ -38,7 +38,6 @@ STEP_ENV_KEYS: dict[str, list[str]] = {
     "a2a":       [],
     "features":  [],
     "mlflow":    ["MLFLOW_EXPERIMENT_ID"],
-    "grants":    [],
     "deploy":    ["DBX_APP_NAME"],
     "git":       [],
 }
@@ -1176,17 +1175,8 @@ async def setup_exec(request: Request):
                 yield sse_done(False, 1)
                 return
             config.set_many({"AGENT_MODEL": ep_name})
-            # Comment out cross-workspace token (same-workspace mode)
-            env_file = config.get("ENV_FILE") or str(PROJECT_ROOT / ".env.local")
-            try:
-                import re as _re
-                with open(env_file) as f:
-                    content = f.read()
-                content = _re.sub(r'^(AGENT_MODEL_TOKEN=)', r'# \1', content, flags=_re.MULTILINE)
-                with open(env_file, 'w') as f:
-                    f.write(content)
-            except FileNotFoundError:
-                pass
+            # Clear cross-workspace token (same-workspace mode)
+            config.set("model.token", None)
             yield sse_line(f"[+] same-workspace mode\n")
             yield sse_line(f"[+] AGENT_MODEL = {ep_name}\n")
             logger.finish(True)
@@ -1341,17 +1331,29 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             return
 
         if action == "exec-deploy-agent":
-            config_dict = config.to_env_dict()
+            config_dict = config.data  # structured JSON config
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", dir=str(PROJECT_ROOT), prefix=".tmp-deploy-", delete=False) as f:
                 json.dump(config_dict, f, indent=2)
                 tmp_path = f.name
-            cmd = [PYTHON,"deploy/deploy_agent_app.py", "--config", tmp_path]
+            # Step 1: Deploy
+            cmd = [PYTHON, "deploy/deploy_agent_app.py", "--config", tmp_path]
+            deploy_ok = True
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
+                # Check if deploy failed
+                if isinstance(event, str) and '"ok": false' in event:
+                    deploy_ok = False
             try:
                 os.unlink(tmp_path)
             except OSError:
                 pass
+            # Step 2: Run grants (only if deploy succeeded)
+            if deploy_ok:
+                yield sse_line("\n[~] Running grants for app service principal...\n")
+                app_name = config.get("app.name") or "brickforge-agent"
+                grant_cmd = [PYTHON, str(PACKAGE_ROOT / "deploy" / "grant" / "run_all_grants.py"), app_name]
+                async for event in stream_subprocess(grant_cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                    yield event
             logger.finish(True)
             return
 
@@ -1656,9 +1658,11 @@ import os, configparser, subprocess, sys
 host = '{host_url}'
 profile = '{safe_profile}' or host.split('//')[1].split('.')[0]
 
-from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
-write_env_entry(ENV_FILE, 'DATABRICKS_HOST', host)
-write_env_entry(ENV_FILE, 'DATABRICKS_CONFIG_PROFILE', profile)
+from lib.config_json import read_config, write_config
+cfg = read_config()
+cfg.setdefault('workspace', {{}})['host'] = host
+cfg['workspace']['config_profile'] = profile
+write_config(cfg)
 print('[+] DATABRICKS_HOST = ' + host)
 print('[+] DATABRICKS_CONFIG_PROFILE = ' + profile)
 
@@ -1688,7 +1692,7 @@ print('[+] done')
 def _model_profile_script(profile: str) -> str:
     return f"""
 import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
-from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact, write_env_entry, ENV_FILE
+from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact
 import subprocess, re
 out = subprocess.check_output(['databricks', 'auth', 'profiles'], text=True)
 host = None
@@ -1702,8 +1706,11 @@ if not host.startswith('http'): host = 'https://' + host
 endpoint = host.rstrip('/') + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
 w = _isolated_client('{profile}')
 t = w.tokens.create(comment='agent-forge-fm', lifetime_seconds=604800)
-write_env_entry(ENV_FILE, 'AGENT_MODEL', endpoint)
-write_env_entry(ENV_FILE, 'AGENT_MODEL_TOKEN', t.token_value)
+from lib.config_json import read_config, write_config
+cfg = read_config()
+cfg.setdefault('model', {{}})['endpoint'] = endpoint
+cfg['model']['token'] = t.token_value
+write_config(cfg)
 print('[+] AGENT_MODEL = ' + endpoint)
 print('[+] AGENT_MODEL_TOKEN = ' + _redact(t.token_value))
 """.strip()

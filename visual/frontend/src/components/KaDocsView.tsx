@@ -20,7 +20,7 @@ export function KaDocsView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [uploadResults, setUploadResults] = useState<{ name: string; ok: boolean; error?: string }[]>([])
+  const [uploadResults, setUploadResults] = useState<{ name: string; ok: boolean; error?: string; steps?: string[]; size?: number }[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [urlUploading, setUrlUploading] = useState(false)
