@@ -8,6 +8,7 @@ interface ConfigResponse {
     [key: string]: boolean;
   };
   logoUrl?: string | null;
+  appTitle?: string;
 }
 
 interface AppConfigContextType {
@@ -19,6 +20,8 @@ interface AppConfigContextType {
   featureEnabled: (name: string) => boolean;
   /** Custom logo URL configured via setup panel (null until loaded). */
   logoUrl: string | null;
+  /** Human-friendly app title derived from DBX_APP_NAME. */
+  appTitle: string;
 }
 
 const AppConfigContext = createContext<AppConfigContextType | undefined>(
@@ -50,6 +53,7 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
     chatHistoryEnabled: data?.features.chatHistory ?? true,
     featureEnabled,
     logoUrl: data?.logoUrl ?? null,
+    appTitle: data?.appTitle ?? 'Agent Forge',
   };
 
   return (

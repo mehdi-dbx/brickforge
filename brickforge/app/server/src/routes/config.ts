@@ -33,5 +33,11 @@ configRouter.get('/', (_req: Request, res: Response) => {
   // Custom logo URL (string, not boolean — sent as separate field)
   const logoUrl = process.env.PROJECT_LOGO_URL?.trim() || null;
 
-  res.json({ features, logoUrl });
+  // Derive human-friendly app title from DBX_APP_NAME env var
+  const appName = process.env.DBX_APP_NAME?.trim() || '';
+  const appTitle = appName
+    ? appName.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : 'Agent Forge';
+
+  res.json({ features, logoUrl, appTitle });
 });
