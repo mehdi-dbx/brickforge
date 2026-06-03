@@ -1370,6 +1370,63 @@ function Terminal({ lines, showCopy = true }: { lines: ExecLine[]; showCopy?: bo
   )
 }
 
+// ─── Progress stepper ─────────────────────────────────────────────────────────
+
+function ProgressStepper({ stages, currentStage }: { stages: string[]; currentStage: number }) {
+  return (
+    <div className="flex items-center gap-1 px-1 py-2 font-mono text-[10px]">
+      {stages.map((label, i) => (
+        <div key={label} className="flex items-center gap-1">
+          {i > 0 && <div className={`w-3 h-px ${i <= currentStage ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300 dark:bg-dbx-gray-700'}`} />}
+          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+            i < currentStage ? 'bg-dbx-blue dark:bg-dbx-green' :
+            i === currentStage ? 'bg-dbx-amber animate-pulse' :
+            'bg-dbx-gray-300 dark:bg-dbx-gray-700'
+          }`} />
+          <span className={`${
+            i < currentStage ? 'text-dbx-blue dark:text-dbx-green' :
+            i === currentStage ? 'text-dbx-amber' :
+            'text-dbx-gray-400 dark:text-dbx-gray-600'
+          }`}>{label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const STAGE_MAPS: Record<string, { match: string; label: string }[]> = {
+  'exec-deploy-agent': [
+    { match: 'validat', label: 'Validate' },
+    { match: 'config sync', label: 'Config' },
+    { match: 'pre-flight', label: 'Pre-flight' },
+    { match: 'bundl', label: 'Bundle' },
+    { match: 'upload', label: 'Upload' },
+    { match: 'deploy', label: 'Deploy' },
+    { match: 'running', label: 'Ready' },
+  ],
+  'exec-lakebase': [
+    { match: 'creat', label: 'Create' },
+    { match: 'available', label: 'Ready' },
+  ],
+  'exec-tables': [
+    { match: 'catalog', label: 'Schema' },
+    { match: 'provis', label: 'Tables' },
+    { match: 'load', label: 'Data' },
+  ],
+  'exec-ka': [
+    { match: 'creat', label: 'Create' },
+    { match: 'upload', label: 'Upload' },
+    { match: 'ready', label: 'Ready' },
+  ],
+  'exec-functions': [
+    { match: 'function', label: 'Functions' },
+    { match: 'procedure', label: 'Procedures' },
+  ],
+  'exec-grants': [
+    { match: 'grant', label: 'Grants' },
+  ],
+}
+
 // ─── Current value helper ──────────────────────────────────────────────────────
 
 function currentValueLabel(stepId: StepId, values: Record<string, string>): string {
@@ -1796,6 +1853,15 @@ export function SetupDrawer({
   const [featuresDirty, setFeaturesDirty] = useState<Record<string, boolean>>({})  // key -> new enabled state
   const [brickItems, setBrickItems] = useState<FeatureItem[]>([])
   const [bricksDirty, setBricksDirty] = useState<Record<string, boolean>>({})
+  const [currentStage, setCurrentStage] = useState(0)
+  const [elapsedSec, setElapsedSec]     = useState(0)
+
+  // Elapsed timer — ticks every second while executing
+  useEffect(() => {
+    if (phase !== 'execute') { setElapsedSec(0); setCurrentStage(0); return }
+    const t = setInterval(() => setElapsedSec(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [phase])
 
   // Test a specific instance by env key
   const handleInstanceTest = useCallback(async (key: string) => {
@@ -2062,8 +2128,18 @@ export function SetupDrawer({
             }
             if (!evtData) continue
             const parsed = JSON.parse(evtData)
-            if (evtType === 'line')      window.dispatchEvent(new CustomEvent('exec-line', { detail: parsed }))
-            else if (evtType === 'done' && !aborted) wrappedExecDone(parsed.ok)
+            if (evtType === 'line') {
+              window.dispatchEvent(new CustomEvent('exec-line', { detail: parsed }))
+              // Advance progress stepper stage
+              const stageMap = STAGE_MAPS[action] || []
+              const lineText = (parsed.text ?? '').toLowerCase()
+              setCurrentStage(prev => {
+                for (let i = prev; i < stageMap.length; i++) {
+                  if (lineText.includes(stageMap[i].match)) return i + 1
+                }
+                return prev
+              })
+            } else if (evtType === 'done' && !aborted) wrappedExecDone(parsed.ok)
           }
         }
       } catch (e) {
@@ -2494,9 +2570,19 @@ export function SetupDrawer({
 
   // ── Execute ────────────────────────────────────────────────────────────────
   function renderExecute() {
+    const stageLabels = choice && STAGE_MAPS[choice.action] ? STAGE_MAPS[choice.action].map(s => s.label) : null
+    const elapsed = `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`
     return (
       <>
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">
+          {stageLabels && (
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-1">
+                <ProgressStepper stages={stageLabels} currentStage={currentStage} />
+                <span className="text-[10px] font-mono text-dbx-gray-400 flex-shrink-0">{elapsed}</span>
+              </div>
+            </div>
+          )}
           <Terminal lines={execLines} />
         </div>
         <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex gap-2">
