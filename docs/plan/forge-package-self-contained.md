@@ -72,7 +72,7 @@ Solution: add `PYTHONPATH=str(PACKAGE_ROOT)` to every subprocess environment via
 
 ## Deploy Script Impact
 
-`deploy_agent_app.py` uses `ROOT = Path(__file__).resolve().parents[1]`. After move, `parents[1]` from `brickforge/deploy/` points to `brickforge/`. The `AGENT_APP_DIRS` (`"agent"`, `"tools"`, `"data/default"`) resolve relative to ROOT = `brickforge/`. The zip writes them at the bundle root (strips `brickforge/` prefix). Deployed agent sees `agent/`, `tools/`, `data/` at its root. Works correctly.
+`deploy_agent_app.py` uses `ROOT = Path(__file__).resolve().parents[1]`. After move, `parents[1]` from `brickforge/deploy/` points to `brickforge/`. The `AGENT_APP_DIRS` (`"agent"`, `"tools"`, `"data/demo"`) resolve relative to ROOT = `brickforge/`. The zip writes them at the bundle root (strips `brickforge/` prefix). Deployed agent sees `agent/`, `tools/`, `data/` at its root. Works correctly.
 
 ## Stash Tool Imports
 

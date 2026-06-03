@@ -29,7 +29,7 @@ These are the actions that actually DO things on a Databricks workspace. They we
 ### 3. Provision tables
 - From the pip-installed app, run "provision tables"
 - Verify: `create_all_assets.py` finds SQL files at `PACKAGE_ROOT/data/init/`
-- Verify: CSV files found at `PACKAGE_ROOT/data/default/csv/`
+- Verify: CSV files found at `PACKAGE_ROOT/data/demo/csv/`
 
 ### 4. Generate data
 - From the pip-installed app, open data gen wizard

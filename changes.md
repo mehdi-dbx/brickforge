@@ -12,11 +12,11 @@ Tracks every action taken during the domain extraction for regression testing.
 
 ## Phase 1: Extract Data Layer
 
-- [x] Moved `data/default/csv/flights.csv` -> `stash/airops/data/csv/`
-- [x] Moved 5 DDL SQL files from `data/default/init/` -> `stash/airops/data/init/`
-- [x] Moved 11 function SQL files from `data/default/func/` -> `stash/airops/data/func/`
-- [x] Moved 4 procedure SQL files from `data/default/proc/` -> `stash/airops/data/proc/`
-- [x] Added `.gitkeep` to empty `data/default/` subdirs
+- [x] Moved `data/demo/csv/flights.csv` -> `stash/airops/data/csv/`
+- [x] Moved 5 DDL SQL files from `data/demo/init/` -> `stash/airops/data/init/`
+- [x] Moved 11 function SQL files from `data/demo/func/` -> `stash/airops/data/func/`
+- [x] Moved 4 procedure SQL files from `data/demo/proc/` -> `stash/airops/data/proc/`
+- [x] Added `.gitkeep` to empty `data/demo/` subdirs
 
 ## Phase 2: Extract Config
 
@@ -88,7 +88,7 @@ Tracks every action taken during the domain extraction for regression testing.
 grep -rn "checkin_agents|checkin_metrics|flights_at_risk|border_officers|border_terminals|
 AT_RISK|BA312|amadeus.airops|delay_risk|EC.261|passenger.right|flight_number|
 Check-in Manager|Check-in Agent" agent/ app/client/src/ app/server/src/ conf/ 
-data/default/ deploy/ visual/frontend/src/ visual/backend/ → 0 matches
+data/demo/ deploy/ visual/frontend/src/ visual/backend/ → 0 matches
 ```
 
 ### Summary

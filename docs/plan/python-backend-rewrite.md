@@ -433,8 +433,8 @@ test_phase5.py:
 ```
 test_phase6.py:
   # Status + discovery
-  test_gen_status_returns_flags()                - GET /api/gen/status -> USE_DEFAULT_DATA, USE_GEN_DATA
-  test_gen_tables_discovers_csvs()               - GET /api/gen/tables -> list from data/default/csv
+  test_gen_status_returns_flags()                - GET /api/gen/status -> useDefault, useGen
+  test_gen_tables_discovers_csvs()               - GET /api/gen/tables -> list from data/demo/csv
   test_gen_routines_discovers_sql()              - GET /api/gen/routines -> list from func/proc dirs
 
   # Wizard state

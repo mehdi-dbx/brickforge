@@ -12,7 +12,7 @@ vs the **Setup App** (stays local / runs the setup flow).
 | `agent/` | Python agent runtime |
 | `app/` | React + Express chat app (with pre-built `dist/`) |
 | `tools/` | Framework tools only: `sql_executor`, `ka_factory`, `api_factory`, `a2a_factory`, `generate_chart`, `get_current_time`, `tool_factory` |
-| `data/default/` | Domain data files (populated from `.forge`) |
+| `data/demo/` | Domain data files (populated from `.forge`) |
 | `data/init/` | Provisioning scripts |
 | `data/py/` | Shared Python utilities |
 | `conf/` | Prompts, KA configs (populated from `.forge`) |

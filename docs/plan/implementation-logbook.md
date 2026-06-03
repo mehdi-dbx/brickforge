@@ -178,7 +178,7 @@
 - **Gap 12 (bundle templates in stash):** Created `stash/airops/app.yaml` and `stash/airops/databricks.yml` reference templates with placeholder vars.
 - **Gap 3 (stash health endpoint):** Added `GET /api/stash/health` -- scans `stash/` directory, parses each `.forge` manifest, verifies all referenced files (DDL, seed CSV, tools, prompts, configs) exist, checks expected dirs (tools/, data/, conf/) and optional bundle templates.
 - **Gap 10 (deploy-setup.py):** Created `deploy/deploy_setup_app.py` -- one-command Setup App deployment via Databricks CLI. Pre-flight checks (CLI auth, frontend built, app.yaml present), create-or-update app, deploy source, retrieve URL.
-- **Gap 8 (data provisioning from .forge):** Added `FORGE_STASH_DIR` env var support to `create_all_assets.py`, `create_all_functions.py`, `create_all_procedures.py`, and inline `exec-tables` script. When set, data paths resolve to stash directory instead of `data/default/`.
+- **Gap 8 (data provisioning from .forge):** Added `FORGE_STASH_DIR` env var support to `create_all_assets.py`, `create_all_functions.py`, `create_all_procedures.py`, and inline `exec-tables` script. When set, data paths resolve to stash directory instead of `data/demo/`.
 - All changes syntax-verified: `node -c visual/backend/index.js` passes clean.
 
 ### 2026-05-15 -- Full plan audit + last gap

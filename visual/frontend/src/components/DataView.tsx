@@ -83,8 +83,8 @@ export function DataView() {
       .finally(() => setLoadingExisting(false))
   }, [])
 
-  const toggleFlag = async (flag: 'USE_DEFAULT_DATA' | 'USE_GEN_DATA', value: boolean) => {
-    if (flag === 'USE_DEFAULT_DATA') setUseDefault(value)
+  const toggleFlag = async (flag: 'USE_DEMO_DATA' | 'USE_GEN_DATA', value: boolean) => {
+    if (flag === 'USE_DEMO_DATA') setUseDefault(value)
     else setUseGen(value)
     await fetch('/api/env', {
       method: 'PUT',
@@ -147,10 +147,10 @@ export function DataView() {
                   <input
                     type="checkbox"
                     checked={useDefault}
-                    onChange={e => toggleFlag('USE_DEFAULT_DATA', e.target.checked)}
+                    onChange={e => toggleFlag('USE_DEMO_DATA', e.target.checked)}
                     className="accent-dbx-blue w-3 h-3"
                   />
-                  <span className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">default data</span>
+                  <span className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">demo data</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
@@ -239,7 +239,7 @@ export function DataView() {
             </div>
             <div className="text-[13px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 mb-1">No tables found</div>
             <p className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mb-4">
-              No tables found. Generate synthetic data or add CSVs to data/default/csv/.
+              No tables found. Generate synthetic data or add CSVs to data/demo/csv/.
             </p>
             <button
               onClick={() => setMode('generate')}

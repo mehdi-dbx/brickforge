@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create (or replace) all stored procedures from data/default/proc/*.sql.
+"""Create (or replace) all stored procedures from data/demo/proc/*.sql.
 
 Runs each SQL file through data/py/run_sql.py which handles
 __SCHEMA_QUALIFIED__ substitution and Databricks auth.

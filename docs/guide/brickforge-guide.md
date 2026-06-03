@@ -76,9 +76,9 @@ uv run python data/init/create_all_assets.py
 This creates everything the agent needs:
 
 - Unity Catalog schema
-- Delta tables (from `data/default/csv/` and optionally `data/gen/csv/`)
-- UC functions (from `data/default/func/`)
-- Stored procedures (from `data/default/proc/`)
+- Delta tables (from `data/demo/csv/` and optionally `data/gen/csv/`)
+- UC functions (from `data/demo/func/`)
+- Stored procedures (from `data/demo/proc/`)
 - Genie space
 - MLflow experiment
 
@@ -185,10 +185,10 @@ deploy/           DAB pipeline: validate -> sync -> deploy -> grants
 
 | Directory | Contents |
 |-----------|----------|
-| `data/default/csv/` | Seed data (auto-discovered) |
-| `data/default/init/` | DDL SQL for tables |
-| `data/default/func/` | UC function definitions (used by tools) |
-| `data/default/proc/` | Stored procedure definitions |
+| `data/demo/csv/` | Seed data (auto-discovered) |
+| `data/demo/init/` | DDL SQL for tables |
+| `data/demo/func/` | UC function definitions (used by tools) |
+| `data/demo/proc/` | Stored procedure definitions |
 | `data/gen/` | Synthetic data generation (LLM-powered wizard) |
 | `data/init/` | Orchestrators: `create_all_assets.py`, `create_catalog_schema.py` |
 | `data/py/` | Low-level SQL runners and CSV-to-Delta loader |
@@ -220,8 +220,8 @@ Tool patterns are declarative:
 
 | Pattern | When to use | Source |
 |---------|------------|--------|
-| **SQL read** | Query warehouse via a UC function | `data/default/func/` |
-| **Action** | Call a stored procedure | `data/default/proc/` |
+| **SQL read** | Query warehouse via a UC function | `data/demo/func/` |
+| **Action** | Call a stored procedure | `data/demo/proc/` |
 | **KA** | Query a Knowledge Assistant endpoint | auto-discovered from `PROJECT_KA_*` |
 
 ---
@@ -230,9 +230,9 @@ Tool patterns are declarative:
 
 ### Add your own data
 
-1. Drop a CSV in `data/default/csv/<table_name>.csv`
-2. Write DDL at `data/default/init/create_<table_name>.sql` (use `__SCHEMA_QUALIFIED__` placeholder)
-3. Run `uv run python data/py/run_sql.py data/default/init/create_<table_name>.sql`
+1. Drop a CSV in `data/demo/csv/<table_name>.csv`
+2. Write DDL at `data/demo/init/create_<table_name>.sql` (use `__SCHEMA_QUALIFIED__` placeholder)
+3. Run `uv run python data/py/run_sql.py data/demo/init/create_<table_name>.sql`
 
 `create_all_assets.py` auto-discovers both files -- no script modification needed.
 
