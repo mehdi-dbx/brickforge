@@ -10,6 +10,7 @@ Two tool patterns:
 """
 
 import logging
+import os
 import re
 
 from langchain_core.tools import tool
@@ -160,7 +161,6 @@ def discover_forge_tools(forge_config: dict) -> list:
       - .forge project config (loaded by config provider)
     """
     import json
-    import os
 
     tools_list = forge_config.get("tools", [])
 
@@ -212,15 +212,13 @@ def discover_uc_function_tools() -> list:
     Each comma-separated function name is resolved against Unity Catalog
     to fetch its input parameters, then wrapped via ``create_sql_read_tool``.
     """
-    import os
-
     raw = os.environ.get("PROJECT_FUNCTIONS", "").strip()
     if not raw:
         return []
 
     schema = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
-    if not schema or "." not in schema:
-        _log.warning("PROJECT_FUNCTIONS set but PROJECT_UNITY_CATALOG_SCHEMA missing or invalid")
+    if not schema or schema.count(".") != 1:
+        _log.warning("PROJECT_FUNCTIONS set but PROJECT_UNITY_CATALOG_SCHEMA missing or invalid (expected catalog.schema, got '%s')", schema)
         return []
 
     func_names = [f.strip() for f in raw.split(",") if f.strip()]
@@ -233,7 +231,7 @@ def discover_uc_function_tools() -> list:
     try:
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
-        uc_funcs = {f.name: f for f in w.functions.list(catalog_name=cat, schema_name=sch) if f.name}
+        uc_funcs = {fn.name: fn for fn in w.functions.list(catalog_name=cat, schema_name=sch) if fn.name}
     except Exception as e:
         _log.warning("Could not list UC functions in %s: %s — creating tools without params", schema, e)
         uc_funcs = {}
@@ -242,12 +240,12 @@ def discover_uc_function_tools() -> list:
     for func_name in func_names:
         uc_info = uc_funcs.get(func_name)
         params = []
-        desc = func_name.replace("_", " ")
+        desc = uc_info.comment if uc_info and uc_info.comment else f"Query {func_name.replace('_', ' ')}"
 
         if uc_info and uc_info.input_params and uc_info.input_params.parameters:
             params = [p.name for p in uc_info.input_params.parameters if p.name]
-            if uc_info.comment:
-                desc = uc_info.comment
+        elif uc_funcs:
+            _log.warning("UC function '%s' not found in %s — registering with no params", func_name, schema)
 
         t = create_sql_read_tool(func_name, func_name, params, desc)
         tools.append(t)
