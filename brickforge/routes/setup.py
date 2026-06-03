@@ -67,6 +67,11 @@ FEATURE_REGISTRY = {
         "desc": "Upload images in chat for visual analysis (requires vision-capable model)",
         "default": "false",
     },
+    "PERSONAS": {
+        "label": "Personas",
+        "desc": "Role selector in chat UI (Agent/Manager or custom roles)",
+        "default": "false",
+    },
 }
 
 # ── Bricks registry (Agent Bricks) ───────────────────────────────────────────
