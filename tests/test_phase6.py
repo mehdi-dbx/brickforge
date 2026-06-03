@@ -14,8 +14,8 @@ def test_gen_status_returns_flags():
     assert r.status_code == 200
     data = r.json()
     assert "modelReady" in data
-    assert "USE_DEFAULT_DATA" in data
-    assert "USE_GEN_DATA" in data
+    assert "useDefault" in data
+    assert "useGen" in data
 
 
 def test_gen_tables_discovers_csvs():

@@ -99,7 +99,7 @@ def build_graph() -> dict:
         nodes.append({
             "id": f"func-{i}", "type": "data", "position": {"x": 700, "y": data_y + i * 80},
             "data": {"kind": "data", "label": fn, "subtitle": "UC function", "dataVariant": "function",
-                     "sourceFile": f"data/default/func/{fn}.sql"},
+                     "sourceFile": f"data/demo/func/{fn}.sql"},
         })
 
     # Procedure nodes
@@ -108,7 +108,7 @@ def build_graph() -> dict:
         nodes.append({
             "id": f"proc-{i}", "type": "data", "position": {"x": 700, "y": proc_start + i * 80},
             "data": {"kind": "data", "label": proc, "subtitle": "UC procedure", "dataVariant": "procedure",
-                     "sourceFile": f"data/default/proc/{proc}.sql"},
+                     "sourceFile": f"data/demo/proc/{proc}.sql"},
         })
 
     # Table nodes

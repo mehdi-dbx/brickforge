@@ -91,7 +91,7 @@ Validates, syncs config, bundles, deploys to Databricks Apps, and applies grants
 | `agent/` | LangGraph agent, MLflow server, Genie capture |
 | `app/` | Full-stack chat app (React + Express + shared packages) |
 | `tools/` | LangChain tool functions the agent can call |
-| `data/default/` | Shipped airport-ops data (CSV, DDL, functions, procedures) |
+| `data/demo/` | Shipped airport-ops data (CSV, DDL, functions, procedures) |
 | `data/gen/` | Synthetic data generation (LLM-powered wizard) |
 | `conf/` | Env template, KA configs, prompt templates |
 | `visual/` | Architecture viz + setup + data gen + cleanup UI |

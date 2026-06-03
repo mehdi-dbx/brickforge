@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload CSVs from data/default/csv/ + data/gen/csv/ to Delta tables in PROJECT_UNITY_CATALOG_SCHEMA. Creates volume 'data' if missing."""
+"""Upload CSVs from data/demo/csv/ + data/gen/csv/ to Delta tables in PROJECT_UNITY_CATALOG_SCHEMA. Creates volume 'data' if missing."""
 import os
 import re
 import sys
@@ -18,10 +18,10 @@ TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "CANCELED", "CLOSED"})
 DATA_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _active_csv_dirs() -> list[Path]:
-    """Return CSV directories based on USE_DEFAULT_DATA / USE_GEN_DATA flags."""
+    """Return CSV directories based on USE_DEMO_DATA / USE_GEN_DATA flags."""
     dirs = []
-    if os.environ.get("USE_DEFAULT_DATA", "true").strip().lower() in ("true", "1", "yes"):
-        dirs.append(DATA_ROOT / "default" / "csv")
+    if (os.environ.get("USE_DEMO_DATA") or os.environ.get("USE_DEFAULT_DATA", "true")).strip().lower() in ("true", "1", "yes"):
+        dirs.append(DATA_ROOT / "demo" / "csv")
     if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
         dirs.append(DATA_ROOT / "gen" / "csv")
     return dirs

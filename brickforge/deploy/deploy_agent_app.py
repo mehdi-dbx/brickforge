@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 AGENT_APP_DIRS = [
     "agent",
     "tools",
-    "data/default",
+    "data/demo",
     "data/init",
     "data/gen",
     "data/py",

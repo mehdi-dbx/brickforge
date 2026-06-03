@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create (or replace) all UC SQL functions from data/default/func/*.sql.
+"""Create (or replace) all UC SQL functions from data/demo/func/*.sql.
 
 Only files that contain a CREATE statement are executed (SELECT-only
 query templates are skipped automatically).

@@ -301,7 +301,7 @@ data/
 ```
 
 Data source flags in `.env.local`:
-- `USE_DEFAULT_DATA=true|false` -- include default tables
+- `USE_DEMO_DATA=true|false` -- include demo tables (backward compat: USE_DEFAULT_DATA also accepted)
 - `USE_GEN_DATA=true|false` -- include generated tables
 
 ## Chat UI (agent app frontend)
@@ -361,7 +361,7 @@ cp -r dist/* ../../brickforge/static/
 | Add a setup block | `visual/frontend/src/setupSteps.ts` + `brickforge/routes/setup.py` |
 | Add a test for a block | `brickforge/routes/setup.py` (TEST_SCRIPTS dict) |
 | Add an agent tool | `brickforge/tools/` + `brickforge/agent/agent.py` (tool wiring) |
-| Add seed data | `brickforge/data/default/csv/` + `data/default/init/` (DDL SQL) |
+| Add seed data | `brickforge/data/demo/csv/` + `data/demo/init/` (DDL SQL) |
 | Change deploy behavior | `brickforge/deploy/deploy_agent_app.py` |
 | Change bridge auth | `brickforge/scripts/connect.sh` |
 | Change chat UI | `brickforge/app/client/src/` + rebuild |

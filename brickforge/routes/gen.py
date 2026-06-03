@@ -39,23 +39,25 @@ async def gen_status():
         manifest = json.loads(manifest_path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         pass
+    use_demo = (env.get("USE_DEMO_DATA") or env.get("USE_DEFAULT_DATA", "true")).strip().lower()
+    use_gen = env.get("USE_GEN_DATA", "false").strip().lower()
     return {
         "modelReady": model_ready,
         "manifest": manifest,
-        "USE_DEFAULT_DATA": env.get("USE_DEFAULT_DATA", "true"),
-        "USE_GEN_DATA": env.get("USE_GEN_DATA", "false"),
+        "useDefault": use_demo in ("true", "1", "yes"),
+        "useGen": use_gen in ("true", "1", "yes"),
     }
 
 
 @router.get("/api/gen/tables")
 async def gen_tables():
     env = _get_config().to_env_dict()
-    use_default = env.get("USE_DEFAULT_DATA", "true").strip().lower()
+    use_demo = (env.get("USE_DEMO_DATA") or env.get("USE_DEFAULT_DATA", "true")).strip().lower()
     use_gen = env.get("USE_GEN_DATA", "false").strip().lower()
     tables = []
     sources = []
-    if use_default in ("true", "1", "yes"):
-        sources.append(("default", PACKAGE_ROOT / "data" / "default"))
+    if use_demo in ("true", "1", "yes"):
+        sources.append(("demo", PACKAGE_ROOT / "data" / "demo"))
     if use_gen in ("true", "1", "yes"):
         sources.append(("generated", PACKAGE_ROOT / "data" / "gen"))
 
@@ -80,12 +82,12 @@ async def gen_tables():
 @router.get("/api/gen/routines")
 async def gen_routines():
     env = _get_config().to_env_dict()
-    use_default = env.get("USE_DEFAULT_DATA", "true").strip().lower()
+    use_demo = (env.get("USE_DEMO_DATA") or env.get("USE_DEFAULT_DATA", "true")).strip().lower()
     use_gen = env.get("USE_GEN_DATA", "false").strip().lower()
     routines = []
     sources = []
-    if use_default in ("true", "1", "yes"):
-        sources.append(("default", PACKAGE_ROOT / "data" / "default"))
+    if use_demo in ("true", "1", "yes"):
+        sources.append(("demo", PACKAGE_ROOT / "data" / "demo"))
     if use_gen in ("true", "1", "yes"):
         sources.append(("generated", PACKAGE_ROOT / "data" / "gen"))
 

@@ -100,7 +100,7 @@ function buildGraph() {
     nodes.push({
       id, type: 'data', position: { x: 700, y: dataY + i * 80 },
       data: { kind: 'data', label: fn, subtitle: 'UC function', dataVariant: 'function',
-        sourceFile: `data/default/func/${fn}.sql` },
+        sourceFile: `data/demo/func/${fn}.sql` },
     })
   })
 
@@ -111,7 +111,7 @@ function buildGraph() {
     nodes.push({
       id, type: 'data', position: { x: 700, y: procStart + i * 80 },
       data: { kind: 'data', label: proc, subtitle: 'UC procedure', dataVariant: 'procedure',
-        sourceFile: `data/default/proc/${proc}.sql` },
+        sourceFile: `data/demo/proc/${proc}.sql` },
     })
   })
 

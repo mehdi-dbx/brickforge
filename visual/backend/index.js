@@ -712,7 +712,7 @@ app.get('/api/setup/status', (_req, res) => {
       if (step === 'functions') {
         let routineCount = 0
         for (const sub of ['func', 'proc']) {
-          for (const base of ['data/default', 'data/gen']) {
+          for (const base of ['data/demo', 'data/gen']) {
             const dir = path.join(PROJECT_ROOT, base, sub)
             try { routineCount += fs.readdirSync(dir).filter(f => f.endsWith('.sql')).length } catch {}
           }
@@ -1147,21 +1147,21 @@ r = subprocess.run(['uv', 'run', 'python', 'data/init/create_catalog_schema.py']
 if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
 print('[+] Catalog and schema ready')
 
-# Find table SQL files based on FORGE_STASH_DIR or USE_DEFAULT_DATA / USE_GEN_DATA flags
+# Find table SQL files based on FORGE_STASH_DIR or USE_DEMO_DATA / USE_GEN_DATA flags
 import os
 sql_files = []
 stash_dir = os.environ.get('FORGE_STASH_DIR', '').strip()
-use_default = os.environ.get('USE_DEFAULT_DATA', 'true').strip().lower()
+use_demo = (os.environ.get('USE_DEMO_DATA') or os.environ.get('USE_DEFAULT_DATA', 'true')).strip().lower()
 use_gen = os.environ.get('USE_GEN_DATA', 'false').strip().lower()
 if stash_dir:
     print(f'[~] Data source: stash={stash_dir}')
     d = ROOT / stash_dir / 'data' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
 else:
-    print(f'[~] Data sources: default={use_default}, gen={use_gen}')
+    print(f'[~] Data sources: demo={use_demo}, gen={use_gen}')
 sys.stdout.flush()
-if not stash_dir and use_default in ('true', '1', 'yes'):
-    d = ROOT / 'data' / 'default' / 'init'
+if not stash_dir and use_demo in ('true', '1', 'yes'):
+    d = ROOT / 'data' / 'demo' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
 if os.environ.get('USE_GEN_DATA', 'false').strip().lower() in ('true', '1', 'yes'):
     d = ROOT / 'data' / 'gen' / 'init'
@@ -1636,7 +1636,7 @@ if not spec: print('[x] schema not set'); exit(1)
 root = Path('.')
 func_count = 0
 proc_count = 0
-for base in ['data/default', 'data/gen']:
+for base in ['data/demo', 'data/gen']:
     fd = root / base / 'func'
     pd = root / base / 'proc'
     if fd.exists(): func_count += len([f for f in fd.glob('*.sql') if re.search(r'CREATE', f.read_text(), re.I)])
@@ -2093,7 +2093,7 @@ app.get('/api/gen/status', (_req, res) => {
     const manifestPath = path.join(PROJECT_ROOT, 'data', 'gen', 'manifest.json')
     try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) } catch {}
 
-    const useDefault = ['true', '1', 'yes'].includes((env.USE_DEFAULT_DATA || 'true').trim().toLowerCase())
+    const useDefault = ['true', '1', 'yes'].includes((env.USE_DEMO_DATA || env.USE_DEFAULT_DATA || 'true').trim().toLowerCase())
     const useGen = ['true', '1', 'yes'].includes((env.USE_GEN_DATA || 'false').trim().toLowerCase())
 
     res.json({ modelReady, manifest, useDefault, useGen })
@@ -2102,18 +2102,18 @@ app.get('/api/gen/status', (_req, res) => {
   }
 })
 
-// GET /api/gen/tables — dynamic table discovery based on USE_DEFAULT_DATA / USE_GEN_DATA flags
+// GET /api/gen/tables — dynamic table discovery based on USE_DEMO_DATA / USE_GEN_DATA flags
 app.get('/api/gen/tables', (_req, res) => {
   try {
     const env = {}
     for (const { key, value } of config.list()) env[key] = value
 
-    const useDefault = (env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
+    const useDemo = (env.USE_DEMO_DATA || env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
     const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
 
     const sources = []
-    if (['true', '1', 'yes'].includes(useDefault)) {
-      sources.push({ csvDir: path.join(PROJECT_ROOT, 'data', 'default', 'csv'), initDir: path.join(PROJECT_ROOT, 'data', 'default', 'init'), source: 'default' })
+    if (['true', '1', 'yes'].includes(useDemo)) {
+      sources.push({ csvDir: path.join(PROJECT_ROOT, 'data', 'demo', 'csv'), initDir: path.join(PROJECT_ROOT, 'data', 'demo', 'init'), source: 'demo' })
     }
     if (['true', '1', 'yes'].includes(useGen)) {
       sources.push({ csvDir: path.join(PROJECT_ROOT, 'data', 'gen', 'csv'), initDir: path.join(PROJECT_ROOT, 'data', 'gen', 'init'), source: 'generated' })
@@ -2155,18 +2155,18 @@ app.get('/api/gen/tables', (_req, res) => {
   }
 })
 
-// GET /api/gen/routines — dynamic routine discovery (functions + procedures) from default + gen
+// GET /api/gen/routines — dynamic routine discovery (functions + procedures) from demo + gen
 app.get('/api/gen/routines', (_req, res) => {
   try {
     const env = {}
     for (const { key, value } of config.list()) env[key] = value
 
-    const useDefault = (env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
+    const useDemo = (env.USE_DEMO_DATA || env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
     const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
 
     const sources = []
-    if (['true', '1', 'yes'].includes(useDefault)) {
-      sources.push({ base: path.join(PROJECT_ROOT, 'data', 'default'), source: 'default' })
+    if (['true', '1', 'yes'].includes(useDemo)) {
+      sources.push({ base: path.join(PROJECT_ROOT, 'data', 'demo'), source: 'demo' })
     }
     if (['true', '1', 'yes'].includes(useGen)) {
       sources.push({ base: path.join(PROJECT_ROOT, 'data', 'gen'), source: 'generated' })
@@ -2645,11 +2645,11 @@ if catalog and schema:
     vol_full = f'{catalog}.{schema}.doc'
     if exists_volume(vol_full):
         resources.append({'id': 'volume', 'category': 'UC Volume', 'name': vol_full})
-    for tn in parse_tables('data/default/init') + parse_tables('data/gen/init'):
+    for tn in parse_tables('data/demo/init') + parse_tables('data/gen/init'):
         full = f'{catalog}.{schema}.{tn}'
         if exists_table(full):
             resources.append({'id': f'table:{tn}', 'category': 'UC Table', 'name': full})
-    for pn in parse_names('data/default/proc', 'PROCEDURE'):
+    for pn in parse_names('data/demo/proc', 'PROCEDURE'):
         full = f'{catalog}.{schema}.{pn}'
         if exists_routine(full, 'FUNCTION'):
             resources.append({'id': f'proc:{pn}', 'category': 'UC Procedure', 'name': full})

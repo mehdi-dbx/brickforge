@@ -1530,12 +1530,12 @@ if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
 print('[+] Catalog and schema ready')
 sql_files = []
 stash_dir = os.environ.get('FORGE_STASH_DIR', '').strip()
-use_default = os.environ.get('USE_DEFAULT_DATA', 'true').strip().lower()
+use_demo = (os.environ.get('USE_DEMO_DATA') or os.environ.get('USE_DEFAULT_DATA', 'true')).strip().lower()
 if stash_dir:
     d = ROOT / stash_dir / 'data' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
-if not stash_dir and use_default in ('true', '1', 'yes'):
-    d = ROOT / 'data' / 'default' / 'init'
+if not stash_dir and use_demo in ('true', '1', 'yes'):
+    d = ROOT / 'data' / 'demo' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
 if os.environ.get('USE_GEN_DATA', 'false').strip().lower() in ('true', '1', 'yes'):
     d = ROOT / 'data' / 'gen' / 'init'
