@@ -650,9 +650,8 @@ try:
     else: print('[x] ' + app_name + ' — ' + status); exit(1)
 except Exception as e:
     err = str(e)[:100]
-    if 'not found' in err.lower() or '404' in err: print('[x] app not found — deploy first')
-    else: print('[x] ' + err)
-    exit(1)
+    if 'not found' in err.lower() or '404' in err: print('[+] name configured -- not yet deployed')
+    else: print('[x] ' + err); exit(1)
 """.strip(),
     "tables": """
 from databricks.sdk import WorkspaceClient; import os

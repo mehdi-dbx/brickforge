@@ -55,6 +55,14 @@ export function SetupView() {
     setActiveStep(id)
     setExecLines([])
     setSelectedInstanceKey(null)
+    // If block is already done (configured), go straight to done phase
+    const currentStatus = stepStates[id]?.status
+    if (currentStatus === 'done') {
+      setSelectedChoice(null)
+      setPhase('done')
+      refreshStatus()
+      return
+    }
     // Single-choice blocks: skip choose phase, go straight to configure
     const step = SETUP_STEPS.find(s => s.id === id)
     if (step && step.choices.length === 1) {
@@ -65,7 +73,7 @@ export function SetupView() {
       setPhase('choose')
     }
     refreshStatus()
-  }, [refreshStatus])
+  }, [refreshStatus, stepStates])
 
   const handleClickInstance = useCallback((stepId: StepId, key: string) => {
     setActiveStep(stepId)
