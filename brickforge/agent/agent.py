@@ -29,7 +29,7 @@ from tools.generate_chart import generate_chart
 from tools.ka_factory import discover_ka_tools
 from tools.api_factory import discover_api_tools
 from tools.a2a_factory import discover_a2a_tools
-from tools.tool_factory import discover_forge_tools
+from tools.tool_factory import discover_forge_tools, discover_uc_function_tools
 
 import importlib
 import pkgutil
@@ -198,7 +198,9 @@ async def init_agent(
     domain_tools = _discover_domain_tools()
     # .forge declarative tools (SQL read + action patterns from config)
     forge_tools = discover_forge_tools(dict(os.environ))
-    _log.info("Discovered %d domain, %d forge, %d KA, %d API, %d A2A tools", len(domain_tools), len(forge_tools), len(ka_tools), len(api_tools), len(a2a_tools))
+    # UC functions from PROJECT_FUNCTIONS env var
+    uc_func_tools = discover_uc_function_tools()
+    _log.info("Discovered %d domain, %d forge, %d uc_func, %d KA, %d API, %d A2A tools", len(domain_tools), len(forge_tools), len(uc_func_tools), len(ka_tools), len(api_tools), len(a2a_tools))
     # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
     chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
     from agent.memory_tools import create_memory_tools
@@ -206,7 +208,7 @@ async def init_agent(
     memory_tools = create_memory_tools(store, user_id) if memory_enabled and store and user_id else []
     if memory_tools:
         _log.info("Memory tools enabled for user '%s'", user_id)
-    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + forge_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
+    tools = list(wrapped_tools) + ka_tools + api_tools + a2a_tools + forge_tools + uc_func_tools + chart_tools + memory_tools + [get_current_time] + domain_tools
     endpoint = os.environ.get("AGENT_MODEL_ENDPOINT", "").strip()
     databricks_host = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
 

@@ -200,3 +200,57 @@ def discover_forge_tools(forge_config: dict) -> list:
             _log.warning("Unknown tool type '%s' for tool '%s'", tool_type, tool_name)
 
     return tools
+
+
+# ---------------------------------------------------------------------------
+# UC function discovery from PROJECT_FUNCTIONS env var
+# ---------------------------------------------------------------------------
+
+def discover_uc_function_tools() -> list:
+    """Read ``PROJECT_FUNCTIONS`` env var and create sql_read tools.
+
+    Each comma-separated function name is resolved against Unity Catalog
+    to fetch its input parameters, then wrapped via ``create_sql_read_tool``.
+    """
+    import os
+
+    raw = os.environ.get("PROJECT_FUNCTIONS", "").strip()
+    if not raw:
+        return []
+
+    schema = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
+    if not schema or "." not in schema:
+        _log.warning("PROJECT_FUNCTIONS set but PROJECT_UNITY_CATALOG_SCHEMA missing or invalid")
+        return []
+
+    func_names = [f.strip() for f in raw.split(",") if f.strip()]
+    if not func_names:
+        return []
+
+    cat, sch = schema.split(".", 1)
+
+    # Fetch UC metadata for param discovery
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        uc_funcs = {f.name: f for f in w.functions.list(catalog_name=cat, schema_name=sch) if f.name}
+    except Exception as e:
+        _log.warning("Could not list UC functions in %s: %s — creating tools without params", schema, e)
+        uc_funcs = {}
+
+    tools = []
+    for func_name in func_names:
+        uc_info = uc_funcs.get(func_name)
+        params = []
+        desc = func_name.replace("_", " ")
+
+        if uc_info and uc_info.input_params and uc_info.input_params.parameters:
+            params = [p.name for p in uc_info.input_params.parameters if p.name]
+            if uc_info.comment:
+                desc = uc_info.comment
+
+        t = create_sql_read_tool(func_name, func_name, params, desc)
+        tools.append(t)
+
+    _log.info("Discovered %d UC function tool(s) from PROJECT_FUNCTIONS", len(tools))
+    return tools
