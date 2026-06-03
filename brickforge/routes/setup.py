@@ -121,6 +121,14 @@ def _get_forge_mode():
     return FORGE_MODE
 
 
+def _get_workspace_client():
+    """Build a WorkspaceClient from config (host + token). Avoids stale CLI profiles."""
+    from databricks.sdk import WorkspaceClient
+    config = _get_config()
+    flat = config.flatten()
+    return WorkspaceClient(host=flat.get("DATABRICKS_HOST"), token=flat.get("DATABRICKS_TOKEN"))
+
+
 # ── Status ────────────────────────────────────────────────────────────────────
 
 @router.get("/api/setup/status")
@@ -1212,6 +1220,26 @@ async def setup_exec(request: Request):
             yield sse_line(f"[+] PROJECT_GENIE_SPACES = {new_value}\n")
             logger.finish(True)
             yield sse_done(True)
+            return
+
+        if action == "save-genie-rename":
+            space_id = params.get("space_id", "")
+            new_name = params.get("name", "")
+            if not space_id or not new_name:
+                yield sse_line("[x] space_id and name required\n", "err")
+                logger.finish(False, 1)
+                yield sse_done(False, 1)
+                return
+            try:
+                w = _get_workspace_client()
+                w.genie.update_space(space_id=space_id, title=new_name)
+                yield sse_line(f"[+] Genie space renamed to '{new_name}'\n")
+                logger.finish(True)
+                yield sse_done(True)
+            except Exception as e:
+                yield sse_line(f"[x] rename failed: {e}\n", "err")
+                logger.finish(False, 1)
+                yield sse_done(False, 1)
             return
 
         if action == "save-lakebase":
