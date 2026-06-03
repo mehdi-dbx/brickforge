@@ -13,6 +13,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { useTaskNotification } from '@/contexts/TaskNotificationContext';
+import { useAppConfig } from '@/contexts/AppConfigContext';
 
 export function ChatPanelHeader({
   showIntermediateSteps,
@@ -40,12 +41,15 @@ export function ChatPanelHeader({
   const { refresh } = useTableRefresh();
   const { role, setRole } = useRole();
   const { hasUnreadTask } = useTaskNotification();
+  const { featureEnabled } = useAppConfig();
+  const personasEnabled = featureEnabled('personas');
   const sendMessageRef = useRef(sendMessage);
   sendMessageRef.current = sendMessage;
   const [resetting, setResetting] = useState(false);
 
   // Send persona message to agent on mount and when user changes role
   useEffect(() => {
+    if (!personasEnabled) return;
     const fn = sendMessageRef.current;
     if (!fn) return;
     const personaMessage = `Your current persona is now ${role}`;
@@ -54,7 +58,7 @@ export function ChatPanelHeader({
       parts: [{ type: 'text', text: personaMessage }],
       metadata: { source: 'system' },
     });
-  }, [role]);
+  }, [role, personasEnabled]);
 
   const resetState = async () => {
     setResetting(true);
@@ -78,31 +82,33 @@ export function ChatPanelHeader({
         <span className="truncate font-semibold tracking-tight text-purple-600 text-sm">
           BrickForge
         </span>
-        <div className="flex items-center gap-2">
-          <select
-            value={role}
-            onChange={(e) => {
-              const newRole = e.target.value as 'Agent' | 'Manager';
-              if (newRole !== role) {
-                onNewChat();
-                setRole(newRole);
-              }
-            }}
-            className="rounded-md border border-input bg-background px-2 py-1 text-muted-foreground text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-            aria-label="Role"
-          >
-            <option value="Agent">Agent</option>
-            <option value="Manager">Manager</option>
-          </select>
-          {role === 'Agent' && hasUnreadTask && (
-            <span
-              className="flex items-center justify-center rounded-full bg-blue-600 p-1.5 text-white"
-              title="New staffing duty assigned"
+        {personasEnabled && (
+          <div className="flex items-center gap-2">
+            <select
+              value={role}
+              onChange={(e) => {
+                const newRole = e.target.value as 'Agent' | 'Manager';
+                if (newRole !== role) {
+                  onNewChat();
+                  setRole(newRole);
+                }
+              }}
+              className="rounded-md border border-input bg-background px-2 py-1 text-muted-foreground text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Role"
             >
-              <Bell className="h-4 w-4" />
-            </span>
-          )}
-        </div>
+              <option value="Agent">Agent</option>
+              <option value="Manager">Manager</option>
+            </select>
+            {role === 'Agent' && hasUnreadTask && (
+              <span
+                className="flex items-center justify-center rounded-full bg-blue-600 p-1.5 text-white"
+                title="New staffing duty assigned"
+              >
+                <Bell className="h-4 w-4" />
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
         <Button
