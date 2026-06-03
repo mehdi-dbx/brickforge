@@ -205,7 +205,9 @@ async def init_agent(
     """
     mcp_tools = await _get_mcp_tools_safe(workspace_client or _get_workspace_client())
     wrapped_tools = [wrap_for_genie_capture(t) for t in mcp_tools]
-    ka_tools = discover_ka_tools()
+    # Brick-gated tool discovery: only load tools for enabled bricks
+    _brick = lambda key, default="false": os.environ.get(f"PROJECT_BRICK_{key}", default).strip().lower() not in ("false", "0", "")
+    ka_tools = discover_ka_tools() if _brick("KA") else []
     api_tools = discover_api_tools()
     a2a_tools = discover_a2a_tools()
     domain_tools = _discover_domain_tools()
@@ -214,7 +216,7 @@ async def init_agent(
     # UC functions selected in Setup (PROJECT_FUNCTIONS env var)
     uc_func_tools = discover_uc_function_tools()
     _log.info("Discovered %d domain, %d forge, %d uc_func, %d KA, %d API, %d A2A tools", len(domain_tools), len(forge_tools), len(uc_func_tools), len(ka_tools), len(api_tools), len(a2a_tools))
-    # Chart tool: enabled by default, disable with PROJECT_TOOL_CHART=false
+    # Feature-gated tools
     chart_tools = [generate_chart] if os.environ.get("PROJECT_TOOL_CHART", "true").strip().lower() != "false" else []
     from agent.memory_tools import create_memory_tools
     memory_enabled = os.environ.get("PROJECT_TOOL_MEMORY", "false").strip().lower() != "false"
