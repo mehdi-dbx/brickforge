@@ -1128,7 +1128,7 @@ function PromptGenerator({ onDone }: { onDone: () => void }) {
               disabled={saving}
               className="w-full text-[14px] py-2.5 rounded-lg font-mono font-medium bg-dbx-red text-white hover:bg-dbx-red-dk shadow-dbx-md hover:shadow-dbx-glow active:scale-[0.98] transition-all duration-200"
             >
-              save to conf/prompt/
+              save
             </button>
             <button
               onClick={handleGenerate}
@@ -2690,12 +2690,22 @@ export function SetupDrawer({
                 <div className="w-12 h-12 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
                   <span className="text-[24px] text-dbx-blue dark:text-dbx-green leading-none">&#10003;</span>
                 </div>
-                <div className="text-[14px] font-semibold text-dbx-blue dark:text-dbx-green">configured</div>
+                <div className="text-[14px] font-semibold text-dbx-blue dark:text-dbx-green">{activeStep === 'deploy' ? 'deployed' : 'configured'}</div>
                 {['schema', 'tables', 'functions'].includes(activeStep) && currentValues.PROJECT_UNITY_CATALOG_SCHEMA && (
                   <div className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mt-0.5">
                     {currentValues.PROJECT_UNITY_CATALOG_SCHEMA}
                   </div>
                 )}
+                {activeStep === 'deploy' && (() => {
+                  const urlLine = execLines.find(l => l.text.includes('Agent App: https://'))
+                  const url = urlLine?.text.match(/https:\/\/\S+/)?.[0]
+                  return url ? (
+                    <a href={url} target="_blank" rel="noopener noreferrer"
+                      className="text-[12px] font-mono text-dbx-red dark:text-[#FF6B5A] hover:underline mt-1 truncate max-w-full">
+                      {url}
+                    </a>
+                  ) : null
+                })()}
               </>
             )}
           </div>
@@ -2714,7 +2724,7 @@ export function SetupDrawer({
             onClick={onReconfigure}
             className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-red hover:border-dbx-red-lt font-mono transition-all duration-150"
           >
-            reconfigure
+            {activeStep === 'deploy' ? 'redeploy' : 'reconfigure'}
           </button>
         </div>
       </>
@@ -2739,7 +2749,7 @@ export function SetupDrawer({
               onClick={onBack}
               className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-md px-2 py-0.5 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 font-mono transition-all duration-150 hover:shadow-node"
             >
-              reconfigure
+              {activeStep === 'deploy' ? 'redeploy' : 'reconfigure'}
             </button>
           )}
         </div>
