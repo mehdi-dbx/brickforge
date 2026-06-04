@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Create (or replace) all stored procedures from data/demo/proc/*.sql.
+"""Create (or replace) all UC SQL functions from data/demo/func/*.sql.
 
-Runs each SQL file through data/py/run_sql.py which handles
+Only files that contain a CREATE statement are executed (SELECT-only
+query templates are skipped automatically).
+
+Runs each SQL file through provisioners/run_sql.py which handles
 __SCHEMA_QUALIFIED__ substitution and Databricks auth.
 
-Usage: uv run python data/init/create_all_procedures.py
+Usage: uv run python data/init/create_all_functions.py
 """
 import os
 import re
@@ -14,10 +17,10 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
-LOG_FILE = ROOT / "logs" / "create_all_procedures.log"
+LOG_FILE = ROOT / "logs" / "create_all_functions.log"
 
 R, G, Y, B, M, C, W = "\033[31m", "\033[32m", "\033[33m", "\033[34m", "\033[35m", "\033[36m", "\033[0m"
 BOLD = "\033[1m"
@@ -80,30 +83,41 @@ def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> boo
     return True
 
 
+def _is_ddl(sql_path: Path) -> bool:
+    """Return True if the SQL file contains a CREATE statement (DDL, not a query template)."""
+    content = sql_path.read_text()
+    return bool(re.search(r"\bCREATE\b", content, re.IGNORECASE))
+
+
 def main() -> None:
     stash_dir = os.environ.get("FORGE_STASH_DIR", "").strip()
-    proc_dir = (ROOT / stash_dir / "data" / "proc") if stash_dir else (ROOT / "data" / "default" / "proc")
-    proc_sql = sorted(proc_dir.glob("*.sql"))
+    func_dir = (ROOT / stash_dir / "data" / "func") if stash_dir else (ROOT / "data" / "default" / "func")
+    all_sql = sorted(func_dir.glob("*.sql"))
+    ddl_sql = [p for p in all_sql if _is_ddl(p)]
+    skipped = len(all_sql) - len(ddl_sql)
 
     print(f"\n{BOLD}{M}╔══════════════════════════════════════════╗{W}")
-    print(f"{BOLD}{M}║  Create All Procedures                   ║{W}")
+    print(f"{BOLD}{M}║  Create All Functions                    ║{W}")
     print(f"{BOLD}{M}╚══════════════════════════════════════════╝{W}\n")
-    _log_plain(f"=== create_all_procedures started {datetime.now().isoformat()} ===")
+    _log_plain(f"=== create_all_functions started {datetime.now().isoformat()} ===")
 
-    if not proc_sql:
-        print(f"  {WARN} No SQL files found in {proc_dir.relative_to(ROOT)}{W}")
+    if skipped:
+        print(f"  {DIM}Skipping {skipped} query template(s) without CREATE statement{W}")
+
+    if not ddl_sql:
+        print(f"  {WARN} No CREATE function SQL files found in {func_dir.relative_to(ROOT)}{W}")
         return
 
-    total = len(proc_sql)
-    for i, sql_path in enumerate(proc_sql, 1):
+    total = len(ddl_sql)
+    for i, sql_path in enumerate(ddl_sql, 1):
         rel = str(sql_path.relative_to(ROOT))
-        if not run_step(rel, ["uv", "run", "python", "data/py/run_sql.py", rel], i, total):
+        if not run_step(rel, ["uv", "run", "python", "provisioners/run_sql.py", rel], i, total):
             print(f"\n  {FAIL} Aborting after {rel} failed{W}")
             _log_plain(f"Aborting after {rel} failed")
             sys.exit(1)
 
-    print(f"\n  {OK} {G}All procedures created ({total}){W}\n")
-    _log_plain("=== create_all_procedures completed ===")
+    print(f"\n  {OK} {G}All functions created ({total}){W}\n")
+    _log_plain("=== create_all_functions completed ===")
 
 
 if __name__ == "__main__":

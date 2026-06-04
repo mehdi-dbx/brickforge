@@ -19,7 +19,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 LOG_FILE = ROOT / "logs" / "create_all_assets.log"
@@ -249,30 +249,30 @@ def main() -> None:
 
     step = 0
     step += 1
-    if not run_step("create_catalog_schema", ["uv", "run", "python", "data/init/create_catalog_schema.py"], step, total_steps):
+    if not run_step("create_catalog_schema", ["uv", "run", "python", "provisioners/create_catalog_schema.py"], step, total_steps):
         print(f"\n  {FAIL} Aborting after create_catalog_schema failed{W}")
         _log_plain("Aborting after create_catalog_schema failed")
         sys.exit(1)
 
     for sql in INIT_SQL:
         step += 1
-        if not run_step(f"run_sql {sql}", ["uv", "run", "python", "data/py/run_sql.py", sql], step, total_steps):
+        if not run_step(f"run_sql {sql}", ["uv", "run", "python", "provisioners/run_sql.py", sql], step, total_steps):
             sys.exit(1)
 
     step += 1
-    if not run_step("create_genie_space", ["uv", "run", "python", "data/init/create_genie_space.py"], step, total_steps):
+    if not run_step("create_genie_space", ["uv", "run", "python", "provisioners/create_genie_space.py"], step, total_steps):
         sys.exit(1)
 
     step += 1
-    if not run_step("create_all_functions", ["uv", "run", "python", "data/init/create_all_functions.py"], step, total_steps):
+    if not run_step("create_all_functions", ["uv", "run", "python", "provisioners/create_all_functions.py"], step, total_steps):
         sys.exit(1)
 
     step += 1
-    if not run_step("create_all_procedures", ["uv", "run", "python", "data/init/create_all_procedures.py"], step, total_steps):
+    if not run_step("create_all_procedures", ["uv", "run", "python", "provisioners/create_all_procedures.py"], step, total_steps):
         sys.exit(1)
 
     step += 1
-    if not run_step("create_lakebase", ["uv", "run", "python", "data/init/create_lakebase.py"], step, total_steps):
+    if not run_step("create_lakebase", ["uv", "run", "python", "provisioners/create_lakebase.py"], step, total_steps):
         sys.exit(1)
 
     step += 1

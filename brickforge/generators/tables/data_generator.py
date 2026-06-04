@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from data.gen.llm_client import call_llm_json
+from generators.llm_client import call_llm_json
 
 BATCH_SIZE = 30
 

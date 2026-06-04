@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from data.gen.llm_client import call_llm_json
+from generators.llm_client import call_llm_json
 
 ALLOWED_TYPES = frozenset(
     ["STRING", "INT", "BIGINT", "DOUBLE", "FLOAT", "BOOLEAN", "DATE", "TIMESTAMP_NTZ"]

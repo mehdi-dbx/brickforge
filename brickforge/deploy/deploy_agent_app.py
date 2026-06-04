@@ -32,10 +32,10 @@ AGENT_APP_DIRS = [
     "agent",
     "tools",
     "lib",
+    "generators",
+    "provisioners",
     "data/demo",
-    "data/init",
     "data/gen",
-    "data/py",
     "conf",
     "eval",
 ]

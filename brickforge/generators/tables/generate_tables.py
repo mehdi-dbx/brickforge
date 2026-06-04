@@ -31,7 +31,7 @@ def _emit_result(data: dict | list) -> None:
 
 
 def mode_schema(domain: str) -> None:
-    from data.gen.schema_generator import generate_schema
+    from generators.tables.schema_generator import generate_schema
     try:
         tables = generate_schema(domain)
         _emit_result({"tables": tables})
@@ -42,7 +42,7 @@ def mode_schema(domain: str) -> None:
 
 
 def mode_data() -> None:
-    from data.gen.data_generator import generate_data
+    from generators.tables.data_generator import generate_data
     try:
         input_data = json.loads(sys.stdin.read())
         table = input_data["table"]
@@ -56,7 +56,7 @@ def mode_data() -> None:
 
 
 def mode_save() -> None:
-    from data.gen.writer import write_csv, write_create_sql, write_manifest
+    from generators.tables.writer import write_csv, write_create_sql, write_manifest
     try:
         input_data = json.loads(sys.stdin.read())
         table = input_data["table"]

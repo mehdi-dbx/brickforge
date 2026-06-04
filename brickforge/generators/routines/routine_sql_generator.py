@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from data.gen.llm_client import call_llm
+from generators.llm_client import call_llm
 
 _REFERENCE_PATH = Path(__file__).parent / "databricks_sql_reference.md"
 

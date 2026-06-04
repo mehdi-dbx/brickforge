@@ -15,7 +15,7 @@ load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "CANCELED", "CLOSED"})
 
-DATA_ROOT = Path(__file__).resolve().parent.parent.parent
+DATA_ROOT = Path(__file__).resolve().parent.parent
 
 def _active_csv_dirs() -> list[Path]:
     """Return CSV directories based on USE_DEMO_DATA / USE_GEN_DATA flags."""

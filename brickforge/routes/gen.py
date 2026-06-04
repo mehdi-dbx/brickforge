@@ -259,7 +259,7 @@ async def prompt_generate(request: Request):
     body = await request.json()
     domain = body.get("domain", "")
     table_schemas = body.get("tableSchemas")
-    cmd = [sys.executable, "data/gen/generate_prompts.py", "--mode=generate", f"--domain={domain}"]
+    cmd = [sys.executable, "generators/prompts/generate_prompts.py", "--mode=generate", f"--domain={domain}"]
     if table_schemas:
         cmd.append(f"--tables-json={json.dumps(table_schemas)}")
     return _sse_gen(cmd)
@@ -269,7 +269,7 @@ async def prompt_generate(request: Request):
 async def prompt_save(request: Request):
     body = await request.json()
     stdin_data = json.dumps(body)
-    cmd = [sys.executable, "data/gen/generate_prompts.py", "--mode=save"]
+    cmd = [sys.executable, "generators/prompts/generate_prompts.py", "--mode=save"]
     return _sse_gen(cmd, stdin_data)
 
 
@@ -280,7 +280,7 @@ async def gen_schema(request: Request):
     body = await request.json()
     domain = body.get("domain", "")
     table_schemas = body.get("tableSchemas")
-    cmd = [sys.executable, "data/gen/generate_tables.py", "--mode=schema", f"--domain={domain}"]
+    cmd = [sys.executable, "generators/tables/generate_tables.py", "--mode=schema", f"--domain={domain}"]
     if table_schemas:
         cmd.append(f"--tables-json={json.dumps(table_schemas)}")
     return _sse_gen(cmd)
@@ -290,7 +290,7 @@ async def gen_schema(request: Request):
 async def gen_data(request: Request):
     body = await request.json()
     stdin_data = json.dumps(body)
-    cmd = [sys.executable, "data/gen/generate_tables.py", "--mode=data"]
+    cmd = [sys.executable, "generators/tables/generate_tables.py", "--mode=data"]
     return _sse_gen(cmd, stdin_data)
 
 
@@ -298,13 +298,13 @@ async def gen_data(request: Request):
 async def gen_save(request: Request):
     body = await request.json()
     stdin_data = json.dumps(body)
-    cmd = [sys.executable, "data/gen/generate_tables.py", "--mode=save"]
+    cmd = [sys.executable, "generators/tables/generate_tables.py", "--mode=save"]
     return _sse_gen(cmd, stdin_data)
 
 
 @router.post("/api/gen/provision")
 async def gen_provision():
-    cmd = [sys.executable, "data/gen/generate_tables.py", "--mode=provision-gen"]
+    cmd = [sys.executable, "generators/tables/generate_tables.py", "--mode=provision-gen"]
     return _sse_gen(cmd)
 
 
@@ -349,7 +349,7 @@ async def routine_schema(request: Request):
     body = await request.json()
     domain = body.get("domain", "")
     table_schemas = body.get("tableSchemas")
-    cmd = [sys.executable, "data/gen/generate_routines.py", "--mode=schema", f"--domain={domain}"]
+    cmd = [sys.executable, "generators/routines/generate_routines.py", "--mode=schema", f"--domain={domain}"]
     if table_schemas:
         cmd.append(f"--tables-json={json.dumps(table_schemas)}")
     return _sse_gen(cmd)
@@ -359,7 +359,7 @@ async def routine_schema(request: Request):
 async def routine_sql(request: Request):
     body = await request.json()
     stdin_data = json.dumps(body)
-    cmd = [sys.executable, "data/gen/generate_routines.py", "--mode=sql"]
+    cmd = [sys.executable, "generators/routines/generate_routines.py", "--mode=sql"]
     return _sse_gen(cmd, stdin_data)
 
 
@@ -367,11 +367,11 @@ async def routine_sql(request: Request):
 async def routine_save(request: Request):
     body = await request.json()
     stdin_data = json.dumps(body)
-    cmd = [sys.executable, "data/gen/generate_routines.py", "--mode=save"]
+    cmd = [sys.executable, "generators/routines/generate_routines.py", "--mode=save"]
     return _sse_gen(cmd, stdin_data)
 
 
 @router.post("/api/gen/routine-provision")
 async def routine_provision():
-    cmd = [sys.executable, "data/gen/generate_routines.py", "--mode=provision-gen"]
+    cmd = [sys.executable, "generators/routines/generate_routines.py", "--mode=provision-gen"]
     return _sse_gen(cmd)

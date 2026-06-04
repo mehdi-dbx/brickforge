@@ -31,7 +31,7 @@ def _emit_result(data: dict | list) -> None:
 
 
 def mode_generate(domain: str, tables_json: str | None) -> None:
-    from data.gen.prompt_generator import generate_prompts
+    from generators.prompts.prompt_generator import generate_prompts
 
     table_schemas = None
     if tables_json:

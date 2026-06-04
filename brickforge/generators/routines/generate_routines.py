@@ -32,7 +32,7 @@ def _emit_result(data: dict | list) -> None:
 
 
 def mode_schema(domain: str, tables_json: str | None) -> None:
-    from data.gen.routine_schema_generator import generate_routine_schema
+    from generators.routines.routine_schema_generator import generate_routine_schema
 
     table_schemas = None
     if tables_json:
@@ -51,7 +51,7 @@ def mode_schema(domain: str, tables_json: str | None) -> None:
 
 
 def mode_sql() -> None:
-    from data.gen.routine_sql_generator import generate_routine_sql
+    from generators.routines.routine_sql_generator import generate_routine_sql
 
     try:
         input_data = json.loads(sys.stdin.read())
@@ -66,7 +66,7 @@ def mode_sql() -> None:
 
 
 def mode_save() -> None:
-    from data.gen.routine_writer import (
+    from generators.routines.routine_writer import (
         write_function_sql,
         write_procedure_sql,
         write_routine_manifest,
@@ -103,8 +103,8 @@ Do NOT add features, parameters, or clauses that were not in the original."""
 
 def _self_heal(sql_file: Path, error_msg: str, kind: str) -> str | None:
     """Attempt to fix SQL using the LLM. Returns corrected SQL or None."""
-    from data.gen.llm_client import call_llm
-    from data.gen.routine_sql_generator import _sanitize_sql, _load_reference
+    from generators.llm_client import call_llm
+    from generators.routines.routine_sql_generator import _sanitize_sql, _load_reference
 
     original_sql = sql_file.read_text()
     ref = _load_reference()

@@ -1,7 +1,7 @@
 """Generate agent prompt files from a domain description using the LLM."""
 from __future__ import annotations
 
-from data.gen.llm_client import call_llm_json
+from generators.llm_client import call_llm_json
 
 
 SYSTEM_PROMPT = """\

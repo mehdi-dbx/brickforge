@@ -1341,7 +1341,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
         if action == "exec-genie":
             genie_name = params.get("name", "Project Data")
             sub_env["GENIE_ROOM_NAME"] = genie_name
-            cmd = [PYTHON,"data/init/create_genie_space.py"]
+            cmd = [PYTHON,"provisioners/create_genie_space.py"]
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             logger.finish(True)
@@ -1352,7 +1352,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             if schema_spec:
                 config.set_many({"PROJECT_UNITY_CATALOG_SCHEMA": schema_spec})
                 sub_env["PROJECT_UNITY_CATALOG_SCHEMA"] = schema_spec
-            cmd = [PYTHON,"data/init/create_all_assets.py"]
+            cmd = [PYTHON,"provisioners/create_all_assets.py"]
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             logger.finish(True)
@@ -1580,7 +1580,7 @@ from pathlib import Path
 ROOT = Path('.')
 print('[~] Creating catalog and schema...')
 sys.stdout.flush()
-r = subprocess.run([sys.executable, 'data/init/create_catalog_schema.py'], cwd=ROOT)
+r = subprocess.run([sys.executable, 'provisioners/create_catalog_schema.py'], cwd=ROOT)
 if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
 print('[+] Catalog and schema ready')
 sql_files = []
@@ -1602,7 +1602,7 @@ for i, sf in enumerate(sql_files, 1):
     name = sf.stem.replace('create_', '')
     print(f'[~] ({i}/{len(sql_files)}) {name}...')
     sys.stdout.flush()
-    r = subprocess.run([sys.executable, 'data/py/run_sql.py', rel], cwd=ROOT)
+    r = subprocess.run([sys.executable, 'provisioners/run_sql.py', rel], cwd=ROOT)
     if r.returncode != 0: print(f'[x] Failed: {rel}'); sys.exit(1)
     print(f'[+] {name}')
 print(f'[+] All {len(sql_files)} table(s) provisioned')
@@ -1616,7 +1616,7 @@ from pathlib import Path
 ROOT = Path('.')
 print('[~] Creating catalog and schema...')
 sys.stdout.flush()
-r = subprocess.run([sys.executable, 'data/init/create_catalog_schema.py'], cwd=ROOT)
+r = subprocess.run([sys.executable, 'provisioners/create_catalog_schema.py'], cwd=ROOT)
 if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
 print('[+] Catalog and schema ready')
 upload_init = ROOT / 'data' / 'upload' / 'init'
@@ -1630,7 +1630,7 @@ for i, sf in enumerate(sql_files, 1):
     name = sf.stem.replace('create_', '')
     print(f'[~] ({i}/{len(sql_files)}) {name}...')
     sys.stdout.flush()
-    r = subprocess.run([sys.executable, 'data/py/run_sql.py', rel], cwd=ROOT)
+    r = subprocess.run([sys.executable, 'provisioners/run_sql.py', rel], cwd=ROOT)
     if r.returncode != 0: print(f'[x] Failed: {rel}'); sys.exit(1)
     # Load CSV data into the table
     csv_path = upload_csv_dir / f'{name}.csv'
@@ -1641,7 +1641,7 @@ for i, sf in enumerate(sql_files, 1):
     if csv_path.exists():
         print(f'[~] Loading data from {csv_path.name}...')
         sys.stdout.flush()
-        r2 = subprocess.run([sys.executable, 'data/py/csv_to_delta.py', str(csv_path)], cwd=ROOT)
+        r2 = subprocess.run([sys.executable, 'provisioners/csv_to_delta.py', str(csv_path)], cwd=ROOT)
         if r2.returncode != 0: print(f'[~] CSV load warning: {csv_path.name}')
     print(f'[+] {name}')
 print(f'[+] All {len(sql_files)} uploaded table(s) provisioned')
@@ -1653,11 +1653,11 @@ def _functions_script() -> str:
 import subprocess, sys
 print('[~] Creating UC functions...')
 sys.stdout.flush()
-r = subprocess.run([sys.executable, 'data/init/create_all_functions.py'])
+r = subprocess.run([sys.executable, 'provisioners/create_all_functions.py'])
 if r.returncode != 0: print('[x] create_all_functions failed'); sys.exit(1)
 print('[~] Creating UC procedures...')
 sys.stdout.flush()
-r = subprocess.run([sys.executable, 'data/init/create_all_procedures.py'])
+r = subprocess.run([sys.executable, 'provisioners/create_all_procedures.py'])
 if r.returncode != 0: print('[x] create_all_procedures failed'); sys.exit(1)
 print('[+] All functions and procedures created')
 """.strip()
