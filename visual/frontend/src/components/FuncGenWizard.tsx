@@ -603,10 +603,10 @@ export function FuncGenWizard({ onSwitchToTables }: Props) {
               {routines.filter(r => r.type === 'procedure').length} procedure(s) created in UC, {routines.filter(r => r.type === 'function').length} function template(s) saved locally
             </p>
             <button
-              onClick={onSwitchToTables}
+              onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'setup' }))}
               className="px-4 py-2 rounded-md text-[12px] font-mono font-medium bg-dbx-red text-white hover:bg-[#E02E1C] transition-colors"
             >
-              view tables
+              view functions
             </button>
           </div>
         )}

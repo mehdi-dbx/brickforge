@@ -147,9 +147,11 @@ export function DataView() {
       <div className="flex-shrink-0 px-6 pt-6 pb-4">
         <div className="max-w-5xl mx-auto flex items-start justify-between">
           <div>
-            <h2 className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">Unity Catalog Tables</h2>
+            <h2 className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">
+              {isRoutines ? 'Unity Catalog Functions' : 'Unity Catalog Tables'}
+            </h2>
             <p className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mt-1">
-              Delta tables provisioned by create_all_assets.py
+              {isRoutines ? 'Functions and stored procedures in Unity Catalog' : 'Delta tables provisioned in Unity Catalog'}
             </p>
             {/* Data source flags */}
             {!isGenerate && !isRoutines && (

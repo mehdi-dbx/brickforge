@@ -29,6 +29,10 @@ You write Databricks SQL. Not standard SQL. Not PostgreSQL. Databricks SQL only.
 Generate a CREATE OR REPLACE FUNCTION for Databricks Unity Catalog.
 Return ONLY the raw SQL. No markdown fences. No explanation. No comments.
 
+CRITICAL: Use __SCHEMA_QUALIFIED__ as prefix for ALL table and routine names.
+Example: CREATE OR REPLACE FUNCTION __SCHEMA_QUALIFIED__.my_func(...)
+Example: SELECT * FROM __SCHEMA_QUALIFIED__.my_table
+
 Be minimalist. Write the simplest SQL that works.
 - Only the parameters the user asked for. Nothing extra.
 - Only the columns needed. Nothing extra.
@@ -40,6 +44,10 @@ You write Databricks SQL. Not standard SQL. Not PostgreSQL. Databricks SQL only.
 
 Generate a CREATE OR REPLACE PROCEDURE for Databricks Unity Catalog.
 Return ONLY the raw SQL. No markdown fences. No explanation. No comments.
+
+CRITICAL: Use __SCHEMA_QUALIFIED__ as prefix for ALL table and routine names.
+Example: CREATE OR REPLACE PROCEDURE __SCHEMA_QUALIFIED__.my_proc(...)
+Example: INSERT INTO __SCHEMA_QUALIFIED__.my_table VALUES (...)
 
 Be minimalist. Write the simplest SQL that works.
 - Only the parameters the user asked for. Nothing extra.
@@ -90,9 +98,17 @@ def _sanitize_sql(sql: str, routine_type: str) -> str:
     fixes: list[str] = []
     upper = sql.upper()
 
-    # ── Common: must have schema placeholder ──
+    # ── Common: auto-add schema qualifier if missing ──
     if "__SCHEMA_QUALIFIED__" not in sql:
-        raise ValueError("Missing __SCHEMA_QUALIFIED__ placeholder — qualify all table and routine names")
+        # Qualify the routine name in CREATE statement
+        if routine_type == "procedure":
+            sql = re.sub(r'(CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+)`?(\w+)`?', r'\1__SCHEMA_QUALIFIED__.\2', sql, count=1, flags=re.IGNORECASE)
+        else:
+            sql = re.sub(r'(CREATE\s+OR\s+REPLACE\s+FUNCTION\s+)`?(\w+)`?', r'\1__SCHEMA_QUALIFIED__.\2', sql, count=1, flags=re.IGNORECASE)
+        # Qualify table names in FROM, INTO, UPDATE, JOIN clauses (bare backtick-quoted or unquoted)
+        for kw in ('FROM', 'INTO', 'UPDATE', 'JOIN'):
+            sql = re.sub(rf'({kw}\s+)`?(\w+)`?', rf'\1__SCHEMA_QUALIFIED__.\2', sql, flags=re.IGNORECASE)
+        fixes.append("auto-added __SCHEMA_QUALIFIED__ to routine and table names")
 
     # ── Common: strip SQL SECURITY INVOKER from functions ──
     if routine_type == "function" and re.search(r'\bSQL\s+SECURITY\s+INVOKER\b', sql):

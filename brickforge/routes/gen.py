@@ -108,59 +108,45 @@ async def gen_routines():
 
 # ── Wizard State ──────────────────────────────────────────────────────────────
 
-def _state_path(kind: str = "data") -> Path:
-    if kind == "routine":
-        return PACKAGE_ROOT / "data" / "gen" / "routine-wizard-state.json"
-    return PACKAGE_ROOT / "data" / "gen" / "wizard-state.json"
-
-
 @router.get("/api/gen/wizard-state")
 async def get_wizard_state():
-    try:
-        return json.loads(_state_path().read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
+    config = _get_config()
+    return config.get("data.wizard_state") or None
 
 
 @router.put("/api/gen/wizard-state")
 async def save_wizard_state(request: Request):
     body = await request.json()
-    _state_path().parent.mkdir(parents=True, exist_ok=True)
-    _state_path().write_text(json.dumps(body, indent=2))
+    config = _get_config()
+    config.set("data.wizard_state", body)
     return {"ok": True}
 
 
 @router.delete("/api/gen/wizard-state")
 async def delete_wizard_state():
-    try:
-        _state_path().unlink()
-    except FileNotFoundError:
-        pass
+    config = _get_config()
+    config.set("data.wizard_state", None)
     return {"ok": True}
 
 
 @router.get("/api/gen/routine-wizard-state")
 async def get_routine_wizard_state():
-    try:
-        return json.loads(_state_path("routine").read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
+    config = _get_config()
+    return config.get("data.routine_wizard_state") or None
 
 
 @router.put("/api/gen/routine-wizard-state")
 async def save_routine_wizard_state(request: Request):
     body = await request.json()
-    _state_path("routine").parent.mkdir(parents=True, exist_ok=True)
-    _state_path("routine").write_text(json.dumps(body, indent=2))
+    config = _get_config()
+    config.set("data.routine_wizard_state", body)
     return {"ok": True}
 
 
 @router.delete("/api/gen/routine-wizard-state")
 async def delete_routine_wizard_state():
-    try:
-        _state_path("routine").unlink()
-    except FileNotFoundError:
-        pass
+    config = _get_config()
+    config.set("data.routine_wizard_state", None)
     return {"ok": True}
 
 

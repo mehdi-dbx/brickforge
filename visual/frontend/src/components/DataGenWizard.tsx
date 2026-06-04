@@ -89,6 +89,13 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
       .catch(() => {})
   }, [])
 
+  // Auto-save domain text (debounced)
+  useEffect(() => {
+    if (!domain.trim()) return
+    const timer = setTimeout(() => saveWizardState({ domain }), 500)
+    return () => clearTimeout(timer)
+  }, [domain, saveWizardState])
+
   // ── Domain step ────────────────────────────────────────────────────────────
 
   const handleGenerateSchema = () => fire('schema')

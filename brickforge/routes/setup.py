@@ -178,8 +178,23 @@ async def setup_status():
                 raw = env.get("PROJECT_GENIE_SPACES", "").strip()
                 space_ids = [s.strip() for s in raw.split(",") if s.strip()] if raw else []
                 status = "configured" if space_ids else "missing"
+                genie_names = config.get("tools.genie_names") or {}
+                # Backfill missing names from workspace API
+                missing = [sid for sid in space_ids if sid not in genie_names]
+                if missing and env.get("DATABRICKS_HOST") and env.get("DATABRICKS_TOKEN"):
+                    try:
+                        w = _get_workspace_client()
+                        for sid in missing:
+                            try:
+                                sp = w.genie.get_space(space_id=sid)
+                                genie_names[sid] = getattr(sp, 'title', sid[:16])
+                            except Exception:
+                                genie_names[sid] = sid[:16]
+                        config.set("tools.genie_names", genie_names)
+                    except Exception:
+                        pass
                 instances = [
-                    {"key": f"PROJECT_GENIE_SPACES[{i}]", "value": sid, "enabled": True, "label": f"space {i}"}
+                    {"key": f"PROJECT_GENIE_SPACES[{i}]", "value": sid, "enabled": True, "label": genie_names.get(sid, sid[:16])}
                     for i, sid in enumerate(space_ids, 1)
                 ]
                 count = len(space_ids)
@@ -665,10 +680,11 @@ try:
     url = getattr(app, 'url', '') or ''
     if 'RUNNING' in status: print('[+] running — ' + (url or app_name))
     elif 'STARTING' in status or 'PENDING' in status: print('[+] deploying — ' + status.lower())
+    elif 'UNAVAILABLE' in status or 'STOPPED' in status: print('[+] app exists');print('[~] not running — ' + status.lower())
     else: print('[x] ' + app_name + ' — ' + status); exit(1)
 except Exception as e:
     err = str(e)[:100]
-    if 'not found' in err.lower() or '404' in err: print('[+] name configured -- not yet deployed')
+    if 'not found' in err.lower() or '404' in err or 'does not exist' in err.lower(): print('[+] name configured');print('[~] not yet deployed')
     else: print('[x] ' + err); exit(1)
 """.strip(),
     "tables": """
@@ -1205,6 +1221,7 @@ async def setup_exec(request: Request):
 
         if action == "save-genie":
             genie_id = params.get("id", "")
+            genie_name = params.get("name", "")
             if not genie_id:
                 logger.finish(False, 1)
                 yield sse_done(False, 1)
@@ -1215,7 +1232,12 @@ async def setup_exec(request: Request):
             existing_ids.add(genie_id)
             new_value = ",".join(sorted(existing_ids))
             config.set_many({"PROJECT_GENIE_SPACES": new_value})
-            yield sse_line(f"[+] PROJECT_GENIE_SPACES = {new_value}\n")
+            # Save name for display
+            if genie_name:
+                names = config.get("tools.genie_names") or {}
+                names[genie_id] = genie_name
+                config.set("tools.genie_names", names)
+            yield sse_line(f"[+] {genie_name or genie_id} added\n")
             logger.finish(True)
             yield sse_done(True)
             return
@@ -1231,6 +1253,10 @@ async def setup_exec(request: Request):
             try:
                 w = _get_workspace_client()
                 w.genie.update_space(space_id=space_id, title=new_name)
+                # Update cached name
+                names = config.get("tools.genie_names") or {}
+                names[space_id] = new_name
+                config.set("tools.genie_names", names)
                 yield sse_line(f"[+] Genie space renamed to '{new_name}'\n")
                 logger.finish(True)
                 yield sse_done(True)

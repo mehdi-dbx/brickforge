@@ -5,9 +5,10 @@ Create an MLflow experiment and update .env.local with MLFLOW_EXPERIMENT_ID.
 Requires: DATABRICKS_HOST, DATABRICKS_TOKEN or DATABRICKS_CONFIG_PROFILE.
 """
 import os
-import secrets
 import sys
 from pathlib import Path
+
+from coolname import generate_slug
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -26,7 +27,8 @@ def main() -> None:
         print(f"Failed to connect: {e}", file=sys.stderr)
         sys.exit(1)
 
-    experiment_name = f"/Users/{username}/agent-forge"
+    slug = generate_slug(2)
+    experiment_name = f"/Users/{username}/brick-forge-{slug}"
     experiment_id = ""
 
     try:
@@ -34,12 +36,13 @@ def main() -> None:
         experiment_id = str(getattr(exp, "experiment_id", ""))
     except Exception as e:
         if "RESOURCE_ALREADY_EXISTS" in str(e) or "already exists" in str(e).lower():
-            experiment_name = f"/Users/{username}/agent-forge-{secrets.token_hex(4)}"
+            slug = generate_slug(3)
+            experiment_name = f"/Users/{username}/brick-forge-{slug}"
             try:
                 exp = w.experiments.create_experiment(name=experiment_name)
                 experiment_id = str(getattr(exp, "experiment_id", ""))
             except Exception as e2:
-                print(f"Failed to create experiment with suffix: {e2}", file=sys.stderr)
+                print(f"Failed to create experiment: {e2}", file=sys.stderr)
                 sys.exit(1)
         else:
             print(f"Failed to create experiment: {e}", file=sys.stderr)
