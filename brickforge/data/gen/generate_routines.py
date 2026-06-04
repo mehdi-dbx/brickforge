@@ -67,7 +67,6 @@ def mode_save() -> None:
     from data.gen.routine_writer import (
         write_function_sql,
         write_procedure_sql,
-        write_routine_manifest,
     )
 
     try:
@@ -79,10 +78,6 @@ def mode_save() -> None:
             write_procedure_sql(routine["name"], sql)
         else:
             write_function_sql(routine["name"], sql)
-
-        # Update manifest with all routines so far
-        all_routines = input_data.get("allRoutines", [routine])
-        write_routine_manifest(all_routines)
 
         _emit_result({"ok": True, "routine": routine["name"]})
     except Exception as e:

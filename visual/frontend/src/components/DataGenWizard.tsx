@@ -313,10 +313,13 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
                 Configure the model endpoint in the Setup tab before generating data.
               </div>
               <button
-                onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'setup' }))}
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('switch-view', { detail: 'setup' }))
+                  window.dispatchEvent(new CustomEvent('activate-step', { detail: 'model' }))
+                }}
                 className="mt-2 text-[12px] font-mono text-dbx-red dark:text-[#FF6B5A] hover:underline"
               >
-                go to setup
+                go to setup (model)
               </button>
             </div>
           </div>

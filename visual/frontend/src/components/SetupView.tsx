@@ -82,6 +82,16 @@ export function SetupView() {
     refreshStatus()
   }, [refreshStatus, stepStates])
 
+  // Listen for activate-step events (e.g. from data/routines wizards)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const stepId = (e as CustomEvent<StepId>).detail
+      if (ALL_STEP_IDS.includes(stepId)) handleActivate(stepId)
+    }
+    window.addEventListener('activate-step', handler)
+    return () => window.removeEventListener('activate-step', handler)
+  }, [handleActivate])
+
   const handleClickInstance = useCallback((stepId: StepId, key: string) => {
     setActiveStep(stepId)
     setSelectedInstanceKey(key)

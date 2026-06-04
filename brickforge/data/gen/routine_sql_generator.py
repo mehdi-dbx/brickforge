@@ -49,10 +49,18 @@ CRITICAL: Use __SCHEMA_QUALIFIED__ as prefix for ALL table and routine names.
 Example: CREATE OR REPLACE PROCEDURE __SCHEMA_QUALIFIED__.my_proc(...)
 Example: INSERT INTO __SCHEMA_QUALIFIED__.my_table VALUES (...)
 
+CRITICAL: ALL procedure parameters MUST be declared as STRING type.
+- The calling tool always passes arguments as quoted strings.
+- Prefix every parameter with p_ to avoid column name conflicts.
+- Use CAST() in the procedure body to convert to the target column type.
+- Example: parameter p_check_in_date STRING, then CAST(p_check_in_date AS DATE) in the INSERT.
+- Example: parameter p_total_amount STRING, then CAST(p_total_amount AS DOUBLE) in the INSERT.
+- NEVER use DATE, DOUBLE, TIMESTAMP, INT, BIGINT, DECIMAL, or FLOAT as parameter types.
+
 Be minimalist. Write the simplest SQL that works.
 - Only the parameters the user asked for. Nothing extra.
 - No optional clauses. No clever tricks.
-- End with SELECT 'status' AS status for agent feedback."""
+- Do NOT end with SELECT 'status' -- just do the INSERT/UPDATE and end."""
 
 
 def _build_user_prompt(
@@ -181,6 +189,28 @@ def _sanitize_sql(sql: str, routine_type: str) -> str:
             raise ValueError("Procedure SQL missing CREATE statement")
         if "BEGIN" not in upper or "END" not in upper:
             raise ValueError("Procedure SQL missing BEGIN...END block")
+
+        # ── Procedure params must be STRING -- auto-fix non-STRING types ──
+        param_match = re.search(
+            r'CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+\S+\s*\((.*?)\)\s*\n',
+            sql, re.DOTALL | re.IGNORECASE,
+        )
+        if param_match:
+            params_block = param_match.group(1)
+            params = [p.strip() for p in params_block.split(',') if p.strip()]
+            non_string_types = re.compile(r'\b(DATE|DOUBLE|FLOAT|INT|BIGINT|DECIMAL|TIMESTAMP_NTZ|TIMESTAMP|BOOLEAN)\b', re.IGNORECASE)
+            new_params = []
+            fixed_any = False
+            for p in params:
+                if non_string_types.search(p):
+                    original_type = non_string_types.search(p).group(1)
+                    p = non_string_types.sub('STRING', p)
+                    fixed_any = True
+                new_params.append(p)
+            if fixed_any:
+                new_block = ',\n  '.join(new_params)
+                sql = sql[:param_match.start(1)] + '\n  ' + new_block + '\n' + sql[param_match.end(1):]
+                fixes.append("auto-fixed procedure params to STRING (tool_factory passes quoted strings)")
 
     for fix in fixes:
         print(f"[~] Auto-fixed: {fix}")

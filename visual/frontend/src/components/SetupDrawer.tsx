@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pencil, Upload, Link, Trash2, FileText } from 'lucide-react'
+import { Pencil, Upload, Link, Trash2, FileText, ExternalLink } from 'lucide-react'
 import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxEndpoint, DbxGenieSpace, ExecLine, TableDef } from '../types'
 import { GenTerminal } from './GenTerminal'
 import { SETUP_STEPS } from '../setupSteps'
@@ -1474,6 +1474,30 @@ const STEP_KEY_MAP: Record<string, string> = {
 
 // ─── Inline editable value ──────────────────────────────────────────────────
 
+function DeployAppLink({ appName }: { appName: string }) {
+  const [appUrl, setAppUrl] = useState<string | null>(null)
+  useEffect(() => {
+    fetch(`/api/setup/test?step=deploy`)
+      .then(r => r.json())
+      .then(d => {
+        const url = d.message?.match(/https?:\/\/\S+/)?.[0]
+        if (url) setAppUrl(url)
+      })
+      .catch(() => {})
+  }, [appName])
+  return (
+    <span className="flex items-center gap-1.5 min-w-0">
+      <span className="text-[13px] font-mono text-dbx-red dark:text-[#FF6B5A] truncate">{appName}</span>
+      {appUrl && (
+        <a href={appUrl} target="_blank" rel="noopener noreferrer"
+          className="flex-shrink-0 text-dbx-gray-400 hover:text-dbx-blue dark:hover:text-blue-400 transition-colors" title="open app">
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+      )}
+    </span>
+  )
+}
+
 function InlineEditable({ value, stepId, onSave, onClear }: {
   value: string
   stepId: string
@@ -1524,6 +1548,8 @@ function InlineEditable({ value, stepId, onSave, onClear }: {
           className="text-[13px] font-mono text-dbx-blue truncate hover:underline">
           {value}
         </a>
+      ) : stepId === 'deploy' && value ? (
+        <DeployAppLink appName={value} />
       ) : value ? (
         <span className="text-[13px] font-mono text-dbx-blue truncate">{value}</span>
       ) : (
@@ -2800,8 +2826,13 @@ export function SetupDrawer({
             </div>
             {/* Line 2: test result message */}
             {testState.status === 'ok' && testState.message && (
-              <div className="text-[11px] font-mono text-dbx-green mt-0.5 truncate animate-fade-in">
-                [+] {testState.message}
+              <div className="text-[11px] font-mono text-dbx-green mt-0.5 animate-fade-in">
+                [+] {testState.message.match(/https?:\/\/\S+/) ? (
+                  <>
+                    {testState.message.replace(/https?:\/\/\S+/, '')}
+                    <a href={testState.message.match(/https?:\/\/\S+/)![0]} target="_blank" rel="noopener noreferrer" className="text-dbx-blue dark:text-blue-400 hover:underline break-all">{testState.message.match(/https?:\/\/\S+/)![0]}</a>
+                  </>
+                ) : testState.message}
               </div>
             )}
             {testState.status === 'ok' && testState.detail && (

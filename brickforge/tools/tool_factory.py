@@ -59,7 +59,8 @@ def create_sql_read_tool(
             columns, rows = execute_query(w, wh_id, stmt)
             return format_query_result(columns, rows)
         except Exception as e:
-            return f"Error executing {name}: {e}"
+            _log.error("SQL-read tool %s failed: %s (type: %s)", name, e, type(e).__name__, exc_info=True)
+            return f"Error executing {name}: {type(e).__name__}: {e}"
 
     sql_read_tool.__name__ = name
     sql_read_tool.name = name
@@ -98,11 +99,13 @@ def create_action_tool(
                 f"'{_escape_sql_string(str(kwargs.get(p, '')))}'" for p in params
             )
             stmt = f"CALL {schema}.{safe_proc}({args_sql})"
+            _log.info("Action tool %s: %s", name, stmt)
             execute_statement(w, wh_id, stmt)
             param_summary = ", ".join(f"{p}={kwargs.get(p, '')}" for p in params)
             return f"Procedure {safe_proc} executed successfully ({param_summary})."
         except Exception as e:
-            return f"Error executing {name}: {e}"
+            _log.error("Action tool %s failed: %s (type: %s)", name, e, type(e).__name__, exc_info=True)
+            return f"Error executing {name}: {type(e).__name__}: {e}"
 
     action_tool.__name__ = name
     action_tool.name = name
@@ -203,25 +206,23 @@ def discover_forge_tools(forge_config: dict) -> list:
 
 
 def discover_uc_function_tools() -> list:
-    """Auto-discover UC functions from PROJECT_FUNCTIONS and register as tools.
+    """Auto-discover UC functions/procedures and register as tools.
 
-    Reads function names from PROJECT_FUNCTIONS env var (comma-separated),
-    fetches metadata from UC (params, types, comments), and creates sql_read
-    tools for TABLE_TYPE functions.
+    If PROJECT_FUNCTIONS is set, only those names are registered.
+    If PROJECT_FUNCTIONS is empty, ALL functions/procedures in the schema
+    are discovered from UC directly -- no manifest, no config dependency.
     """
     import os
 
-    raw = os.environ.get("PROJECT_FUNCTIONS", "").strip()
-    if not raw:
-        return []
-
     schema_spec = os.environ.get("PROJECT_UNITY_CATALOG_SCHEMA", "").strip()
     if not schema_spec or "." not in schema_spec:
-        _log.warning("PROJECT_FUNCTIONS set but PROJECT_UNITY_CATALOG_SCHEMA missing")
         return []
 
     cat, sch = schema_spec.split(".", 1)
-    selected = set(raw.split(","))
+
+    # If PROJECT_FUNCTIONS is set, use it as a filter; otherwise discover all
+    raw = os.environ.get("PROJECT_FUNCTIONS", "").strip()
+    selected = set(raw.split(",")) if raw else None  # None = discover all
 
     try:
         from databricks.sdk import WorkspaceClient
@@ -231,14 +232,17 @@ def discover_uc_function_tools() -> list:
         return []
 
     tools = []
-    for func_info in w.functions.list(catalog_name=cat, schema_name=sch):
-        if not func_info.name or func_info.name not in selected:
-            continue
+    try:
+        uc_functions = list(w.functions.list(catalog_name=cat, schema_name=sch))
+    except Exception as e:
+        _log.warning("Cannot list UC functions in %s.%s: %s", cat, sch, e)
+        return []
 
-        # Only register TABLE_TYPE functions as sql_read tools
-        dt = str(func_info.data_type) if func_info.data_type else ""
-        if "TABLE" not in dt:
-            _log.info("Skipping non-table UC function %s (type: %s)", func_info.name, dt)
+    for func_info in uc_functions:
+        if not func_info.name:
+            continue
+        # If selected is set, only register those names
+        if selected is not None and func_info.name not in selected:
             continue
 
         # Get full detail (list doesn't include params)
@@ -252,11 +256,21 @@ def discover_uc_function_tools() -> list:
         if detail.input_params and detail.input_params.parameters:
             params = [p.name for p in detail.input_params.parameters if p.name]
 
-        desc = detail.comment or f"Look up data from {func_info.name}"
-        tool_name = f"query_{func_info.name}"
+        dt = str(func_info.data_type) if func_info.data_type else ""
 
-        t = create_sql_read_tool(tool_name, func_info.name, params, desc)
+        if "TABLE" in dt:
+            # TABLE_TYPE -> sql_read tool (SELECT * FROM TABLE(func(args)))
+            desc = detail.comment or f"Look up data from {func_info.name}"
+            tool_name = f"query_{func_info.name}"
+            t = create_sql_read_tool(tool_name, func_info.name, params, desc)
+        else:
+            # NULL / scalar -> action tool (CALL proc(args))
+            desc = detail.comment or f"Execute {func_info.name}"
+            tool_name = func_info.name
+            t = create_action_tool(tool_name, func_info.name, params, desc)
+
         tools.append(t)
 
-    _log.info("Discovered %d UC function tool(s) from PROJECT_FUNCTIONS", len(tools))
+    mode = f"filtered by PROJECT_FUNCTIONS ({len(selected)})" if selected else "auto-discovered from UC"
+    _log.info("Discovered %d UC function tool(s) (%s) in %s.%s", len(tools), mode, cat, sch)
     return tools

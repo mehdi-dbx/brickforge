@@ -183,7 +183,7 @@ async def clear_routines():
                 if f.suffix == ".sql":
                     f.unlink()
                     deleted += 1
-    for name in ["routine_manifest.json", "routine-wizard-state.json"]:
+    for name in ["routine-wizard-state.json"]:
         try:
             (gen_dir / name).unlink()
             deleted += 1

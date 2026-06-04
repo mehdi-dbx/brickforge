@@ -1406,6 +1406,33 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
                 grant_cmd = [PYTHON, str(PACKAGE_ROOT / "deploy" / "grant" / "run_all_grants.py"), app_name]
                 async for event in stream_subprocess(grant_cmd, env=sub_env, cwd=PACKAGE_ROOT):
                     yield event
+                # Step 3: Wait for app to be live (poll app logs for server ready signal)
+                yield sse_line("\n[~] Waiting for app to start serving...\n")
+                log_script = f"""
+import time, subprocess, sys
+for attempt in range(10):
+    try:
+        r = subprocess.run(
+            ['databricks', 'apps', 'logs', '{app_name}'],
+            capture_output=True, text=True, timeout=15
+        )
+        if 'Backend server is running' in (r.stdout or ''):
+            print('[+] App is live')
+            sys.exit(0)
+        if 'ERROR' in (r.stderr or '').upper() or 'CRASHED' in (r.stdout or '').upper():
+            print('[x] App failed -- check logs: databricks apps logs {app_name}')
+            sys.exit(0)
+    except Exception:
+        pass
+    elapsed = (attempt + 1) * 30
+    print(f'[~] App starting... ({{elapsed}}s)')
+    sys.stdout.flush()
+    time.sleep(30)
+print('[~] App deployed but not yet serving -- check logs: databricks apps logs {app_name}')
+"""
+                log_cmd = [PYTHON, "-c", log_script.strip()]
+                async for event in stream_subprocess(log_cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                    yield event
             logger.finish(True)
             return
 
@@ -1667,15 +1694,17 @@ print(f'[+] All {len(sql_files)} uploaded table(s) provisioned')
 
 
 def _functions_script() -> str:
-    return """
+    funcs_path = str(PACKAGE_ROOT / "data" / "init" / "create_all_functions.py")
+    procs_path = str(PACKAGE_ROOT / "data" / "init" / "create_all_procedures.py")
+    return f"""
 import subprocess, sys
 print('[~] Creating UC functions...')
 sys.stdout.flush()
-r = subprocess.run([sys.executable, 'data/init/create_all_functions.py'])
+r = subprocess.run([sys.executable, '{funcs_path}'])
 if r.returncode != 0: print('[x] create_all_functions failed'); sys.exit(1)
 print('[~] Creating UC procedures...')
 sys.stdout.flush()
-r = subprocess.run([sys.executable, 'data/init/create_all_procedures.py'])
+r = subprocess.run([sys.executable, '{procs_path}'])
 if r.returncode != 0: print('[x] create_all_procedures failed'); sys.exit(1)
 print('[+] All functions and procedures created')
 """.strip()

@@ -329,18 +329,37 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
                         ? 'border border-dbx-gray-200 dark:border-dbx-gray-800 bg-dbx-gray-50 dark:bg-dbx-gray-900/50 opacity-40 cursor-not-allowed'
                         : active
                         ? 'border-2 border-dbx-red bg-dbx-red-bg dark:bg-dbx-red-bg-dk dark:border-[#FF6B5A] shadow-dbx-md'
-                        : `border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900
-                           hover:border-dbx-red-lt dark:hover:border-dbx-gray-600 hover:shadow-node-hover
-                           ${state.status === 'done' ? 'border-l-2 border-l-dbx-blue dark:border-l-dbx-green' : ''}`}
+                        : `border hover:shadow-node-hover
+                           ${state.status === 'done' && id === 'deploy'
+                             ? 'border-dbx-red dark:border-[#FF6B5A] bg-dbx-red dark:bg-[#FF6B5A] hover:border-dbx-red dark:hover:border-[#FF6B5A]'
+                           : state.status === 'done' && id === 'git'
+                             ? 'border-blue-400/30 dark:border-blue-400/30 bg-blue-500/10 dark:bg-blue-400/10 hover:border-blue-400/50 dark:hover:border-blue-400/50'
+                           : state.status === 'done'
+                             ? 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 border-l-2 border-l-dbx-blue dark:border-l-dbx-green hover:border-dbx-red-lt dark:hover:border-dbx-gray-600'
+                           : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-red-lt dark:hover:border-dbx-gray-600'}`}
                     `}
                   >
                     <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all ${ORB_CLASS[state.status]}`} />
-                    {(() => { const Icon = STEP_ICON[id]; return <Icon className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${active ? 'text-dbx-red dark:text-[#FF6B5A]' : state.status === 'done' ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`} /> })()}
+                    {(() => { const Icon = STEP_ICON[id]; return <Icon className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${
+                      active ? 'text-dbx-red dark:text-[#FF6B5A]'
+                      : state.status === 'done'
+                        ? id === 'deploy' ? 'text-white'
+                        : id === 'git' ? 'text-blue-500 dark:text-blue-400'
+                        : 'text-dbx-blue dark:text-dbx-green'
+                      : 'text-dbx-gray-400 dark:text-dbx-gray-500'
+                    }`} /> })()}
                     <div className="min-w-0 flex-1">
-                      <div className={`text-[13px] font-medium leading-tight truncate transition-colors ${active ? 'text-dbx-red dark:text-[#FF6B5A]' : 'text-dbx-gray-900 dark:text-dbx-gray-100'}`}>
+                      <div className={`text-[13px] font-medium leading-tight truncate transition-colors ${
+                        state.status === 'done' && id === 'deploy' ? 'text-white'
+                        : active ? 'text-dbx-red dark:text-[#FF6B5A]'
+                        : 'text-dbx-gray-900 dark:text-dbx-gray-100'}`}>
                         {STEP_LABEL[id]}
                       </div>
-                      <div className={`text-[10px] leading-tight truncate transition-colors ${state.status === 'done' ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
+                      <div className={`text-[10px] leading-tight truncate transition-colors ${state.status === 'done'
+                        ? id === 'deploy' ? 'text-white/80'
+                        : id === 'git' ? 'text-blue-500 dark:text-blue-400'
+                        : 'text-dbx-blue dark:text-dbx-green'
+                        : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
                         {subLabel(id, state)}
                       </div>
                     </div>

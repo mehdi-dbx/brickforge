@@ -37,7 +37,8 @@ Rules:
 - **Functions** (type: "function"): read-only SELECT queries. Use RETURN SELECT, not BEGIN...END.
 - **Procedures** (type: "procedure"): write operations (UPDATE, INSERT, DELETE) with BEGIN...END.
 - Names: lowercase snake_case, letters/digits/underscores only
-- Parameter sql_type: STRING, INT, BIGINT, DOUBLE, FLOAT, BOOLEAN, DATE, TIMESTAMP_NTZ
+- Parameter sql_type for FUNCTIONS: STRING, INT, BIGINT, DOUBLE, FLOAT, BOOLEAN, DATE, TIMESTAMP_NTZ
+- Parameter sql_type for PROCEDURES: ALWAYS use STRING for ALL parameters. The calling tool passes everything as quoted strings. The procedure body must CAST() to the target type. Prefix procedure params with p_ to avoid column name conflicts.
 - tables_referenced: actual table names from the provided schemas. Do NOT reference tables that don't exist.
 - Keep parameters minimal. Only what's needed for the query.
 - instructions: brief, factual. Do not ask for exotic SQL features."""

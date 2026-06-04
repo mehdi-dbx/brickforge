@@ -55,7 +55,8 @@ if not SCHEMA:
     print("[x] PROJECT_UNITY_CATALOG_SCHEMA not set in config.json", file=sys.stderr)
     sys.exit(1)
 
-print(f"Running all grants for app: {APP_NAME} (schema: {SCHEMA})\n")
+print(f"[~] Running all grants for app: {APP_NAME} (schema: {SCHEMA})")
+sys.stdout.flush()
 
 GRANT_DIR = ROOT / "deploy" / "grant"
 
@@ -71,27 +72,37 @@ STEPS = [
     ("4. Granting CAN_QUERY on serving endpoints",
      [PY, str(GRANT_DIR / "authorize_endpoint_for_app.py"), APP_NAME]),
     ("5. Granting CAN_RUN on Genie space",
-     [PY, str(GRANT_DIR / "authorize_genie_for_app.py")]),
+     [PY, str(GRANT_DIR / "authorize_genie_for_app.py"), APP_NAME]),
     ("6. Granting Lakebase permissions",
      [PY, str(GRANT_DIR / "grant_lakebase_for_app.py"), APP_NAME]),
 ]
 
 
 def run_step(label: str, cmd: list[str]) -> bool:
-    print(f"{label}...")
-    r = subprocess.run(cmd, cwd=ROOT)
+    print(f"[~] {label}...")
+    sys.stdout.flush()
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    if r.stdout:
+        for line in r.stdout.strip().splitlines():
+            print(f"  {line}")
     if r.returncode != 0:
-        print(f"  [!] {label.split('.', 1)[1].strip()} failed (non-blocking)", file=sys.stderr)
+        print(f"  [x] {label.split('.', 1)[1].strip()} failed (non-blocking)")
+        if r.stderr:
+            for line in r.stderr.strip().splitlines()[:3]:
+                print(f"  {line}")
+        sys.stdout.flush()
         return False
+    print(f"  [+] done")
+    sys.stdout.flush()
     return True
 
 
 for label, cmd in STEPS:
     run_step(label, cmd)
-    print()
 
 # Step 7: Secret scope grant (uses SDK instead of CLI)
-print("7. Granting secret scope READ access...")
+print("[~] 7. Granting secret scope READ access...")
+sys.stdout.flush()
 try:
     from databricks.sdk import WorkspaceClient
 
@@ -110,4 +121,4 @@ try:
 except Exception as e:
     print(f"  [!] Secret scope grant skipped: {e}", file=sys.stderr)
 
-print("\nDone. All grants applied.")
+print("\n[+] All grants applied successfully")
