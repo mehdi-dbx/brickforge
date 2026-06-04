@@ -21,8 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from dotenv import load_dotenv
-load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
+import os
 
 
 def _emit_result(data: dict | list) -> None:
@@ -95,8 +94,8 @@ def mode_provision_gen() -> None:
     print("[~] Ensuring catalog and schema exist...")
     sys.stdout.flush()
     r = subprocess.run(
-        ["uv", "run", "python", "data/init/create_catalog_schema.py"],
-        cwd=ROOT, capture_output=True, text=True,
+        [sys.executable, "data/init/create_catalog_schema.py"],
+        cwd=ROOT, capture_output=True, text=True, env=dict(os.environ),
     )
     if r.returncode != 0:
         print(f"[x] create_catalog_schema failed: {r.stderr.strip() or r.stdout.strip()}")
@@ -110,8 +109,8 @@ def mode_provision_gen() -> None:
         print(f"[~] ({i}/{total}) Running {rel}...")
         sys.stdout.flush()
         r = subprocess.run(
-            ["uv", "run", "python", "data/py/run_sql.py", rel],
-            cwd=ROOT, capture_output=True, text=True,
+            [sys.executable, "data/py/run_sql.py", rel],
+            cwd=ROOT, capture_output=True, text=True, env=dict(os.environ),
         )
         if r.returncode != 0:
             print(f"[x] Failed: {r.stderr.strip() or r.stdout.strip()}")

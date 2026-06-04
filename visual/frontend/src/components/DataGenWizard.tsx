@@ -322,7 +322,9 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
               Describe your domain
             </h3>
             <p className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mb-4">
-              Tell the model about your use case, industry, and the kind of data you need. It will design a table schema for you.
+              Tell the model about your use case, industry, and the kind of data you need.
+              <br />
+              It will design a schema with synthetic data for you.
             </p>
 
             <textarea
@@ -369,6 +371,8 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
                 </h3>
                 <p className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mt-0.5">
                   Edit names, columns, types, and row counts. Add or remove tables as needed.
+                  <br />
+                  You can always come back to refine or regenerate.
                 </p>
               </div>
               <button

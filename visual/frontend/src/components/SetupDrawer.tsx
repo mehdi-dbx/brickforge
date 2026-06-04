@@ -1224,6 +1224,11 @@ function EditableSchemaField({ value, host, onSaved }: { value: string; host?: s
             <span className="text-[12px] font-mono text-dbx-gray-400">not set</span>
           )}
           {saved && <span className="text-[10px] font-mono text-emerald-400 animate-fade-in">[+] saved</span>}
+          {value && (
+            <button onClick={() => navigator.clipboard.writeText(value)} className="text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="copy">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          )}
           <button
             onClick={() => setEditing(true)}
             className="text-dbx-gray-400 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors"
@@ -2640,7 +2645,7 @@ export function SetupDrawer({
                   <span className="text-[24px] text-dbx-blue dark:text-dbx-green leading-none">&#10003;</span>
                 </div>
                 <div className="text-[14px] font-semibold text-dbx-blue dark:text-dbx-green">configured</div>
-                {currentValues.PROJECT_UNITY_CATALOG_SCHEMA && (
+                {['schema', 'tables', 'functions'].includes(activeStep) && currentValues.PROJECT_UNITY_CATALOG_SCHEMA && (
                   <div className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mt-0.5">
                     {currentValues.PROJECT_UNITY_CATALOG_SCHEMA}
                   </div>
@@ -2688,7 +2693,7 @@ export function SetupDrawer({
               onClick={onBack}
               className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-md px-2 py-0.5 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 font-mono transition-all duration-150 hover:shadow-node"
             >
-              ← back
+              reconfigure
             </button>
           )}
         </div>

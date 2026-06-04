@@ -9,12 +9,10 @@ import secrets
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
-load_dotenv(os.environ.get("ENV_FILE", str(ROOT / ".env.local")), override=True)
 
 
 def main() -> None:

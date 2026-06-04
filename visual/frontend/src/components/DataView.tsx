@@ -147,7 +147,7 @@ export function DataView() {
       <div className="flex-shrink-0 px-6 pt-6 pb-4">
         <div className="max-w-5xl mx-auto flex items-start justify-between">
           <div>
-            <h2 className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">Unity Catalog Tables</h2>
+            <h2 className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">Unity Catalog Tables</h2>
             <p className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mt-1">
               Delta tables provisioned by create_all_assets.py
             </p>
@@ -250,7 +250,7 @@ export function DataView() {
             </div>
             <div className="text-[13px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 mb-1">No tables found</div>
             <p className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mb-4">
-              No tables found. Generate synthetic data or add CSVs to data/demo/csv/.
+              No tables found. Generate synthetic data or add existing data.
             </p>
             <button
               onClick={() => setMode('generate')}

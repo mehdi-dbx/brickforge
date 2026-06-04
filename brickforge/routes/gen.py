@@ -32,7 +32,7 @@ def _sub_env():
 async def gen_status():
     config = _get_config()
     env = config.to_env_dict()
-    model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") and env.get("DATABRICKS_HOST"))
+    model_ready = bool((env.get("AGENT_MODEL") or env.get("AGENT_MODEL_ENDPOINT")) and env.get("DATABRICKS_HOST"))
     manifest = None
     manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
     try:
@@ -72,8 +72,12 @@ async def gen_tables():
             columns = []
             if sql_path.exists():
                 content = sql_path.read_text()
-                for m in re.finditer(r"(\w+)\s+(STRING|INT|BIGINT|DOUBLE|FLOAT|BOOLEAN|DATE|TIMESTAMP|DECIMAL[^,)]*)", content, re.IGNORECASE):
-                    columns.append({"name": m.group(1), "type": m.group(2)})
+                # Extract only the CREATE TABLE (...) block
+                create_match = re.search(r'CREATE\s+(?:OR\s+REPLACE\s+)?TABLE\s+\S+\s*\((.*?)\)', content, re.IGNORECASE | re.DOTALL)
+                if create_match:
+                    create_block = create_match.group(1)
+                    for m in re.finditer(r"(\w+)\s+(STRING|INT|BIGINT|DOUBLE|FLOAT|BOOLEAN|DATE|TIMESTAMP\w*|DECIMAL[^,)]*)", create_block, re.IGNORECASE):
+                        columns.append({"name": m.group(1), "type": m.group(2)})
             tables.append({"name": table_name, "columns": columns, "source": source})
 
     return {"tables": tables}
@@ -314,7 +318,7 @@ async def gen_provision():
 async def routine_status():
     config = _get_config()
     env = config.to_env_dict()
-    model_ready = bool(env.get("AGENT_MODEL_ENDPOINT") and env.get("DATABRICKS_HOST"))
+    model_ready = bool((env.get("AGENT_MODEL") or env.get("AGENT_MODEL_ENDPOINT")) and env.get("DATABRICKS_HOST"))
     # Load table schemas for context: try gen manifest first, then existing UC tables
     table_schemas = None
     manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"

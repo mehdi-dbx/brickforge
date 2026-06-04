@@ -144,9 +144,8 @@ async def setup_status():
             status = "unknown" if len(keys) == 0 else ("configured" if all_set else "missing")
             values = {k: env.get(k, "") for k in keys}
 
-            # Model: same-workspace mode
+            # Model: same-workspace hint (not auto-configured -- user must explicitly choose)
             if step == "model" and not all_set and env.get("DATABRICKS_HOST", "").strip():
-                status = "configured"
                 values["AGENT_MODEL"] = env["DATABRICKS_HOST"].rstrip("/") + " (same workspace)"
 
             # Tables: status based on whether schema is configured (test button does the real UC check)
@@ -164,8 +163,9 @@ async def setup_status():
             # Prompt: file-based
             if step == "prompt":
                 prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
-                main_exists = (prompt_dir / "main.prompt").exists()
-                status = "configured" if main_exists else "missing"
+                main_file = prompt_dir / "main.prompt"
+                has_content = main_file.exists() and main_file.stat().st_size > 0
+                status = "configured" if has_content else "missing"
                 try:
                     files = [f.name for f in prompt_dir.iterdir() if not f.name.startswith(".")]
                 except FileNotFoundError:
@@ -685,7 +685,8 @@ if not csvs:
     w = WorkspaceClient()
     try:
         tbls = list(w.tables.list(catalog_name=spec.split('.')[0], schema_name=spec.split('.')[1]))
-        if tbls: print(f'[+] {len(tbls)} table(s) exist in {spec}'); exit(0)
+        if tbls: print(f'[+] {len(tbls)} table(s) in {spec}'); exit(0)
+        else: print(f'[+] schema exists');print(f'[~] no tables in {spec}'); exit(0)
     except Exception as e:
         print(f'[~] could not list tables: {e}')
     print('[x] no CSVs found and no tables in schema'); exit(1)
@@ -695,7 +696,8 @@ for csv in csvs:
     tn = csv.stem.replace('-','_')
     try: w.tables.get(f'{spec}.{tn}'); found += 1
     except: pass
-print(f'[+] {found}/{len(csvs)} table(s) exist in {spec}')
+if found > 0: print(f'[+] {found}/{len(csvs)} table(s) in {spec}')
+else: print(f'[+] schema exists');print(f'[~] no tables in {spec}')
 """.strip(),
     "functions": """
 import os
@@ -719,8 +721,8 @@ try:
 except Exception:
     pass
 total = func_count + proc_count
-if total == 0: print('[x] no functions or procedures found in ' + spec); exit(1)
-print(f'[+] {func_count} function(s) + {proc_count} procedure(s) ready in {spec}')
+if total == 0: print('[+] schema exists');print('[~] no functions or procedures in ' + spec); exit(0)
+print(f'[+] {func_count} function(s) + {proc_count} procedure(s) in {spec}')
 """.strip(),
 }
 
