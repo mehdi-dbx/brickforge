@@ -16,7 +16,7 @@ type Phase = 'select' | 'running' | 'done'
 // Group resources by category for display
 const CATEGORY_ORDER = [
   'Databricks App', 'MLflow Experiment', 'Genie Space', 'UC Volume',
-  'UC Table', 'UC Function', 'UC Procedure', 'DAB Bundle State', '.env.local cleanup',
+  'UC Table', 'UC Function', 'UC Procedure', 'DAB Bundle State', 'config.json cleanup',
 ]
 
 function groupByCategory(items: Resource[]): [string, Resource[]][] {

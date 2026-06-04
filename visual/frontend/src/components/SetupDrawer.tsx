@@ -2041,9 +2041,9 @@ export function SetupDrawer({
         Object.assign(params, { key: envKey, value: manualVal.trim() })
       }
     }
-    // Deploy: cfg-deploy-name saves app name to .env.local
+    // Deploy: cfg-deploy-name saves app name to config.json
     if (action === 'cfg-deploy-name' && manualVal) { action = 'save-deploy-name'; Object.assign(params, { name: manualVal.trim() }) }
-    // API: cfg-api-uc or cfg-api-direct saves API config to .env.local
+    // API: cfg-api-uc or cfg-api-direct saves API config to config.json
     if (action === 'cfg-api-uc' && mcpSlug && manualVal) {
       const slug = mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
       action = 'save-api'
@@ -2340,7 +2340,7 @@ export function SetupDrawer({
         <div className="mt-3"><Label>params (optional, comma-separated name:type)</Label></div>
         <Input value={apiParams} onChange={setApiParams} placeholder="city:str,units:str" />
         <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
-          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_CONN to .env.local
+          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_CONN to config.json
         </div>
       </>)
     else if (action === 'cfg-api-direct')
@@ -2360,7 +2360,7 @@ export function SetupDrawer({
         <div className="mt-3"><Label>auth header (optional)</Label></div>
         <Input value={mcpHeader} onChange={setMcpHeader} placeholder="X-API-Key:sk-abc123" />
         <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
-          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_URL to .env.local
+          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_URL to config.json
         </div>
       </>)
     else if (action === 'upload-csv')
@@ -2412,7 +2412,7 @@ export function SetupDrawer({
         <div className="mt-3"><Label>auth header (optional)</Label></div>
         <Input value={mcpHeader} onChange={setMcpHeader} placeholder="Authorization:Bearer sk-..." />
         <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
-          saves as {activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'}{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'} in .env.local
+          saves as {activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'}{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'} in config.json
         </div>
       </>)
     else if (action === 'manual' && activeStep === 'host') {
@@ -2517,11 +2517,11 @@ export function SetupDrawer({
         </div>
       </>)
     else if (action === 'manual')
-      body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">writes directly to .env.local</div></>)
+      body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">writes directly to config.json</div></>)
     else if (action === 'cfg-new')
       body = (<><Label>workspace url</Label><Input value={manualVal} onChange={setManualVal} placeholder="https://....cloud.databricks.com" /><div className="mt-3"><Label>profile name (optional)</Label><Input value={genieName} onChange={setGenieName} placeholder="my-workspace" /></div><InfoBox>Will run `databricks auth login` automatically and open the browser for OAuth.</InfoBox></>)
     else if (action === 'cfg-deploy-name')
-      body = (<><Label>app name</Label><Input value={manualVal} onChange={setManualVal} placeholder="my-agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">sets DBX_APP_NAME in .env.local -- used as the Databricks App name for deployment</div></>)
+      body = (<><Label>app name</Label><Input value={manualVal} onChange={setManualVal} placeholder="my-agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">sets DBX_APP_NAME in config.json -- used as the Databricks App name for deployment</div></>)
     else if (action === 'cfg-prompt')
       return (
         <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
@@ -2852,7 +2852,7 @@ export function SetupDrawer({
                     </button>
                   </div>
                   <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
-                    writes OPENAI_API_KEY to .env.local
+                    writes OPENAI_API_KEY to config.json
                   </div>
                 </div>
               )}
@@ -2979,7 +2979,7 @@ export function SetupDrawer({
                   )}
 
                   <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
-                    writes PROJECT_LOGO_URL to .env.local — displayed in the chat app header
+                    writes PROJECT_LOGO_URL to config.json — displayed in the chat app header
                   </div>
                 </div>
               )}

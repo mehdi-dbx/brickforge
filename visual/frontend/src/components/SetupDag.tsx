@@ -199,7 +199,7 @@ function InstanceRow({ inst, stepId, onToggle, onClick, onDelete }: { inst: Step
       {confirmOpen && (
         <ConfirmDialog
           title={`Remove ${inst.label}?`}
-          detail={`This will delete ${inst.key} from .env.local.`}
+          detail={`This will delete ${inst.key} from config.json.`}
           onConfirm={() => { setConfirmOpen(false); onDelete?.(inst.key) }}
           onCancel={() => setConfirmOpen(false)}
         />
@@ -268,7 +268,7 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
       <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           <span className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 bg-white/90 dark:bg-dbx-gray-800/90 backdrop-blur-sm border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-full px-3 py-0.5 shadow-node">
-            .env.local
+            config.json
           </span>
           <div className="flex items-center gap-1.5 bg-white/90 dark:bg-dbx-gray-800/90 backdrop-blur-sm border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-full px-2.5 py-0.5 shadow-node">
             <span className="text-[11px] font-semibold text-dbx-red">{readyCount}</span>

@@ -332,7 +332,7 @@ export default function App() {
                       : 'text-dbx-gray-500 dark:text-dbx-gray-400 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800'
                   }`}
                 >
-                  {!currentProject ? '> ' : '  '}local (.env.local)
+                  {!currentProject ? '> ' : '  '}local (config.json)
                 </button>
               </div>
             )}
