@@ -134,6 +134,10 @@ _MULTI_INSTANCE_DEFS: list[tuple[str, str, list[tuple[str, str]]]] = [
     ]),
 ]
 
+# All known scalar env var keys (for clean env wipe on project switch)
+_ALL_SCALAR_KEYS = {env_key for _, env_key in _SCALAR_MAP}
+_MULTI_PREFIXES = {prefix for _, prefix, _ in _MULTI_INSTANCE_DEFS} | {"PROJECT_TOOL_", "PROJECT_BRICK_", "PROJECT_GENIE_SPACES", "PROJECT_FUNCTIONS"}
+
 # Reverse mapper for instance CRUD: env prefix -> JSON section path
 INSTANCE_PREFIX_MAP: dict[str, str] = {
     "PROJECT_KA_": "tools.ka",
@@ -380,7 +384,14 @@ class ConfigProvider:
         return flatten(self._data)
 
     def _sync_env(self) -> None:
-        """Update os.environ from current config (keeps subprocess env current)."""
+        """Replace config-managed env vars. Clears ALL known config keys first."""
+        # Clear all known config env vars (scalar keys + multi-instance prefixes)
+        for key in list(os.environ.keys()):
+            if key in _ALL_SCALAR_KEYS:
+                del os.environ[key]
+            elif any(key.startswith(p) for p in _MULTI_PREFIXES):
+                del os.environ[key]
+        # Set new values from current config
         flat = flatten(self._data)
         os.environ.update(flat)
 

@@ -42,6 +42,13 @@ export function SetupView() {
 
   useEffect(() => { refreshStatus() }, [refreshStatus])
 
+  // Re-fetch status when project is switched
+  useEffect(() => {
+    const handler = () => refreshStatus()
+    window.addEventListener('project-switched', handler)
+    return () => window.removeEventListener('project-switched', handler)
+  }, [refreshStatus])
+
   useEffect(() => {
     const handler = (e: Event) => {
       const { text, stream } = (e as CustomEvent<ExecLine>).detail
@@ -253,6 +260,7 @@ export function SetupView() {
           onDeleteInstance={handleDeleteInstance}
           readyCount={readyCount}
           totalCount={ALL_STEP_IDS.length}
+          connected={effectiveStates.host.status === 'done'}
         />
       </div>
 

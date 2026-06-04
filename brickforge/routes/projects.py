@@ -116,13 +116,21 @@ async def create_project(request: Request):
     if project_file.exists():
         return JSONResponse({"error": f"project '{safe_name}' already exists"}, status_code=409)
 
-    # Snapshot current config.json (not DEFAULT_CONFIG)
-    config = _get_config()
-    project_file.write_text(json.dumps(config._data, indent=2) + "\n")
+    # Fresh config from defaults
+    import copy
+    from brickforge.lib.config_provider import DEFAULT_CONFIG
+    fresh = copy.deepcopy(DEFAULT_CONFIG)
+    project_file.write_text(json.dumps(fresh, indent=2) + "\n")
 
-    # Set as current + enable auto-save mirror
+    # Switch mirror FIRST (so _save doesn't overwrite old project with defaults)
     _write_current(safe_name)
     _set_project_mirror(safe_name)
+
+    # Replace active config with fresh defaults
+    config = _get_config()
+    config._data = fresh
+    config._save()
+    config._sync_env()
 
     return {"ok": True, "name": safe_name, "source": "local"}
 
@@ -135,13 +143,14 @@ async def load_project(name: str):
     project_file = PROJECTS_DIR / f"{name}.json"
     if project_file.exists():
         project_config = json.loads(project_file.read_text())
-        config = _get_config()
-        from brickforge.lib.config_provider import _deep_merge
-        _deep_merge(config._data, project_config)
-        config._save()
-        config._sync_env()
+        # Switch mirror FIRST (so _save doesn't overwrite old project)
         _write_current(name)
         _set_project_mirror(name)
+        config = _get_config()
+        from brickforge.lib.config_provider import _merge_defaults, DEFAULT_CONFIG
+        config._data = _merge_defaults(project_config, DEFAULT_CONFIG)
+        config._save()
+        config._sync_env()
         return {"ok": True, "name": name, "source": "local"}
 
     # Try UC Volume
@@ -166,8 +175,8 @@ async def load_project(name: str):
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             if "config.json" in zf.namelist():
                 project_config = json.loads(zf.read("config.json").decode())
-                from brickforge.lib.config_provider import _deep_merge
-                _deep_merge(config._data, project_config)
+                from brickforge.lib.config_provider import _merge_defaults, DEFAULT_CONFIG
+                config._data = _merge_defaults(project_config, DEFAULT_CONFIG)
                 config._save()
                 config._sync_env()
                 _write_current(name)

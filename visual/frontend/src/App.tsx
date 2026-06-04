@@ -148,7 +148,7 @@ export default function App() {
   const loadProject = useCallback((name: string) => {
     fetch(`/api/projects/${name}`)
       .then(r => r.json())
-      .then(() => { setCurrentProject(name); setProjectMenuOpen(false) })
+      .then(() => { window.location.reload() })
       .catch(() => {})
   }, [])
 
@@ -162,9 +162,7 @@ export default function App() {
       .then(async r => {
         const data = await r.json()
         if (!r.ok) { alert(data.error || 'Failed to create project'); return }
-        setNewProjectName('')
-        setShowNewProject(false)
-        refreshProjects()
+        window.location.reload()
       })
       .catch(e => alert(`Error: ${e.message}`))
   }, [newProjectName, refreshProjects])

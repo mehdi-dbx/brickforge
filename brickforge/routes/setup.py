@@ -275,8 +275,6 @@ async def clear_step(request: Request):
     keys = STEP_ENV_KEYS[step]
     if keys:
         config.disable_many(keys)
-        for k in keys:
-            os.environ.pop(k, None)
 
     prefix = MULTI_INSTANCE_PREFIXES.get(step)
     if prefix:
@@ -284,8 +282,6 @@ async def clear_step(request: Request):
         instance_keys = [i["key"] for i in instances]
         if instance_keys:
             config.disable_many(instance_keys)
-            for k in instance_keys:
-                os.environ.pop(k, None)
 
     return {"ok": True}
 
@@ -585,11 +581,11 @@ except urllib.error.HTTPError as e:
 except Exception as e:
     print('[x] host unreachable: ' + str(e)[:100]); exit(1)
 if not token:
-    print('[+] reachable — ' + host.replace('https://','') + ' (no token set)'); exit(0)
+    print('[+] reachable — ' + host.replace('https://',''));print('[~] no token set'); exit(0)
 try:
     req = urllib.request.Request(host + '/api/2.0/preview/scim/v2/Me', headers={'Authorization': 'Bearer ' + token})
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-        d = json.loads(r.read()); print('[+] reachable — ' + d.get('userName', '?'))
+        d = json.loads(r.read()); print('[+] reachable — ' + d.get('userName', '?'));print('[+] authenticated')
 except urllib.error.HTTPError as e:
     if e.code == 401: print('[x] token invalid (401 Unauthorized)'); exit(1)
     elif e.code == 403: print('[+] reachable — token valid (SCIM restricted)')
@@ -704,8 +700,6 @@ print(f'[+] {found}/{len(csvs)} table(s) exist in {spec}')
     "functions": """
 import os
 from databricks.sdk import WorkspaceClient
-from dotenv import load_dotenv
-load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 spec = os.environ.get('PROJECT_UNITY_CATALOG_SCHEMA','').strip()
 if not spec: print('[x] schema not set'); exit(1)
 cat, sch = spec.split('.', 1)
@@ -813,7 +807,16 @@ except Exception as e:
         raw = (result.stdout or "").strip() or (result.stderr or "").strip()
         ok = result.returncode == 0 and raw.startswith("[+]")
         if ok:
-            return {"ok": True, "message": raw.lstrip("[+] ") if raw else "ok"}
+            lines = raw.split("\n")
+            msg = lines[0].lstrip("[+] ") if lines else "ok"
+            warn = next((l.lstrip("[~] ") for l in lines[1:] if l.startswith("[~]")), None)
+            detail = next((l.lstrip("[+] ") for l in lines[1:] if l.startswith("[+]")), None)
+            resp: dict = {"ok": True, "message": msg}
+            if warn:
+                resp["warning"] = warn
+            if detail:
+                resp["detail"] = detail
+            return resp
         # Parse error for clean user message
         from brickforge.lib.env_utils import parse_subprocess_error
         return {"ok": False, "message": parse_subprocess_error(result.stderr, result.stdout) if "Traceback" in raw or "blocked" in raw else (raw.lstrip("[x] ") if raw else "no response")}
@@ -1044,13 +1047,10 @@ async def setup_exec(request: Request):
             if not ws_host.startswith("http"):
                 ws_host = "https://" + ws_host
             ws_host = ws_host.rstrip("/")
-            config.set_many({"DATABRICKS_HOST": ws_host, "DATABRICKS_TOKEN": ws_token})
-            os.environ["DATABRICKS_HOST"] = ws_host
-            os.environ["DATABRICKS_TOKEN"] = ws_token
             for k in ["DATABRICKS_CONFIG_PROFILE", "DATABRICKS_CLIENT_ID", "DATABRICKS_CLIENT_SECRET",
                        "DATABRICKS_REFRESH_TOKEN", "DATABRICKS_TOKEN_ENDPOINT"]:
                 config.disable(k)
-                os.environ.pop(k, None)
+            config.set_many({"DATABRICKS_HOST": ws_host, "DATABRICKS_TOKEN": ws_token})
             for line in [f"[+] DATABRICKS_HOST = {ws_host}", f"[+] DATABRICKS_TOKEN = {ws_token[:8]}..."]:
                 yield sse_line(line + "\n")
                 logger.log(line)
@@ -1072,7 +1072,6 @@ async def setup_exec(request: Request):
                 value = value.rstrip("/")
             if key == "PROJECT_UNITY_CATALOG_SCHEMA" and "." in value:
                 config.set_many({key: value})
-                os.environ[key] = value
                 catalog, schema = value.split(".", 1)
                 cmd = [PYTHON,"-c", _save_schema_script(catalog, schema)]
                 async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
@@ -1080,7 +1079,6 @@ async def setup_exec(request: Request):
                 logger.finish(True)
                 return
             config.set_many({key: value})
-            os.environ[key] = value
             display = f"{value[:8]}..." if "TOKEN" in key else value
             line = f"[+] {key} = {display}"
             yield sse_line(line + "\n")
@@ -1099,7 +1097,6 @@ async def setup_exec(request: Request):
                 return
             env_key = f"PROJECT_TOOL_{key}"
             config.set_many({env_key: enabled})
-            os.environ[env_key] = enabled
             state = "enabled" if enabled.lower() == "true" else "disabled"
             label = FEATURE_REGISTRY[key]["label"]
             yield sse_line(f"[+] {label} ({env_key}) {state}\n")
@@ -1118,7 +1115,6 @@ async def setup_exec(request: Request):
                 return
             env_key = f"PROJECT_BRICK_{key}"
             config.set_many({env_key: enabled})
-            os.environ[env_key] = enabled
             state = "enabled" if enabled.lower() == "true" else "disabled"
             label = BRICKS_REGISTRY[key]["label"]
             yield sse_line(f"[+] {label} ({env_key}) {state}\n")
@@ -1495,7 +1491,6 @@ async def save_prompt(request: Request):
 
 def _save_schema_script(catalog: str, schema: str) -> str:
     return f"""
-import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
 from databricks.sdk import WorkspaceClient
 import re; from pathlib import Path
 w = WorkspaceClient()
@@ -1517,27 +1512,22 @@ except:
             print('[x] cannot create schema:', str(e2)[:200]); exit(1)
     else:
         try:
-            w.catalogs.create(name='{catalog}')
+            w.api_client.do('POST', '/api/2.1/unity-catalog/catalogs', body={{'name': '{catalog}', 'storage_mode': 'DEFAULT_STORAGE'}})
             w.schemas.create(name='{schema}', catalog_name='{catalog}')
             print('[+] catalog + schema created:', spec)
         except Exception as e3:
             print('[x]', str(e3)[:200]); exit(1)
-f = Path('.env.local')
-lines = f.read_text().splitlines() if f.exists() else []
-new = []; found = False
-for line in lines:
-    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
-    if m and m.group(1) == 'PROJECT_UNITY_CATALOG_SCHEMA': new.append('PROJECT_UNITY_CATALOG_SCHEMA=' + spec); found = True
-    else: new.append(line)
-if not found: new.append('PROJECT_UNITY_CATALOG_SCHEMA=' + spec)
-f.write_text('\\n'.join(new) + '\\n')
+from brickforge.lib.config_json import read_config, write_config
+cfg = read_config()
+cfg.setdefault('workspace', {{}})['unity_catalog_schema'] = spec
+write_config(cfg)
 print('[+] PROJECT_UNITY_CATALOG_SCHEMA = ' + spec)
 """.strip()
 
 
 def _pat_script() -> str:
     return """
-import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os
 import os, urllib.request, json, ssl, datetime
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
 token = os.environ.get('DATABRICKS_TOKEN','').strip()
@@ -1665,7 +1655,7 @@ print('[+] All functions and procedures created')
 
 def _ka_script() -> str:
     return """
-import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os
 import subprocess, sys
 print('[~] creating Knowledge Assistant from YAML...')
 sys.stdout.flush()
@@ -1679,7 +1669,7 @@ def _auth_login_script(host: str, profile: str) -> str:
     host_url = host_url.rstrip("/")
     safe_profile = profile.replace("'", "\\'") if profile else ""
     return f"""
-import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os
 from pathlib import Path
 import os, configparser, subprocess, sys
 
@@ -1719,7 +1709,7 @@ print('[+] done')
 
 def _model_profile_script(profile: str) -> str:
     return f"""
-import os; from dotenv import load_dotenv; load_dotenv(os.environ.get('ENV_FILE', '.env.local'), override=True)
+import os
 from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact
 import subprocess, re
 out = subprocess.check_output(['databricks', 'auth', 'profiles'], text=True)

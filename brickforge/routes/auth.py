@@ -56,7 +56,7 @@ async def bridge_nonce():
     _bridge_nonces[nonce_id] = {"value": nonce_value, "expires": (time.time() + NONCE_TTL) * 1000}
     _bridge_state = {"status": "waiting"}
     config = _get_config()
-    ws_default = config.get("DATABRICKS_HOST") or ""
+    ws_default = config.get("workspace.host") or ""
     print(f"[bridge] nonce generated: id={nonce_id[:8]}... TTL=5min, active nonces={len(_bridge_nonces)}")
     return {"nonce_id": nonce_id, "nonce": nonce_value, "ws_default": ws_default}
 
@@ -141,8 +141,6 @@ async def bridge_receive(request: Request):
 
         if is_pat:
             config.disable_many(["DATABRICKS_REFRESH_TOKEN", "DATABRICKS_TOKEN_ENDPOINT"])
-            os.environ.pop("DATABRICKS_REFRESH_TOKEN", None)
-            os.environ.pop("DATABRICKS_TOKEN_ENDPOINT", None)
             print("[bridge] PAT mode -- cleared refresh token + token endpoint")
         else:
             if refresh_token:
@@ -150,16 +148,11 @@ async def bridge_receive(request: Request):
             if token_endpoint:
                 updates["DATABRICKS_TOKEN_ENDPOINT"] = token_endpoint
 
-        config.set_many(updates)
         # Clear conflicting auth
         for k in ["DATABRICKS_CONFIG_PROFILE", "DATABRICKS_CLIENT_ID", "DATABRICKS_CLIENT_SECRET"]:
             config.disable(k)
-            os.environ.pop(k, None)
 
-        # Update process env
-        if host:
-            os.environ["DATABRICKS_HOST"] = host
-        os.environ["DATABRICKS_TOKEN"] = final_token
+        config.set_many(updates)  # triggers _sync_env() -- updates os.environ
 
         _bridge_state = {"status": "connected", "host": host, "user": user, "time": int(time.time() * 1000), "warning": cross_cloud_warning}
         print(f"[bridge] state -> connected (host={host}, user={user})")
@@ -182,11 +175,11 @@ async def bridge_status():
 @router.get("/api/auth/bridge-script")
 async def bridge_script(request: Request, nonce: str = ""):
     if not nonce:
-        return Response("nonce query param required", status_code=400)
+        return Response('#!/bin/bash\necho ""\necho "  [x] Invalid link. Go back to the Setup App and click Connect again."\necho ""\n', media_type="text/plain")
 
     nonce_data = _bridge_nonces.get(nonce)
     if not nonce_data:
-        return Response("invalid or expired nonce", status_code=403)
+        return Response('#!/bin/bash\necho ""\necho "  [x] Session expired. Go back to the Setup App and click Connect again."\necho ""\n', media_type="text/plain")
 
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
     host_header = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
@@ -194,7 +187,7 @@ async def bridge_script(request: Request, nonce: str = ""):
     print(f"[bridge] script download: nonce={nonce[:8]}... appUrl={app_url}")
 
     config = _get_config()
-    current_host = config.get("DATABRICKS_HOST") or ""
+    current_host = config.get("workspace.host") or ""
 
     # Look for connect.sh: first in repo (editable), then in package (pip installed)
     script_path = PACKAGE_ROOT / "scripts" / "connect.sh"

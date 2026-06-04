@@ -37,6 +37,7 @@ interface SetupDagProps {
   onDeleteInstance?: (key: string) => void
   readyCount: number
   totalCount: number
+  connected: boolean
 }
 
 const ORB_CLASS: Record<StepStatus, string> = {
@@ -206,7 +207,7 @@ function InstanceRow({ inst, stepId, onToggle, onClick, onDelete }: { inst: Step
   )
 }
 
-export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance, onToggleAllInstances, onClickInstance, onDeleteInstance, readyCount, totalCount }: SetupDagProps) {
+export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance, onToggleAllInstances, onClickInstance, onDeleteInstance, readyCount, totalCount, connected }: SetupDagProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(1)
@@ -265,9 +266,6 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
       {/* ── Floating toolbar: env pill + counter + zoom controls ── */}
       <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
-          <span className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 bg-white/90 dark:bg-dbx-gray-800/90 backdrop-blur-sm border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-full px-3 py-0.5 shadow-node">
-            config.json
-          </span>
           <div className="flex items-center gap-1.5 bg-white/90 dark:bg-dbx-gray-800/90 backdrop-blur-sm border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-full px-2.5 py-0.5 shadow-node">
             <span className="text-[11px] font-semibold text-dbx-red">{readyCount}</span>
             <span className="text-[11px] text-dbx-gray-300 dark:text-dbx-gray-600">/</span>
@@ -316,16 +314,20 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
             const isMulti = MULTI_INSTANCE_STEPS.includes(id)
             const instances = state.instances || []
 
+            const disabled = !connected && id !== 'host'
+
             return (
               <div key={id} className="flex flex-col items-center">
                 <div className="w-[280px] flex flex-col flex-shrink-0">
                   {/* Main step button */}
                   <button
-                    onClick={() => onActivate(id)}
+                    onClick={() => !disabled && onActivate(id)}
                     className={`
                       w-full flex items-center gap-2 px-3 py-1 rounded-lg text-left transition-all duration-150
                       font-mono
-                      ${active
+                      ${disabled
+                        ? 'border border-dbx-gray-200 dark:border-dbx-gray-800 bg-dbx-gray-50 dark:bg-dbx-gray-900/50 opacity-40 cursor-not-allowed'
+                        : active
                         ? 'border-2 border-dbx-red bg-dbx-red-bg dark:bg-dbx-red-bg-dk dark:border-[#FF6B5A] shadow-dbx-md'
                         : `border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900
                            hover:border-dbx-red-lt dark:hover:border-dbx-gray-600 hover:shadow-node-hover

@@ -400,36 +400,34 @@ if bridge_url_holder[0]:
     has_issues = not _pat_ok or (not _wl_ok and _wl_ip)
 
     W_ = 46  # inner width between ║ chars
-    def _pad(s, plain_len): return s + ' ' * max(0, W_ - plain_len)
+    def _p(s): return s + ' ' * max(0, W_ - len(s))
 
     if has_issues:
         print(f'{BOLD}{Y}╔{"═"*W_}╗{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  Token delivered -- some steps need attention", 46)}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_p("  Token delivered -- some steps need attention")}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}╠{"═"*W_}╣{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  ✓ Authenticated", 19)}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_p("  ✓ Authenticated")}{BOLD}{Y}║{W}')
         if _pat_ok:
-            print(f'{BOLD}{Y}║{W}{_pad("  ✓ PAT created (7 days)", 24)}{BOLD}{Y}║{W}')
+            print(f'{BOLD}{Y}║{W}{_p("  ✓ PAT created (7 days)")}{BOLD}{Y}║{W}')
         else:
-            print(f'{BOLD}{Y}║{W}{_pad("  ✗ PAT failed (using JWT -- expires in 1h)", 43)}{BOLD}{Y}║{W}')
+            print(f'{BOLD}{Y}║{W}{_p("  ✗ PAT failed (using JWT -- expires in 1h)")}{BOLD}{Y}║{W}')
         if _wl_ip:
             if _wl_ok:
-                print(f'{BOLD}{Y}║{W}{_pad("  ✓ IP whitelisted", 18)}{BOLD}{Y}║{W}')
+                print(f'{BOLD}{Y}║{W}{_p("  ✓ IP whitelisted")}{BOLD}{Y}║{W}')
             else:
-                _ip_msg = f'  ✗ IP whitelist failed ({_wl_ip})'
-                print(f'{BOLD}{Y}║{W}{_pad(_ip_msg, len(_ip_msg))}{BOLD}{Y}║{W}')
+                print(f'{BOLD}{Y}║{W}{_p(f"  ✗ IP whitelist failed ({_wl_ip})")}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}║{W}{" "*W_}{BOLD}{Y}║{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  To resolve, try one of:", 25)}{BOLD}{Y}║{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  - Connect to your corporate VPN and retry", 45)}{BOLD}{Y}║{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  - Run from an authorized network", 34)}{BOLD}{Y}║{W}')
-        print(f'{BOLD}{Y}║{W}{_pad("  - Ask workspace admin to whitelist your IP", 44)}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_p("  To resolve, try one of:")}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_p("  - Connect to your corporate VPN and retry")}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_p("  - Run from an authorized network")}{BOLD}{Y}║{W}')
+        print(f'{BOLD}{Y}║{W}{_p("  - Ask workspace admin to whitelist your IP")}{BOLD}{Y}║{W}')
         if _wl_ip and not _wl_ok:
-            _wl_msg = f'    IP to whitelist: {_wl_ip}'
-            print(f'{BOLD}{Y}║{W}{_pad(_wl_msg, len(_wl_msg))}{BOLD}{Y}║{W}')
+            print(f'{BOLD}{Y}║{W}{_p(f"    IP to whitelist: {_wl_ip}")}{BOLD}{Y}║{W}')
         print(f'{BOLD}{Y}╚{"═"*W_}╝{W}\n')
     else:
         print(f'{BOLD}{G}╔{"═"*W_}╗{W}')
-        print(f'{BOLD}{G}║{W}{_pad("  All good -- Setup App is ready.", 33)}{BOLD}{G}║{W}')
-        print(f'{BOLD}{G}║{W}{_pad("  You can close this window.", 28)}{BOLD}{G}║{W}')
+        print(f'{BOLD}{G}║{W}{_p("  All good -- Setup App is ready.")}{BOLD}{G}║{W}')
+        print(f'{BOLD}{G}║{W}{_p("  You can close this window.")}{BOLD}{G}║{W}')
         print(f'{BOLD}{G}╚{"═"*W_}╝{W}\n')
 else:
     print(f'{FAIL} Token exchange failed. Check errors above.\n')

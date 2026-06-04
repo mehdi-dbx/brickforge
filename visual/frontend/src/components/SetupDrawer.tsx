@@ -4,7 +4,7 @@ import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxEndpoint, DbxGeni
 import { GenTerminal } from './GenTerminal'
 import { SETUP_STEPS } from '../setupSteps'
 
-export type TestResult = { status: 'idle' | 'loading' | 'ok' | 'fail'; message: string }
+export type TestResult = { status: 'idle' | 'loading' | 'ok' | 'fail'; message: string; warning?: string; detail?: string }
 
 interface SetupDrawerProps {
   activeStep: StepId
@@ -1550,16 +1550,20 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
   const [copied, setCopied] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Fetch nonce on mount
-  useEffect(() => {
+  const fetchNonce = useCallback(() => {
+    setStatus('loading')
     fetch('/api/auth/bridge-nonce')
       .then(r => r.json())
       .then((data: { nonce_id: string; nonce: string; ws_default?: string }) => {
         setNonce(data)
+        setCopied(false)
         setStatus('waiting')
       })
       .catch(() => setStatus('error'))
   }, [])
+
+  // Fetch nonce on mount
+  useEffect(() => { fetchNonce() }, [fetchNonce])
 
   // Poll for connection
   useEffect(() => {
@@ -1653,8 +1657,18 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
               </>
             )}
 
+            {/* Refresh hint */}
+            <div className="mt-2 flex items-center gap-1.5">
+              <button onClick={fetchNonce} className="text-[11px] text-dbx-blue dark:text-dbx-green hover:underline font-mono">
+                regenerate
+              </button>
+              <span className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-600">
+                - if you see "session expired" in terminal
+              </span>
+            </div>
+
             {/* Status */}
-            <div className="mt-5 flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2">
               {status === 'waiting' ? (
                 <>
                   <span className="inline-block w-2 h-2 rounded-full bg-dbx-amber animate-pulse" />
@@ -1812,7 +1826,7 @@ export function SetupDrawer({
       } catch {
         data = { ok: false, message: r.status === 404 ? 'backend needs restart' : text.slice(0, 120).replace(/<[^>]+>/g, '').trim() || 'unexpected response' }
       }
-      setTestState({ status: data.ok ? 'ok' : 'fail', message: data.message })
+      setTestState({ status: data.ok ? 'ok' : 'fail', message: data.message, warning: (data as any).warning, detail: (data as any).detail })
     } catch (e) {
       setTestState({ status: 'fail', message: String(e) })
     }
@@ -2661,7 +2675,14 @@ export function SetupDrawer({
       {/* Header */}
       <div className="px-4 py-3 border-b border-dbx-gray-100 dark:border-dbx-gray-800 flex-shrink-0 bg-dbx-menu dark:bg-dbx-gray-900">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-widest font-mono font-medium">{step.label}</div>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              currentValues.DATABRICKS_HOST && currentValues.DATABRICKS_TOKEN
+                ? 'bg-dbx-green shadow-[0_0_6px_rgba(0,169,114,0.5)]'
+                : 'bg-dbx-error shadow-[0_0_6px_rgba(226,75,74,0.4)]'
+            }`} title={currentValues.DATABRICKS_HOST && currentValues.DATABRICKS_TOKEN ? 'Connected' : 'Not connected'} />
+            <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-widest font-mono font-medium">{step.label}</div>
+          </div>
           {phase !== 'choose' && (
             <button
               onClick={onBack}
@@ -2720,6 +2741,16 @@ export function SetupDrawer({
             {testState.status === 'ok' && testState.message && (
               <div className="text-[11px] font-mono text-dbx-green mt-0.5 truncate animate-fade-in">
                 [+] {testState.message}
+              </div>
+            )}
+            {testState.status === 'ok' && testState.detail && (
+              <div className="text-[11px] font-mono text-dbx-green mt-0.5 truncate animate-fade-in">
+                [+] {testState.detail}
+              </div>
+            )}
+            {testState.status === 'ok' && testState.warning && (
+              <div className="text-[11px] font-mono text-dbx-amber mt-0.5 truncate animate-fade-in">
+                [~] {testState.warning}
               </div>
             )}
             {testState.status === 'fail' && testState.message && (
