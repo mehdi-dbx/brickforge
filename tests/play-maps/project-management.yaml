@@ -1,0 +1,106 @@
+area: project-management
+url: http://localhost:9000
+updated: 2026-06-04
+
+selectors:
+  project_button:
+    css: '[title="Switch project"]'
+    description: Opens project dropdown in top bar
+  dropdown:
+    css: '.absolute.top-full'
+    description: Project dropdown panel
+  project_item:
+    css: '.group'
+    description: Individual project row in dropdown (has hover effects)
+  new_project_btn:
+    text: 'New project'
+    parent_css: '.absolute.top-full'
+    description: Opens inline project name input
+  name_input:
+    css: 'input[placeholder="project name"]'
+    description: New project name text input
+  create_btn:
+    text: 'Create'
+    parent_css: '.absolute.top-full'
+    description: Submits new project creation
+  pencil_icon:
+    css: '[title="Rename project"]'
+    description: Inline rename trigger (visible on hover)
+  delete_btn:
+    css: '[title="Delete project"]'
+    description: Delete project button (visible on hover, triggers confirm dialog)
+
+flows:
+  # Each flow is self-contained: ensures dropdown is in correct state before acting
+
+  verify_no_local:
+    steps:
+      - action: click
+        selector: '[title="Switch project"]'
+      - action: wait
+        ms: 300
+      - action: verify_absent
+        text: 'local (config.json)'
+        scope: '.absolute.top-full'
+
+  create_project:
+    steps:
+      - action: click
+        selector: '[title="Switch project"]'
+      - action: wait
+        ms: 300
+      - action: click_text
+        text: 'New project'
+        scope: '.absolute.top-full'
+      - action: wait
+        ms: 300
+      - action: fill
+        selector: 'input[placeholder="project name"]'
+        value: '{name}'
+      - action: click_text
+        text: 'Create'
+        scope: '.absolute.top-full'
+      - action: wait
+        ms: 800
+
+  verify_current:
+    steps:
+      - action: click
+        selector: '[title="Switch project"]'
+      - action: wait
+        ms: 300
+      - action: verify
+        js: "[...document.querySelectorAll('.absolute.top-full .group button')].some(b => b.textContent.includes('{name}') && b.textContent.trim().startsWith('>'))"
+        expect: true
+
+  delete_project:
+    steps:
+      - action: click
+        selector: '[title="Switch project"]'
+      - action: wait
+        ms: 300
+      # Hover the target project row to reveal delete button (opacity-0 -> opacity-100)
+      - action: hover
+        selector: '.absolute.top-full .group'
+        containing: '{name}'
+      - action: wait
+        ms: 200
+      - action: click
+        selector: '[title="Delete project"]'
+        scope: '.absolute.top-full .group'
+        containing: '{name}'
+      - action: wait
+        ms: 500
+      # Reopen dropdown to verify deletion
+      - action: click
+        selector: '[title="Switch project"]'
+      - action: wait
+        ms: 300
+      - action: verify
+        js: "!document.querySelector('.absolute.top-full')?.textContent?.includes('{name}')"
+        expect: true
+
+verifications:
+  project_count:
+    js: "document.querySelectorAll('.absolute.top-full .group').length"
+    description: Number of projects in dropdown
