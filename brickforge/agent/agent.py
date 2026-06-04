@@ -185,8 +185,11 @@ async def _get_mcp_tools_safe(workspace_client: WorkspaceClient) -> list:
             all_tools.extend(tools)
             _get_mcp_tools_safe._clients.append(client)
             _log.info("MCP server '%s' connected — %d tools", server.name, len(tools))
-        except Exception as e:
-            _log.warning("MCP server '%s' unavailable — skipping: %s", server.name, e)
+        except BaseException as e:
+            detail = str(e)
+            if hasattr(e, 'exceptions'):
+                detail = "; ".join(str(sub) for sub in e.exceptions)
+            _log.warning("MCP server '%s' unavailable — skipping: %s", server.name, detail)
     return all_tools
 
 
