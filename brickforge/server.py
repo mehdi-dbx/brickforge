@@ -42,6 +42,12 @@ async def lifespan(app: FastAPI):
         print(f"[forge] ForgeConfigProvider initialized" + (f" (schema: {schema})" if schema else " (bootstrap phase)"))
     else:
         config = LocalConfigProvider(CONFIG_FILE)
+        # Restore project auto-save mirror if a current project exists
+        from brickforge.routes.projects import _read_current, _set_project_mirror
+        current = _read_current()
+        if current:
+            _set_project_mirror(current)
+            print(f"[project] active: {current}")
 
     mode = "FORGE (SaaS)" if FORGE_MODE else f"LOCAL ({CONFIG_FILE})"
     print(f"[config] mode: {mode}")

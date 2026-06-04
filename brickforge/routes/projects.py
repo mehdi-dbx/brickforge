@@ -1,9 +1,7 @@
 """Project management routes -- local + UC Volume projects."""
 from __future__ import annotations
 
-import copy
 import json
-import os
 import zipfile
 import io
 from pathlib import Path
@@ -12,7 +10,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from brickforge import PROJECT_ROOT, USER_DIR
-from brickforge.lib.config_provider import DEFAULT_CONFIG
 
 router = APIRouter()
 
@@ -22,10 +19,40 @@ if (PROJECT_ROOT / "pyproject.toml").exists():
 else:
     PROJECTS_DIR = USER_DIR / "projects"
 
+CURRENT_FILE = PROJECTS_DIR / ".current"
+
 
 def _get_config():
     from brickforge.server import config
     return config
+
+
+def _read_current() -> str | None:
+    """Read the currently active project name."""
+    if CURRENT_FILE.exists():
+        name = CURRENT_FILE.read_text().strip()
+        if name and (PROJECTS_DIR / f"{name}.json").exists():
+            return name
+    return None
+
+
+def _write_current(name: str | None) -> None:
+    """Write the currently active project name."""
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    if name:
+        CURRENT_FILE.write_text(name)
+    elif CURRENT_FILE.exists():
+        CURRENT_FILE.unlink()
+
+
+def _set_project_mirror(name: str | None) -> None:
+    """Point config auto-save at the named project file (or clear it)."""
+    config = _get_config()
+    if hasattr(config, "_project_file"):
+        if name:
+            config._project_file = PROJECTS_DIR / f"{name}.json"
+        else:
+            config._project_file = None
 
 
 # ── List projects ────────────────────────────────────────────────────────────
@@ -67,7 +94,8 @@ async def list_projects():
         except Exception:
             pass  # Volume not accessible -- show local projects only
 
-    return {"projects": projects}
+    current = _read_current()
+    return {"projects": projects, "current": current}
 
 
 # ── Create project ───────────────────────────────────────────────────────────
@@ -88,9 +116,13 @@ async def create_project(request: Request):
     if project_file.exists():
         return JSONResponse({"error": f"project '{safe_name}' already exists"}, status_code=409)
 
-    # Start with default config
-    project_config = copy.deepcopy(DEFAULT_CONFIG)
-    project_file.write_text(json.dumps(project_config, indent=2) + "\n")
+    # Snapshot current config.json (not DEFAULT_CONFIG)
+    config = _get_config()
+    project_file.write_text(json.dumps(config._data, indent=2) + "\n")
+
+    # Set as current + enable auto-save mirror
+    _write_current(safe_name)
+    _set_project_mirror(safe_name)
 
     return {"ok": True, "name": safe_name, "source": "local"}
 
@@ -103,12 +135,13 @@ async def load_project(name: str):
     project_file = PROJECTS_DIR / f"{name}.json"
     if project_file.exists():
         project_config = json.loads(project_file.read_text())
-        # Switch the active config to this project
         config = _get_config()
         from brickforge.lib.config_provider import _deep_merge
         _deep_merge(config._data, project_config)
         config._save()
         config._sync_env()
+        _write_current(name)
+        _set_project_mirror(name)
         return {"ok": True, "name": name, "source": "local"}
 
     # Try UC Volume
@@ -137,6 +170,8 @@ async def load_project(name: str):
                 _deep_merge(config._data, project_config)
                 config._save()
                 config._sync_env()
+                _write_current(name)
+                _set_project_mirror(name)
                 return {"ok": True, "name": name, "source": "volume"}
         return JSONResponse({"error": "invalid project zip"}, status_code=400)
     except Exception as e:
@@ -147,6 +182,11 @@ async def load_project(name: str):
 
 @router.delete("/api/projects/{name}")
 async def delete_project(name: str):
+    # If deleting the current project, clear current
+    if _read_current() == name:
+        _write_current(None)
+        _set_project_mirror(None)
+
     # Try local first
     project_file = PROJECTS_DIR / f"{name}.json"
     if project_file.exists():
@@ -195,4 +235,10 @@ async def rename_project(name: str, request: Request):
         return JSONResponse({"error": f"project '{new_name}' already exists"}, status_code=409)
 
     old_file.rename(new_file)
+
+    # Update current if renamed the active project
+    if _read_current() == name:
+        _write_current(new_name)
+        _set_project_mirror(new_name)
+
     return {"ok": True, "name": new_name}

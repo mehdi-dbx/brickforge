@@ -422,7 +422,7 @@ function KaConfig({ selected, onSelect }: { selected: string; onSelect: (endpoin
   )
 }
 
-function BricksList({ toggles, onToggle, kaEndpoint, kaName, onKaSelect }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void; kaEndpoint: string; kaName: string; onKaSelect: (endpoint: string, name: string) => void }) {
+function BricksList({ toggles, onToggle, kaEndpoint, onKaSelect }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void; kaEndpoint: string; onKaSelect: (endpoint: string, name: string) => void }) {
   if (toggles.length === 0) return <InfoBox>No bricks available.</InfoBox>
   return (
     <>
@@ -2303,7 +2303,7 @@ export function SetupDrawer({
       body = <BricksList toggles={brickItems} onToggle={(key, enabled) => {
         setBrickItems(prev => prev.map(b => b.key === key ? { ...b, enabled } : b))
         setBricksDirty(prev => ({ ...prev, [key]: enabled }))
-      }} kaEndpoint={selKaEndpoint} kaName={selKaName} onKaSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} />
+      }} kaEndpoint={selKaEndpoint} onKaSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} />
     else if (action === 'cfg-model')
       body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-profile')
@@ -2753,9 +2753,9 @@ export function SetupDrawer({
             <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 p-4 animate-slide-up">
               <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">{activeStep === 'genie' ? 'space' : 'instance'}</div>
               {activeStep === 'genie' && inst ? (() => {
-                const [editing, setEditing] = React.useState(false)
-                const [name, setName] = React.useState(inst.label || '')
-                const [saving, setSaving] = React.useState(false)
+                const [editing, setEditing] = useState(false)
+                const [name, setName] = useState(inst.label || '')
+                const [saving, setSaving] = useState(false)
                 const save = async () => {
                   if (!name.trim() || name === inst.label) { setEditing(false); return }
                   setSaving(true)

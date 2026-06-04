@@ -618,6 +618,7 @@ class LocalConfigProvider(ConfigProvider):
 
     def __init__(self, config_file: str | Path):
         self._config_file = Path(config_file)
+        self._project_file: Path | None = None  # auto-save mirror for active project
         self._data = self._load()
 
     def _load(self) -> dict[str, Any]:
@@ -633,9 +634,12 @@ class LocalConfigProvider(ConfigProvider):
         return copy.deepcopy(DEFAULT_CONFIG)
 
     def _save(self) -> None:
-        """Write config.json to disk."""
+        """Write config.json to disk + mirror to active project file."""
         self._config_file.parent.mkdir(parents=True, exist_ok=True)
-        self._config_file.write_text(json.dumps(self._data, indent=2) + "\n")
+        payload = json.dumps(self._data, indent=2) + "\n"
+        self._config_file.write_text(payload)
+        if self._project_file and self._project_file.exists():
+            self._project_file.write_text(payload)
 
 
 # ── ForgeConfigProvider (in-memory + UC Volume zip) ─────────────────────────
