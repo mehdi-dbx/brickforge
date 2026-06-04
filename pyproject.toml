@@ -1,15 +1,17 @@
 [project]
-name = "agent-forge"
-version = "0.1.0"
-requires-python = ">=3.11"
+name = "brickforge"
+version = "0.1.0a32"
+description = "Build and deploy Databricks AI agents from a visual Setup App"
+requires-python = ">=3.9"
 dependencies = [
-    "databricks-sdk>=0.102.0",        # >=0.102.0 required for knowledge_assistants API
-    "databricks-langchain",
-    "mlflow>=2.0",
+    "databricks-sdk>=0.102.0",
+    "databricks-langchain[memory]",
+    "mlflow>=3.12.0",
     "python-dotenv",
     "pyyaml",
     "fastapi",
     "uvicorn",
+    "python-multipart",
     "openai",
     "langchain-community",
     "langchain-openai",
@@ -30,7 +32,73 @@ dependencies = [
 ]
 
 [project.scripts]
-start-app = "agent.start_server:main"
+brickforge = "brickforge.cli:main"
+start-app = "brickforge.agent.start_server:main"
+
+[tool.setuptools.packages.find]
+include = ["brickforge*"]
+exclude = ["brickforge.app.node_modules*", "brickforge.app.client.node_modules*", "brickforge.app.server.node_modules*", "brickforge.app.tests*"]
+
+[tool.setuptools.exclude-package-data]
+brickforge = [
+    "app/node_modules/**/*",
+    "app/client/node_modules/**/*",
+    "app/server/node_modules/**/*",
+    "app/tests/**/*",
+]
+
+[tool.setuptools.package-data]
+brickforge = [
+    "static/**/*",
+    "data/**/*.sql",
+    "data/**/*.csv",
+    "data/**/*.json",
+    "conf/**/*.prompt",
+    "conf/**/*.base",
+    "conf/**/*.yml",
+    "conf/**/*.yaml",
+    "stash/**/*",
+    "scripts/**/*.sh",
+    "scripts/**/*.py",
+    "eval/**/*.jsonl",
+    "eval/**/*.py",
+    "deploy/**/*.sh",
+    "app/*.json",
+    "app/*.yaml",
+    "app/*.yml",
+    "app/*.ts",
+    "app/client/src/**/*.ts",
+    "app/client/src/**/*.tsx",
+    "app/client/src/**/*.css",
+    "app/client/*.html",
+    "app/client/*.json",
+    "app/client/*.ts",
+    "app/client/*.js",
+    "app/server/src/**/*.ts",
+    "app/server/*.json",
+    "app/server/*.ts",
+    "app/packages/*/src/**/*.ts",
+    "app/packages/*/package.json",
+    "app/packages/*/tsconfig.json",
+    "app/packages/*/tsdown.config.ts",
+    "app/packages/db/migrations/**/*.sql",
+    "app/packages/db/migrations/**/*.json",
+    "app/scripts/**/*.sh",
+    "app/scripts/**/*.ts",
+    "app/app.yaml",
+    "app/databricks.yml",
+    "app/client/dist/**/*",
+    "app/server/dist/**/*.mjs",
+    "pyproject.toml",
+    "requirements.txt",
+]
 
 [tool.uv]
 native-tls = true
+
+[dependency-groups]
+dev = [
+    "build>=1.5.0",
+    "httpx>=0.28.1",
+    "pytest>=9.0.3",
+]

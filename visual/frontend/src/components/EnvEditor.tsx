@@ -106,7 +106,7 @@ export function EnvEditor({ open, onClose }: EnvEditorProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100">
         <div className="flex items-center gap-2">
           <Settings2 className="h-4 w-4 text-zinc-500" />
-          <span className="text-sm font-semibold text-zinc-800">.env.local</span>
+          <span className="text-sm font-semibold text-zinc-800">config.json</span>
           {changed.length > 0 && (
             <span className="text-[10px] font-medium bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
               {changed.length} unsaved

@@ -193,7 +193,7 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
   // ── Provision step ─────────────────────────────────────────────────────────
 
   const handleProvision = async () => {
-    // Save target schema to .env.local before provisioning
+    // Save target schema to config.json before provisioning
     if (targetSchema.trim()) {
       await fetch('/api/env', {
         method: 'PUT',

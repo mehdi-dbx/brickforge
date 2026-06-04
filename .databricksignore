@@ -1,1 +1,18 @@
-app/client/dist/
+# Exclude from Databricks Apps deploy
+.git/
+.venv/
+.claude/
+.mypy_cache/
+__pycache__/
+*.pyc
+.DS_Store
+stash/
+edu/
+doc/
+
+# Node.js build deps -- not needed at runtime (dist/ pre-built, npm ci at startup)
+app/client/node_modules/
+app/server/node_modules/
+app/packages/
+visual/frontend/node_modules/
+visual/backend/node_modules/

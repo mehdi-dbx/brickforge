@@ -1,11 +1,11 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/logo-dark.svg">
-  <img alt="BrickForge" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/logo-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/logo-dark.svg">
+  <img alt="BrickForge" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/logo-light.svg" width="100%">
 </picture>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/architecture-dark.svg">
-  <img alt="Architecture" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/architecture-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/architecture-dark.svg">
+  <img alt="Architecture" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/architecture-light.svg" width="100%">
 </picture>
 
 ---
@@ -21,8 +21,8 @@ The insight is simple: most agentic apps share the same architecture. The LLM re
 ## Why BrickForge
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/bricks-dark.svg">
-  <img alt="The Six Bricks" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/bricks-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/bricks-dark.svg">
+  <img alt="The Six Bricks" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/bricks-light.svg" width="100%">
 </picture>
 
 ---
@@ -91,16 +91,16 @@ Validates, syncs config, bundles, deploys to Databricks Apps, and applies grants
 | `agent/` | LangGraph agent, MLflow server, Genie capture |
 | `app/` | Full-stack chat app (React + Express + shared packages) |
 | `tools/` | LangChain tool functions the agent can call |
-| `data/default/` | Shipped airport-ops data (CSV, DDL, functions, procedures) |
+| `data/demo/` | Shipped airport-ops data (CSV, DDL, functions, procedures) |
 | `data/gen/` | Synthetic data generation (LLM-powered wizard) |
 | `conf/` | Env template, KA configs, prompt templates |
 | `visual/` | Architecture viz + setup + data gen + cleanup UI |
 | `eval/` | MLflow GenAI eval pipeline with custom LLM judge |
 | `deploy/` | Deployment pipeline (Databricks Asset Bundles) |
 | `scripts/` | Setup, local dev, KA management |
-| `docs/` | Overview, guide, build flow |
+| `doc/` | Guide, reference, assets |
 
-See [`docs/brickforge-guide.md`](docs/brickforge-guide.md) for the full getting started guide.
+See [`doc/guide/brickforge-guide.md`](doc/guide/brickforge-guide.md) for the full getting started guide.
 
 ---
 

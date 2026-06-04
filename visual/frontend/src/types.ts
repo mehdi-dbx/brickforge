@@ -36,7 +36,7 @@ export interface GraphResponse {
 
 // ─── Setup types ──────────────────────────────────────────────────────────────
 
-export type StepId = 'host' | 'auth' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'ka' | 'vs' | 'mlflow' | 'grants' | 'deploy'
+export type StepId = 'host' | 'warehouse' | 'schema' | 'tables' | 'functions' | 'model' | 'prompt' | 'genie' | 'bricks' | 'vs' | 'mcp' | 'api' | 'a2a' | 'features' | 'mlflow' | 'deploy' | 'git'
 export type StepStatus = 'done' | 'warning' | 'error' | 'missing' | 'unknown'
 export type SetupPhase = 'choose' | 'configure' | 'execute' | 'done'
 
@@ -66,6 +66,11 @@ export interface DbxWarehouse {
   state: string
 }
 
+export interface DbxEndpoint {
+  name: string
+  type: string
+}
+
 export interface DbxGenieSpace {
   id: string
   name: string
@@ -77,10 +82,11 @@ export interface ExecLine {
 }
 
 export interface StepInstance {
-  key: string        // e.g. PROJECT_GENIE_CHECKIN
+  key: string        // e.g. PROJECT_GENIE_SPACES[1], PROJECT_KA_PASSENGERS
   value: string      // e.g. space_id or endpoint name
   enabled: boolean   // true = active, false = commented out
-  label: string      // derived slug: "checkin", "passengers"
+  label: string      // derived slug from env key suffix
+  children?: StepInstance[]  // nested sub-entries (e.g. KA instances under KA brick)
 }
 
 export interface StepState {

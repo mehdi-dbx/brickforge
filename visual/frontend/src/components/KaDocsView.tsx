@@ -20,7 +20,7 @@ export function KaDocsView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [uploadResults, setUploadResults] = useState<{ name: string; ok: boolean; error?: string }[]>([])
+  const [uploadResults, setUploadResults] = useState<{ name: string; ok: boolean; error?: string; steps?: string[]; size?: number }[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [urlUploading, setUrlUploading] = useState(false)
@@ -110,7 +110,7 @@ export function KaDocsView() {
     fetch('/api/env')
       .then(r => r.json())
       .then((entries: { key: string; value: string }[]) => {
-        const ka = entries.find(e => e.key === 'PROJECT_KA_PASSENGERS')
+        const ka = entries.find(e => e.key.startsWith('PROJECT_KA_'))
         if (ka?.value) setKaEndpoint(ka.value)
       })
       .catch(() => {})

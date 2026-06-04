@@ -1,0 +1,2806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrickForge SaaS Blueprint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --red:       #eb1600;
+      --red-dim:   rgba(235,22,0,0.07);
+      --blue:      #1b73e8;
+      --blue-dim:  rgba(27,115,232,0.08);
+      --green:     #1a9e67;
+      --green-dim: rgba(26,158,103,0.08);
+      --amber:     #b87200;
+      --amber-dim: rgba(184,114,0,0.08);
+      --purple:    #6d28d9;
+      --purple-dim:rgba(109,40,217,0.08);
+      --bg:        #f5f6f7;
+      --surface:   #ffffff;
+      --border:    #d6d9dc;
+      --text:      #111314;
+      --text2:     #434b54;
+      --text3:     #7e8a95;
+      --code-bg:   #1a1a2e;
+      --nav-h:     52px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      font-size: 16px;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* -- STICKY HEADER -- */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      height: var(--nav-h);
+      background: rgba(255,255,255,0.97);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 2rem;
+    }
+    .nav-title { font-weight: 800; font-size: 1.25rem; letter-spacing: -0.3px; }
+    .nav-title em { color: var(--red); font-style: normal; }
+
+    /* -- CONTAINER -- */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* -- SECTION HEADERS -- */
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 900;
+      letter-spacing: -1px;
+      margin-bottom: 0.25rem;
+    }
+    h1 em { color: var(--red); font-style: normal; }
+
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      padding: 0.6rem 1rem;
+      border-left: 4px solid var(--blue);
+      background: var(--blue-dim);
+      border-radius: 0 6px 6px 0;
+    }
+    h2.red    { border-left-color: var(--red);    background: var(--red-dim); }
+    h2.green  { border-left-color: var(--green);  background: var(--green-dim); }
+    h2.amber  { border-left-color: var(--amber);  background: var(--amber-dim); }
+    h2.purple { border-left-color: var(--purple); background: var(--purple-dim); }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    p, li {
+      color: var(--text2);
+      margin-bottom: 0.5rem;
+    }
+    ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+    li { margin-bottom: 0.3rem; }
+
+    .subtitle {
+      font-size: 1rem;
+      color: var(--text3);
+      margin-bottom: 2rem;
+    }
+
+    /* -- TABLES -- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #e8eaec;
+      font-weight: 700;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text2);
+    }
+    tr:nth-child(even) td { background: #f8f9fa; }
+    tr:nth-child(odd)  td { background: var(--surface); }
+
+    td code, th code {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.82rem;
+      background: rgba(27,115,232,0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* -- CODE BLOCKS -- */
+    pre {
+      background: var(--code-bg);
+      color: #e0e0e0;
+      padding: 1.25rem 1.5rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+    pre .kw  { color: #7c9bf5; }
+    pre .str { color: #6ec97a; }
+    pre .cmt { color: #6a6a8a; }
+    pre .num { color: #e8a86d; }
+    pre .key { color: #7c9bf5; }
+
+    code {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.88em;
+    }
+
+    /* -- INLINE CODE -- */
+    p code, li code {
+      background: rgba(27,115,232,0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.85em;
+    }
+
+    /* -- FLOW DIAGRAMS (fbox pattern) -- */
+    .fbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .fbox {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-align: center;
+      min-width: 140px;
+    }
+    .fbox.red    { border-color: var(--red);    background: var(--red-dim);    color: var(--red); }
+    .fbox.blue   { border-color: var(--blue);   background: var(--blue-dim);   color: var(--blue); }
+    .fbox.green  { border-color: var(--green);  background: var(--green-dim);  color: var(--green); }
+    .fbox.amber  { border-color: var(--amber);  background: var(--amber-dim);  color: var(--amber); }
+    .fbox.purple { border-color: var(--purple); background: var(--purple-dim); color: var(--purple); }
+    .fbox-arrow {
+      font-size: 1.5rem;
+      color: var(--text3);
+      padding: 0 0.5rem;
+      user-select: none;
+    }
+
+    /* -- STATUS BADGES -- */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .badge.decided     { background: var(--green-dim); color: var(--green); }
+    .badge.testing     { background: var(--amber-dim); color: var(--amber); }
+    .badge.verification{ background: var(--blue-dim);  color: var(--blue); }
+    .badge.tobuild     { background: var(--purple-dim);color: var(--purple); }
+    .badge.stretch     { background: var(--red-dim);   color: var(--red); }
+    .badge.na          { background: #e8eaec;          color: var(--text3); }
+    .badge.nottested   { background: var(--amber-dim); color: var(--amber); }
+
+    /* -- BEFORE/AFTER BLOCKS -- */
+    .before-after {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .ba-card {
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      border: 1px solid var(--border);
+    }
+    .ba-card.before { background: var(--red-dim); border-color: var(--red); }
+    .ba-card.after  { background: var(--green-dim); border-color: var(--green); }
+    .ba-card h4 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.4rem;
+    }
+    .ba-card.before h4 { color: var(--red); }
+    .ba-card.after  h4 { color: var(--green); }
+    .ba-card p { color: var(--text); margin: 0; font-size: 0.9rem; }
+
+    /* -- WALL CALLOUT -- */
+    .wall {
+      background: var(--amber-dim);
+      border-left: 4px solid var(--amber);
+      padding: 0.75rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+    }
+    .wall strong { color: var(--amber); }
+
+    /* -- CHECKLIST -- */
+    .checklist li {
+      list-style: none;
+      padding-left: 0;
+    }
+    .checklist li::before {
+      content: "[+] ";
+      font-family: 'DM Mono', monospace;
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    /* -- TOC -- */
+    .toc {
+      columns: 2;
+      column-gap: 2rem;
+      margin-bottom: 2rem;
+    }
+    .toc a {
+      display: block;
+      padding: 0.3rem 0;
+      color: var(--blue);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      break-inside: avoid;
+    }
+    .toc a:hover { text-decoration: underline; }
+    .toc-num {
+      display: inline-block;
+      width: 2rem;
+      color: var(--text3);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+    }
+
+    /* -- MISC -- */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+    .note {
+      background: var(--blue-dim);
+      border-left: 4px solid var(--blue);
+      padding: 0.75rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .note strong { color: var(--blue); }
+
+    /* -- DARK MODE -- */
+    .dark {
+      --bg:        #0d0d12;
+      --surface:   #1a1a24;
+      --border:    #2a2a3a;
+      --text:      #e4e4e8;
+      --text2:     #a0a0b0;
+      --text3:     #6a6a7a;
+      --code-bg:   #12121c;
+      --red-dim:   rgba(235,22,0,0.12);
+      --blue-dim:  rgba(27,115,232,0.12);
+      --green-dim: rgba(26,158,103,0.12);
+      --amber-dim: rgba(184,114,0,0.12);
+      --purple-dim:rgba(109,40,217,0.12);
+    }
+    .dark nav {
+      background: rgba(13,13,18,0.97);
+      border-bottom-color: var(--border);
+    }
+    .dark th {
+      background: #22222e;
+      color: var(--text2);
+    }
+    .dark tr:nth-child(even) td { background: #16161e; }
+    .dark tr:nth-child(odd)  td { background: var(--surface); }
+    .dark td code, .dark th code, .dark p code, .dark li code {
+      background: rgba(27,115,232,0.15);
+    }
+    .dark .ba-card p { color: var(--text); }
+    .dark .badge.na { background: #22222e; color: var(--text3); }
+
+    /* -- DARK MODE TOGGLE -- */
+    .dark-toggle {
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text2);
+      transition: all 0.15s;
+    }
+    .dark-toggle:hover {
+      background: var(--blue-dim);
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    @media (max-width: 768px) {
+      .before-after { grid-template-columns: 1fr; }
+      .toc { columns: 1; }
+      .fbox-row { flex-direction: column; }
+      .fbox-arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- NAV                                                           -->
+<!-- ============================================================ -->
+<nav>
+  <div class="nav-title"><em>Brick</em>Forge SaaS Blueprint</div>
+  <button class="dark-toggle" onclick="document.body.classList.toggle('dark'); this.innerHTML = document.body.classList.contains('dark') ? '<svg width=&quot;16&quot; height=&quot;16&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;><circle cx=&quot;12&quot; cy=&quot;12&quot; r=&quot;5&quot;/><line x1=&quot;12&quot; y1=&quot;1&quot; x2=&quot;12&quot; y2=&quot;3&quot;/><line x1=&quot;12&quot; y1=&quot;21&quot; x2=&quot;12&quot; y2=&quot;23&quot;/><line x1=&quot;4.22&quot; y1=&quot;4.22&quot; x2=&quot;5.64&quot; y2=&quot;5.64&quot;/><line x1=&quot;18.36&quot; y1=&quot;18.36&quot; x2=&quot;19.78&quot; y2=&quot;19.78&quot;/><line x1=&quot;1&quot; y1=&quot;12&quot; x2=&quot;3&quot; y2=&quot;12&quot;/><line x1=&quot;21&quot; y1=&quot;12&quot; x2=&quot;23&quot; y2=&quot;12&quot;/><line x1=&quot;4.22&quot; y1=&quot;19.78&quot; x2=&quot;5.64&quot; y2=&quot;18.36&quot;/><line x1=&quot;18.36&quot; y1=&quot;5.64&quot; x2=&quot;19.78&quot; y2=&quot;4.22&quot;/></svg>' : '<svg width=&quot;16&quot; height=&quot;16&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;><path d=&quot;M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z&quot;/></svg>'" title="Toggle dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+</nav>
+
+<div class="container">
+
+<!-- ============================================================ -->
+<!-- 1. HEADER                                                     -->
+<!-- ============================================================ -->
+<h1><em>Brick</em>Forge SaaS Blueprint</h1>
+<p class="subtitle">Full engineering reference &mdash; single source of truth &mdash; May 2026</p>
+
+<!-- ============================================================ -->
+<!-- 2. TABLE OF CONTENTS                                          -->
+<!-- ============================================================ -->
+<h2 id="toc">Table of Contents</h2>
+<div class="toc">
+  <a href="#vision"><span class="toc-num">1.</span> Vision &amp; Core Shift</a>
+  <a href="#decisions"><span class="toc-num">2.</span> Resolved Decisions</a>
+  <a href="#forge-schema"><span class="toc-num">3.</span> .forge Schema</a>
+  <a href="#stash"><span class="toc-num">4.</span> Stash System</a>
+  <a href="#ch1"><span class="toc-num">5.</span> Challenge 1: Where Does the Code Live?</a>
+  <a href="#ch2"><span class="toc-num">6.</span> Challenge 2: Setup App Backend Shift</a>
+  <a href="#ch3"><span class="toc-num">7.</span> Challenge 3: .env.local Eradication</a>
+  <a href="#ch4"><span class="toc-num">8.</span> Challenge 4: Tool Generation at Runtime</a>
+  <a href="#ch5"><span class="toc-num">9.</span> Challenge 5: Data Provisioning Without Local Scripts</a>
+  <a href="#ch6"><span class="toc-num">10.</span> Challenge 6: Agent App Deployment -- DAB Preserved</a>
+  <a href="#ch7"><span class="toc-num">11.</span> Challenge 7: Prompts / Knowledge Base</a>
+  <a href="#configprovider"><span class="toc-num">12.</span> ConfigProvider Pattern</a>
+  <a href="#runtime-deps"><span class="toc-num">13.</span> Runtime Dependencies (8b)</a>
+  <a href="#packaging"><span class="toc-num">14.</span> Packaging &amp; Distribution (8c)</a>
+  <a href="#stashability"><span class="toc-num">15.</span> Setup Blocks Stashability</a>
+  <a href="#questions"><span class="toc-num">16.</span> Open Questions (31)</a>
+  <a href="#roadmap"><span class="toc-num">17.</span> Execution Roadmap</a>
+  <a href="#invocation-map"><span class="toc-num">20.</span> UI Invocation Map</a>
+  <a href="#current-state"><span class="toc-num">21.</span> Current State</a>
+  <a href="#runtime-modes"><span class="toc-num">22.</span> Runtime Modes (Part 12)</a>
+</div>
+
+<!-- ============================================================ -->
+<!-- 3. VISION & CORE SHIFT                                        -->
+<!-- ============================================================ -->
+<h2 id="vision" class="red">1. Vision &amp; Core Shift</h2>
+
+<h3>Vision</h3>
+<p>BrickForge goes from a locally-cloned project into a cloud-native SaaS product. The user never clones a repo, never runs a terminal, never installs anything. They open a browser, create an agent, deploy it. Done.</p>
+<p>The user also needs access to the generated code. They must be able to CI/CD it, edit it in an IDE, and own it. The Setup App is a PROJECT GENERATOR, not just a deployer.</p>
+
+<h3>The Core Shift</h3>
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Before</h4>
+    <p>User clones repo &rarr; has all code locally &rarr; runs scripts &rarr; deploys from local machine</p>
+  </div>
+  <div class="ba-card after">
+    <h4>After</h4>
+    <p>User opens browser &rarr; Setup App does everything &rarr; code never touches user's machine (unless they want it to)</p>
+  </div>
+</div>
+
+<h3>Setup App = The Product</h3>
+<p>The visual Setup App (currently <code>visual/</code>) IS the product. It:</p>
+<ul>
+  <li>Creates and manages <code>.forge</code> projects (multi-project: save/load/switch)</li>
+  <li>Walks users through domain setup via LLM-assisted wizard</li>
+  <li>Provisions UC data (tables, functions, procedures)</li>
+  <li>Deploys the Agent App to Databricks</li>
+  <li>Generates a git-ready project the user can own</li>
+  <li>Runs as a Databricks App itself (or locally for dev)</li>
+</ul>
+
+<h3>3 Runtime Modes</h3>
+<table>
+  <thead>
+    <tr><th>Mode</th><th>How</th><th>Who</th><th>Auth</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>A: Hosted</strong></td>
+      <td>Maintainer deploys Setup App once, users open URL</td>
+      <td>Quick start / demo</td>
+      <td>Databricks SSO to user's workspace</td>
+    </tr>
+    <tr>
+      <td><strong>B: User's DBX App</strong></td>
+      <td>User deploys Setup App to their own workspace</td>
+      <td>Production use</td>
+      <td>DBX App SP (user's permissions)</td>
+    </tr>
+    <tr>
+      <td><strong>C: Local</strong></td>
+      <td><code>node visual/backend/index.js</code></td>
+      <td>Dev / offline</td>
+      <td><code>.env.local</code> / CLI profile</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>What Lives Where</h3>
+<table>
+  <thead>
+    <tr><th>Asset</th><th>Location</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Framework code (agent runtime, React frontend, Express API, deploy logic)</td>
+      <td>Static artifact bundled inside Setup App</td>
+    </tr>
+    <tr>
+      <td><code>.forge</code> YAML per project</td>
+      <td>UC Volume in user's workspace</td>
+    </tr>
+    <tr>
+      <td>Provisioned data (tables, functions, procedures)</td>
+      <td>User's UC catalog/schema</td>
+    </tr>
+    <tr>
+      <td>Deployed Agent App</td>
+      <td>User's Databricks Apps</td>
+    </tr>
+    <tr>
+      <td>Generated project source (for user CI/CD)</td>
+      <td>Workspace files (downloadable)</td>
+    </tr>
+    <tr>
+      <td>User's machine</td>
+      <td><strong>Nothing</strong> (unless running local mode C)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Flow: SaaS Deployment Path</h3>
+<div class="fbox-row">
+  <div class="fbox blue">User opens browser</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">Setup App wizard</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">.forge generated</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">UC data provisioned</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">Agent App deployed</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 4. RESOLVED DECISIONS                                         -->
+<!-- ============================================================ -->
+<h2 id="decisions">2. Resolved Decisions</h2>
+
+<table>
+  <thead>
+    <tr><th>Question</th><th>Answer</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Hosted mode auth</td>
+      <td>Databricks SSO -- user authenticates via SSO to their workspace</td>
+    </tr>
+    <tr>
+      <td>Can DBX App deploy another DBX App?</td>
+      <td>Yes -- it's just Python code executing from App, calls Apps REST API</td>
+    </tr>
+    <tr>
+      <td>Local mode</td>
+      <td>Still supported -- <code>node visual/backend/index.js</code>, uses <code>.env.local</code></td>
+    </tr>
+    <tr>
+      <td>dbc/ courseware</td>
+      <td>Separated to <code>forge-dbc</code> branch -- different project entirely</td>
+    </tr>
+    <tr>
+      <td><code>.forge</code> storage</td>
+      <td>UC Volume on user's workspace</td>
+    </tr>
+    <tr>
+      <td>User writes YAML?</td>
+      <td>NEVER -- wizard generates it, user only sees UI</td>
+    </tr>
+    <tr>
+      <td>Tools need custom Python?</td>
+      <td>NO -- 7 declarative patterns, framework generates code at runtime</td>
+    </tr>
+    <tr>
+      <td>Notebooks?</td>
+      <td>STRICTLY PROHIBITED -- code-first only</td>
+    </tr>
+    <tr>
+      <td><code>.env.local</code> in SaaS?</td>
+      <td>DOES NOT EXIST -- <code>.forge</code> is the config. ConfigProvider abstraction handles both modes.</td>
+    </tr>
+    <tr>
+      <td>User owns code?</td>
+      <td>YES -- Setup App generates a project the user can download, edit, CI/CD</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 5. .FORGE SCHEMA                                              -->
+<!-- ============================================================ -->
+<h2 id="forge-schema" class="purple">3. .forge Schema</h2>
+
+<h3>What It Is</h3>
+<ul>
+  <li>Internal serialization format -- machine-generated, machine-consumed</li>
+  <li>One <code>.forge</code> file per project</li>
+  <li>User NEVER writes YAML by hand -- the Setup App wizard generates it</li>
+  <li>Contains BOTH domain content (tables, SQL, prompts) AND infrastructure config (schema, warehouse, genie IDs)</li>
+</ul>
+
+<h3>Domain Content</h3>
+<ul>
+  <li>Domain description</li>
+  <li>Table definitions (DDL, seed data references)</li>
+  <li>UC function SQL (inline or sidecar files)</li>
+  <li>Stored procedure SQL</li>
+  <li>Tool definitions (declarative: 7 patterns)</li>
+  <li>System prompt + knowledge base + starter prompts</li>
+  <li>KA configurations</li>
+  <li>Eval dataset + scorer config</li>
+  <li>UI dashboard config</li>
+</ul>
+
+<h3>Infrastructure Config (replaces .env.local)</h3>
+<pre><span class="key">config</span>:
+  <span class="key">schema</span>: <span class="str">"catalog.schema"</span>
+  <span class="key">app_name</span>: <span class="str">"my-agent-app"</span>
+  <span class="key">warehouse_id</span>: <span class="str">"44d9f9e1e0624dfc"</span>
+  <span class="key">model</span>:
+    <span class="key">endpoint</span>: <span class="str">"databricks-claude-sonnet-4-6"</span>
+    <span class="key">token</span>: <span class="cmt">null</span>
+  <span class="key">genie</span>:
+    - <span class="key">slug</span>: <span class="str">"checkin"</span>
+      <span class="key">space_id</span>: <span class="str">"01f142..."</span>
+      <span class="key">enabled</span>: <span class="num">true</span>
+  <span class="key">ka</span>:
+    - <span class="key">slug</span>: <span class="str">"passengers"</span>
+      <span class="key">endpoint</span>: <span class="str">"ka-e0012089-endpoint"</span>
+      <span class="key">enabled</span>: <span class="num">true</span>
+  <span class="key">vs</span>:
+    - <span class="key">slug</span>: <span class="str">"index"</span>
+      <span class="key">path</span>: <span class="str">"catalog.schema.index"</span>
+      <span class="key">enabled</span>: <span class="num">true</span>
+  <span class="key">mcp</span>:
+    - <span class="key">slug</span>: <span class="str">"weather"</span>
+      <span class="key">url</span>: <span class="str">"https://..."</span>
+      <span class="key">header</span>: <span class="str">"Bearer ..."</span>
+  <span class="key">api</span>:
+    - <span class="key">slug</span>: <span class="str">"inventory"</span>
+      <span class="key">connection</span>: <span class="str">"uc-connection-name"</span>
+  <span class="key">a2a</span>:
+    - <span class="key">slug</span>: <span class="str">"billing"</span>
+      <span class="key">url</span>: <span class="str">"https://..."</span>
+  <span class="key">features</span>:
+    <span class="key">chart</span>: <span class="num">true</span>
+  <span class="key">lakebase</span>:
+    <span class="key">instance_name</span>: <span class="str">"my-lakebase"</span>
+  <span class="key">mlflow</span>:
+    <span class="key">experiment_id</span>: <span class="str">"12345"</span>
+  <span class="key">data_flags</span>:
+    <span class="key">use_default</span>: <span class="num">true</span>
+    <span class="key">use_gen</span>: <span class="num">false</span></pre>
+
+<h3>Where It's Stored</h3>
+<table>
+  <thead>
+    <tr><th>Mode</th><th>Path</th><th>Format</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SaaS (A/B)</td>
+      <td><code>/Volumes/{catalog}/{schema}/brickforge/stash/airops.forge.zip</code></td>
+      <td>Single zip archive</td>
+    </tr>
+    <tr>
+      <td>Local (C)</td>
+      <td><code>stash/airops/</code> on filesystem</td>
+      <td>Directory (unzipped for dev)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>What's IN the archive</h4>
+<p><code>.forge</code> YAML, SQL files, prompts, tool specs, KA configs, <code>app.yaml</code>, <code>databricks.yml</code> -- all small text files. Typically <strong>under 1MB compressed</strong>.</p>
+
+<h4>What's NOT in the archive</h4>
+<p>PDFs (stay in UC Volume, referenced by path). Large datasets (already in UC tables as Delta).</p>
+
+<h4>How it works</h4>
+<ol>
+  <li>Download one zip from UC Volume (single API call: <code>w.files.download()</code>)</li>
+  <li>Open in memory (<code>zipfile.ZipFile(io.BytesIO(bytes))</code> in Python, <code>AdmZip(buffer)</code> in Node)</li>
+  <li>Read any file on demand -- no disk extraction, no temp files</li>
+  <li>When saving: update entries in memory, upload zip back (single API call: <code>w.files.upload()</code>)</li>
+</ol>
+
+<p><strong>Implementation:</strong> Python <code>zipfile</code> (stdlib, zero deps). Node.js <code>adm-zip</code> (50KB, zero transitive deps). Rock solid.</p>
+
+<!-- ============================================================ -->
+<!-- 6. STASH SYSTEM                                               -->
+<!-- ============================================================ -->
+<h2 id="stash" class="green">4. Stash System</h2>
+
+<h3>Directory Structure</h3>
+<pre><span class="str">stash/airops/</span>
+  airops.forge          <span class="cmt"># manifest + config</span>
+  tools/                <span class="cmt"># domain tool Python files</span>
+  data/csv/             <span class="cmt"># seed CSVs</span>
+  data/init/            <span class="cmt"># DDL SQL</span>
+  data/func/            <span class="cmt"># UC function SQL</span>
+  data/proc/            <span class="cmt"># stored procedure SQL</span>
+  conf/prompt/          <span class="cmt"># system prompt, knowledge base, starters</span>
+  conf/ka/              <span class="cmt"># KA configs + PDFs</span>
+  eval/                 <span class="cmt"># eval dataset</span>
+  app/components/       <span class="cmt"># domain React card components</span></pre>
+
+<h3>How Stashes Are Created</h3>
+<table>
+  <thead>
+    <tr><th>Method</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>By extraction</strong></td>
+      <td>airops was extracted from the original codebase (already done). The airops extraction defined the <code>.forge</code> schema by example.</td>
+    </tr>
+    <tr>
+      <td><strong>By the wizard</strong></td>
+      <td>Setup App's LLM-assisted wizard generates new stashes from user's domain description.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>File Movement: Stash to Deployment</h3>
+<div class="fbox-row">
+  <div class="fbox purple">stash/{name}/</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox blue">.forge YAML parsed</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">UC Volume (SaaS)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">Workspace files</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">Agent App runtime</div>
+</div>
+
+<h3>Loading a Stash -- Verification &amp; Integrity Check</h3>
+
+<p>When a <code>.forge</code> bundle is loaded, the system MUST verify every piece before proceeding.</p>
+
+<h4>Step 1: Parse &amp; validate manifest</h4>
+<p>Validate YAML syntax, check <code>forge:</code> version, verify all required sections present (data, tools, prompt, config).</p>
+
+<h4>Step 2: Verify sidecar files</h4>
+<table>
+  <thead><tr><th>Manifest Section</th><th>Expected Files</th><th>Check</th></tr></thead>
+  <tbody>
+    <tr><td><code>data.tables[].ddl</code></td><td><code>data/init/create_*.sql</code></td><td>File exists, contains CREATE</td></tr>
+    <tr><td><code>data.tables[].seed</code></td><td><code>data/csv/*.csv</code></td><td>If declared in manifest: must exist. Not all tables need seed CSV.</td></tr>
+    <tr><td><code>data.functions[]</code></td><td><code>data/func/*.sql</code></td><td>File exists</td></tr>
+    <tr><td><code>data.procedures[]</code></td><td><code>data/proc/*.sql</code></td><td>File exists</td></tr>
+    <tr><td><code>tools[].file</code></td><td><code>tools/*.py</code></td><td>File exists, contains @tool</td></tr>
+    <tr><td><code>prompt.system</code></td><td><code>conf/prompt/main.prompt</code></td><td>File exists</td></tr>
+    <tr><td><code>prompt.knowledge_base</code></td><td><code>conf/prompt/knowledge.base</code></td><td>File exists (can be empty)</td></tr>
+    <tr><td><code>knowledge_assistants[].config</code></td><td><code>conf/ka/*.yml</code></td><td>If declared in manifest: must exist. No KA section = not needed.</td></tr>
+    <tr><td><code>eval.dataset</code></td><td><code>eval/data/*.jsonl</code></td><td>File exists (optional)</td></tr>
+  </tbody>
+</table>
+
+<h4>Step 3: Report status</h4>
+<pre><span class="str">[+]</span> airops.forge -- valid YAML, version 1.0
+<span class="str">[+]</span> data/csv/flights.csv -- found (5 rows)
+<span class="str">[+]</span> data/init/create_flights.sql -- found (CREATE TABLE)
+<span class="comment">[x]</span> data/func/missing_function.sql -- NOT FOUND
+<span class="str">[+]</span> conf/prompt/main.prompt -- found (211 lines)
+<span class="comment">[!]</span> eval/data/dataset.jsonl -- not found (optional, eval won't work)</pre>
+
+<h4>Step 4: Suggest fixes for missing assets</h4>
+<table>
+  <thead><tr><th>Missing Asset</th><th>Suggested Fix</th></tr></thead>
+  <tbody>
+    <tr><td>CSV seed data (in manifest)</td><td>Generate via Data Gen wizard, or remove <code>seed:</code> from manifest if table already exists in UC.</td></tr>
+    <tr><td>SQL function/procedure</td><td>Generate from table schema using the Routines wizard</td></tr>
+    <tr><td>System prompt</td><td>Generate from domain description using the Prompt wizard</td></tr>
+    <tr><td>KA config (in manifest)</td><td>Provide the KA YAML, or pick an existing endpoint and update the manifest.</td></tr>
+    <tr><td>Tool file</td><td>Auto-generated from declarative spec at runtime (if pattern is sql_read/action/ka)</td></tr>
+  </tbody>
+</table>
+
+<h4>Step 5: Live workspace provision check</h4>
+<p>After loading files, optionally verify against the live Databricks workspace:</p>
+<table>
+  <thead><tr><th>Resource</th><th>Check</th><th>If Missing</th></tr></thead>
+  <tbody>
+    <tr><td>UC schema</td><td><code>schemas.get(full_name)</code></td><td>Offer to create</td></tr>
+    <tr><td>UC tables</td><td><code>tables.get(full_name)</code> per table</td><td>Offer to provision from DDL + CSV</td></tr>
+    <tr><td>UC functions</td><td>Query <code>SHOW FUNCTIONS IN schema</code></td><td>Offer to create from SQL</td></tr>
+    <tr><td>Genie space</td><td><code>genie.get_space(id)</code></td><td>Offer to create new space</td></tr>
+    <tr><td>KA endpoint</td><td><code>serving_endpoints.get(name)</code></td><td>Offer to provision from YAML</td></tr>
+  </tbody>
+</table>
+<p><strong>This turns the load process into a guided setup:</strong> load &rarr; verify &rarr; fix gaps &rarr; ready.</p>
+
+<h3>UI: Visual Stash Health Report</h3>
+<p>The Setup App displays verification results as a visual checklist -- same pattern as the Setup DAG with [+]/[x]/[!] orbs.</p>
+
+<pre>Stash: airops                                    [Reload] [Fix All]
+─────────────────────────────────────────────────────────────────
+<span class="str">[+]</span> airops.forge              valid YAML, v1.0
+<span class="str">[+]</span> app.yaml                  found
+<span class="str">[+]</span> databricks.yml            found
+
+DATA
+<span class="str">[+]</span> data/csv/flights.csv      5 rows
+<span class="str">[+]</span> data/init/create_flights.sql    CREATE TABLE
+<span class="comment">[x]</span> data/init/create_metrics.sql    NOT FOUND         [Generate]
+<span class="str">[+]</span> data/func/flights_at_risk.sql   found
+
+PROMPTS
+<span class="str">[+]</span> conf/prompt/main.prompt   211 lines
+<span class="comment">[!]</span> conf/prompt/user.prompt   empty (no starters)    [Generate]
+
+WORKSPACE (live)
+<span class="str">[+]</span> Schema: catalog.schema    exists
+<span class="comment">[x]</span> Table: flights            NOT PROVISIONED        [Provision]
+<span class="str">[+]</span> Genie space               accessible
+<span class="comment">[!]</span> KA endpoint               PENDING (not yet ACTIVE)</pre>
+
+<p><strong>Implementation (Implemented):</strong></p>
+<ul>
+  <li>Backend: <code>GET /api/stash/health</code> -- scans stash directory, parses <code>.forge</code> manifests, verifies all referenced files exist. Returns structured JSON with per-file status (found/missing/empty), manifest validity, and file counts.</li>
+  <li>Response shape: <code>{ stash, manifest_valid, files: [{ path, status, detail }], summary: { ok, missing, warnings } }</code></li>
+  <li>Frontend: <code>StashHealthView</code> component -- renders checklist with orbs and action buttons</li>
+  <li>Each [x] item has a contextual action button (Generate, Provision, Create) triggering the relevant wizard step</li>
+  <li>[Fix All] runs all missing provisions in sequence</li>
+  <li>Reusable for any stash -- not domain-specific</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- 7. CHALLENGE 1                                                -->
+<!-- ============================================================ -->
+<h2 id="ch1" class="red">5. Challenge 1: Where Does the Code Live?</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Current State</h4>
+    <p>Everything in cloned repo on user's machine.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p>Setup App carries agent bundle. On deploy, generates domain files from <code>.forge</code>, uploads to workspace files, calls Apps API.</p>
+  </div>
+</div>
+
+<h3>Solution</h3>
+<p>The agent bundle = <code>agent/</code>, <code>app/</code>, framework <code>tools/</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>.</p>
+<p>Domain files = tools, SQL, prompts, KA configs -- generated from <code>.forge</code>.</p>
+<p>Everything else (<code>visual/</code>, <code>stash/</code>, <code>deploy/</code>, <code>scripts/</code>) stays on Setup App side.</p>
+
+<div class="fbox-row">
+  <div class="fbox blue">Setup App</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">Agent Bundle (static)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">Domain files (.forge)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">Workspace Files</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">Apps API deploy</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 8. CHALLENGE 2                                                -->
+<!-- ============================================================ -->
+<h2 id="ch2" class="red">6. Challenge 2: Setup App Backend Shift</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Current State</h4>
+    <p>50+ subprocess calls to <code>uv run python</code> and <code>bash</code>.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p><strong>Mode B:</strong> Keep Python. DBX Apps have Python. Install uv at startup. All subprocess calls work as-is.<br>
+    <strong>Modes A/B long-term:</strong> Migrate SDK calls to REST API (incremental).</p>
+  </div>
+</div>
+
+<h3>Backend Subprocess Categories</h3>
+<table>
+  <thead>
+    <tr><th>Category</th><th>Examples</th><th>Migration Path</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>A: SDK calls</strong></td>
+      <td>List warehouses, test connections, etc.</td>
+      <td>Can become REST API calls</td>
+    </tr>
+    <tr>
+      <td><strong>B: Scripts</strong></td>
+      <td><code>create_all_assets</code>, <code>generate_tables</code>, deploy</td>
+      <td>Must stay Python</td>
+    </tr>
+    <tr>
+      <td><strong>C: File ops</strong></td>
+      <td>Read/write <code>.env.local</code></td>
+      <td>Already Node.js</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 9. CHALLENGE 3                                                -->
+<!-- ============================================================ -->
+<h2 id="ch3" class="red">7. Challenge 3: .env.local Eradication</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Current State</h4>
+    <p><code>.env.local</code> is the config store. 98 refs in Node.js backend, 272 refs across 32 Python files.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p><code>.env.local</code> does not exist in SaaS mode. The <code>.forge</code> file IS the config.</p>
+  </div>
+</div>
+
+<h3>Solution: ConfigProvider Pattern</h3>
+<div class="fbox-row">
+  <div class="fbox purple">ConfigProvider (interface)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox blue">LocalConfigProvider (.env.local -- mode C)</div>
+</div>
+<div class="fbox-row">
+  <div class="fbox purple">ConfigProvider (interface)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">ForgeConfigProvider (.forge -- modes A &amp; B)</div>
+</div>
+
+<p>Both implement: <code>get(key)</code>, <code>set(key, value)</code>, <code>list()</code>, <code>toggle(key)</code>, <code>to_env_dict()</code>.</p>
+<p><strong>Python side needs ZERO changes</strong> -- subprocess env injection already works.</p>
+<p><strong>Node.js side: 36 call sites</strong> to refactor from direct file ops to ConfigProvider.</p>
+<p>Migration: pure refactor first (LocalConfigProvider wraps existing functions), then add ForgeConfigProvider.</p>
+
+<!-- ============================================================ -->
+<!-- 10. CHALLENGE 4                                               -->
+<!-- ============================================================ -->
+<h2 id="ch4" class="red">8. Challenge 4: Tool Generation at Runtime</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Current State</h4>
+    <p>Tools are Python files discovered from filesystem at startup.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p>Tools defined as declarative specs in <code>.forge</code>. A <code>tool_factory.py</code> generates <code>@tool</code> functions at startup.</p>
+  </div>
+</div>
+
+<h3>7 Tool Patterns (3 existing factories + 4 to build/extend)</h3>
+<table>
+  <thead><tr><th>#</th><th>Pattern</th><th>Factory</th><th>Status</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><strong>SQL read</strong></td><td><code>tool_factory.py</code></td><td><span class="badge amber">TO BUILD</span></td><td>Calls a UC function with params, returns query results</td></tr>
+    <tr><td>2</td><td><strong>Action</strong></td><td><code>tool_factory.py</code></td><td><span class="badge amber">TO BUILD</span></td><td>Calls a stored procedure with params</td></tr>
+    <tr><td>3</td><td><strong>KA query</strong></td><td><code>ka_factory.py</code></td><td><span class="badge green">EXISTS</span></td><td>Calls a Knowledge Assistant endpoint, extracts answer</td></tr>
+    <tr><td>4</td><td><strong>External API</strong></td><td><code>api_factory.py</code></td><td><span class="badge green">EXISTS</span></td><td>Calls REST APIs via UC Connection or direct HTTP</td></tr>
+    <tr><td>5</td><td><strong>A2A</strong></td><td><code>a2a_factory.py</code></td><td><span class="badge green">EXISTS</span></td><td>Calls remote agents via Google A2A protocol (JSON-RPC)</td></tr>
+    <tr><td>6</td><td><strong>External MCP</strong></td><td>(wired in agent.py)</td><td><span class="badge green">EXISTS</span></td><td>Connects to external MCP servers, imports their tools</td></tr>
+    <tr><td>7</td><td><strong>Chart</strong></td><td><code>generate_chart.py</code></td><td><span class="badge green">EXISTS</span></td><td>Generates inline chart visualizations (framework tool)</td></tr>
+  </tbody>
+</table>
+<p><strong>Plus MCP-based integrations</strong> (not factories, wired as MCP servers in <code>agent.py</code>): <strong>Genie</strong> (NL-to-SQL, <code>PROJECT_GENIE_*</code>) and <strong>Vector Search</strong> (semantic retrieval, <code>PROJECT_VS_*</code>).</p>
+<p>7 declarative patterns cover 95% of tools. Custom logic tools: user writes Python, puts in <code>tools/</code>. Both coexist via <code>_discover_domain_tools()</code>.</p>
+
+<div class="fbox-row">
+  <div class="fbox purple">.forge tool specs</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox blue">tool_factory.py</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">@tool functions at runtime</div>
+</div>
+<div class="fbox-row">
+  <div class="fbox amber">tools/ directory (custom)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox blue">_discover_domain_tools()</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">@tool functions at runtime</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 11. CHALLENGE 5                                               -->
+<!-- ============================================================ -->
+<h2 id="ch5" class="red">9. Challenge 5: Data Provisioning Without Local Scripts</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Current State</h4>
+    <p><code>create_all_assets.py</code> currently scans local directories for SQL files.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p>In SaaS: reads SQL content from <code>.forge</code> sidecar files in UC Volume.</p>
+  </div>
+</div>
+
+<h3>Solution</h3>
+<p>Setup App copies from UC Volume to workspace files at deploy time. Python scripts get env vars via subprocess injection -- they work without <code>.env.local</code>.</p>
+
+<div class="fbox-row">
+  <div class="fbox purple">.forge sidecar SQL</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox blue">UC Volume</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">Workspace files</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">create_all_assets.py</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">UC tables/functions</div>
+</div>
+
+<h3>FORGE_STASH_DIR: Stash-Aware Data Provisioning (Implemented)</h3>
+<p>When the env var <code>FORGE_STASH_DIR</code> is set, the provisioning scripts resolve all data file paths relative to that directory instead of the default local paths. Implemented in:</p>
+<ul>
+  <li><code>data/create_all_assets.py</code> -- tables DDL + seed CSV</li>
+  <li><code>data/create_all_functions.py</code> -- UC function SQL files</li>
+  <li><code>data/create_all_procedures.py</code> -- stored procedure SQL files</li>
+</ul>
+<pre><span class="cmt"># Injected by backend when running from SaaS mode:</span>
+env[<span class="str">'FORGE_STASH_DIR'</span>] = <span class="str">'/path/to/stash/airops'</span>
+
+<span class="cmt"># Inside the scripts -- path resolution:</span>
+stash_dir = os.environ.get(<span class="str">'FORGE_STASH_DIR'</span>)
+<span class="kw">if</span> stash_dir:
+    sql_path = os.path.join(stash_dir, <span class="str">'data/func'</span>, filename)
+<span class="kw">else</span>:
+    sql_path = os.path.join(<span class="str">'data/func'</span>, filename)  <span class="cmt"># local default</span></pre>
+
+<!-- ============================================================ -->
+<!-- 12. CHALLENGE 6                                               -->
+<!-- ============================================================ -->
+<h2 id="ch6" class="red">10. Challenge 6: Agent App Deployment -- DAB Preserved</h2>
+
+<p><strong>DAB and <code>app.yaml</code> are Databricks platform standards. They MUST be preserved.</strong> This project needs internal validation -- going against the platform is not an option.</p>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Two Layers</h4>
+    <p><strong>Resource creation</strong> (tables, functions, genie, KA, experiments) via SDK during wizard. <strong>Deployment</strong> (packaging agent + deploying as App) via DAB.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p>Setup App generates <code>databricks.yml</code> + <code>app.yaml</code> from <code>.forge</code> config. Deploys via DAB (Python SDK or CLI). Resource bindings, SP grants handled by DAB.</p>
+  </div>
+</div>
+
+<h3>Deploy Flow (DAB-compatible)</h3>
+<table>
+  <thead>
+    <tr><th>Step</th><th>Action</th><th>Mechanism</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Provision resources (tables, functions, genie, KA, experiment)</td>
+      <td>SDK calls during wizard -- already done before deploy</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Generate <code>databricks.yml</code> from <code>.forge</code></td>
+      <td>Template + config injection (resources, targets, app name, bindings)</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Generate <code>app.yaml</code> from <code>.forge</code></td>
+      <td>Template + config injection (startup command, env vars)</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>DAB deploy</td>
+      <td><code>databricks bundle deploy</code> (CLI) or Python SDK <code>w.apps.deploy()</code></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Resource bindings applied</td>
+      <td>Automatic by DAB (experiment, warehouse, genie, endpoint bound to app SP)</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Post-deploy grants</td>
+      <td>SDK grant calls</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Why DAB for Deployment</h3>
+<ul>
+  <li>Databricks platform standard -- required for internal validation</li>
+  <li>Resource binding is declarative in <code>databricks.yml</code></li>
+  <li>SP permissions auto-applied via resource bindings</li>
+  <li>Workspace state tracking (<code>.databricks/bundle/</code>)</li>
+  <li>Reproducible: same <code>databricks.yml</code> = same deployment</li>
+</ul>
+
+<h3>Stash Includes Bundle Configs</h3>
+<p><code>app.yaml</code> and <code>databricks.yml</code> are project artifacts, part of the stash. Setup App generates project-specific versions by injecting <code>.forge</code> config values into templates at deploy time.</p>
+
+<h3>Deployment Scripts (Implemented)</h3>
+<p>Three Python scripts under <code>deploy/</code> replace all bash deploy logic:</p>
+<table>
+  <thead>
+    <tr><th>Script</th><th>What it does</th><th>Mechanism</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>deploy/deploy_setup_app.py</code></td>
+      <td>Deploys the Setup App to Databricks</td>
+      <td>Calls Databricks CLI for app create/update. No bash wrapper needed.</td>
+    </tr>
+    <tr>
+      <td><code>deploy/deploy_agent_app.py</code></td>
+      <td>Deploys the Agent App to Databricks</td>
+      <td>Generates <code>app.yaml</code> + <code>databricks.yml</code> from <code>.forge</code> config, builds zip bundle of agent files, uploads to workspace files via SDK, calls Apps REST API (<code>w.apps.deploy()</code>).</td>
+    </tr>
+    <tr>
+      <td><code>deploy/git_push.py</code></td>
+      <td>Automated git push via Databricks Git Folders</td>
+      <td>Uses <code>w.repos</code> and workspace file write APIs. No PAT required -- uses Databricks-stored git credentials.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Agent App Build Strategy (3 paths, auto-detected)</h3>
+<p>The pip package ships agent app source (client + server + packages) but not built dist. <code>deploy_agent_app.py</code> detects and picks the best build path automatically:</p>
+<table>
+  <thead>
+    <tr><th>Path</th><th>Condition</th><th>What happens</th><th>Speed</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1. Pre-built</td>
+      <td><code>app/client/dist/</code> exists (editable install / local dev)</td>
+      <td>Bundle tarballs as-is</td>
+      <td>Fastest</td>
+    </tr>
+    <tr>
+      <td>2. Local build</td>
+      <td><code>node</code> in PATH (pip install + node on machine)</td>
+      <td>Run <code>npm install && npm run build</code> locally, then bundle</td>
+      <td>Fast</td>
+    </tr>
+    <tr>
+      <td>3. Remote build</td>
+      <td>No node locally (pip install only)</td>
+      <td>Ship source, build on Databricks Apps at startup</td>
+      <td>Slower cold start</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Detection:</strong> check <code>app/client/dist/</code> &rarr; check <code>node</code> in PATH &rarr; fallback to source.</p>
+<p><strong>Dependencies:</strong> Path 1: none. Path 2: node.js + npm. Path 3: node.js on DBX Apps compute (always available), npm pulls from <code>npm-proxy.cloud.databricks.com</code>. All Python deps handled by pip.</p>
+<p class="status amber">STATUS: NOT YET WIRED -- deploy_agent_app.py and startup script need updates.</p>
+
+<h3>Grant Script (Implemented)</h3>
+<p><code>deploy/grant/run_all_grants.py</code> replaces the old <code>deploy/run_all_grants.sh</code> bash script. Cross-platform (no bash dependency). 7 grant steps executed in sequence:</p>
+<table>
+  <thead>
+    <tr><th>Step</th><th>Grant</th><th>Mechanism</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Tables</td><td>Python script via SDK</td></tr>
+    <tr><td>2</td><td>UC Functions</td><td>Python script via SDK</td></tr>
+    <tr><td>3</td><td>SQL Warehouse</td><td>Python script via SDK</td></tr>
+    <tr><td>4</td><td>Model Endpoints</td><td>Python script via SDK</td></tr>
+    <tr><td>5</td><td>Genie spaces</td><td>Python script via SDK</td></tr>
+    <tr><td>6</td><td>Lakebase</td><td>Python script via SDK</td></tr>
+    <tr><td>7</td><td>Secrets</td><td>Python SDK directly (NOT CLI -- eliminates Go binary dependency for this step)</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 13. CHALLENGE 7                                               -->
+<!-- ============================================================ -->
+<h2 id="ch7" class="red">11. Challenge 7: Prompts / Knowledge Base</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Current State</h4>
+    <p>System prompt lives as local files in <code>conf/prompt/</code>.</p>
+  </div>
+  <div class="ba-card after">
+    <h4>Target State</h4>
+    <p>System prompt in <code>.forge</code> (inline or sidecar file). On deploy, written to agent's <code>conf/prompt/</code> in workspace files.</p>
+  </div>
+</div>
+
+<h3>Solution</h3>
+<p>Agent reads from relative paths at startup -- doesn't care where file came from. The Setup App handles writing the files to the correct location during deployment.</p>
+
+<div class="fbox-row">
+  <div class="fbox purple">.forge prompt content</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox blue">Setup App writes files</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">conf/prompt/ in workspace</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">Agent reads at startup</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 14. CONFIGPROVIDER PATTERN                                    -->
+<!-- ============================================================ -->
+<h2 id="configprovider" class="purple">12. ConfigProvider Pattern</h2>
+
+<h3>Interface (Implemented)</h3>
+<p>Both providers implement the same interface. JavaScript side in <code>visual/backend/lib/config-provider.js</code>.</p>
+<pre><span class="cmt">// Full interface -- both providers implement all methods</span>
+<span class="kw">interface</span> ConfigProvider {
+  list()            <span class="cmt">// returns all key-value pairs as object</span>
+  get(key)          <span class="cmt">// returns string value or undefined</span>
+  set(key, value)   <span class="cmt">// write one key</span>
+  setMany(pairs)    <span class="cmt">// write multiple keys atomically</span>
+  toggle(key)       <span class="cmt">// flip true/false string</span>
+  listByPrefix(pfx) <span class="cmt">// returns entries whose key starts with pfx</span>
+  toEnvDict()       <span class="cmt">// returns flat object for subprocess env injection</span>
+  deleteKey(key)    <span class="cmt">// remove a key</span>
+}</pre>
+
+<h3>Implementations</h3>
+<table>
+  <thead>
+    <tr><th>Implementation</th><th>Backing Store</th><th>Modes</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>LocalConfigProvider</code></td>
+      <td><code>.env.local</code> file on disk</td>
+      <td>Mode C (local dev)</td>
+      <td>Wraps existing dotenv read/write. Zero behavior change for local mode.</td>
+    </tr>
+    <tr>
+      <td><code>ForgeConfigProvider</code></td>
+      <td><code>.forge</code> YAML held in-memory zip on UC Volume</td>
+      <td>Modes A &amp; B (SaaS)</td>
+      <td>In-memory zip, event-driven flush to UC Volume on each meaningful write. <code>setMany()</code> used for multi-key saves to avoid multiple flushes.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>ForgeConfigProvider: In-Memory Zip + Flush</h3>
+<p>On startup (SaaS mode), the backend downloads the <code>.forge.zip</code> from UC Volume once and holds it in process memory. All reads serve from memory -- zero network calls. Writes update the in-memory zip then flush to UC Volume (single <code>w.files.upload()</code>, ~200ms). On app restart, re-download from Volume restores last flushed state.</p>
+
+<div class="fbox-row">
+  <div class="fbox blue">App start</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">Download .forge.zip (UC Volume)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">Hold in memory (AdmZip)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">set/setMany triggers flush</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">Upload back to UC Volume</div>
+</div>
+
+<h3>Call Sites to Refactor</h3>
+<table>
+  <thead>
+    <tr><th>Layer</th><th>Current</th><th>Count</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Node.js backend</td>
+      <td>Direct <code>.env.local</code> file read/write</td>
+      <td>36 call sites</td>
+      <td>Refactor to <code>ConfigProvider.get()</code> / <code>.set()</code></td>
+    </tr>
+    <tr>
+      <td>Node.js backend (total refs)</td>
+      <td>All <code>.env.local</code> references</td>
+      <td>98 refs</td>
+      <td>Audit and migrate</td>
+    </tr>
+    <tr>
+      <td>Python files</td>
+      <td><code>os.environ</code> / <code>dotenv</code> reads</td>
+      <td>272 refs across 32 files</td>
+      <td>ZERO changes needed -- subprocess env injection handles it</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Migration Steps</h3>
+<ol>
+  <li><strong>Phase 1 (pure refactor):</strong> Create <code>LocalConfigProvider</code> that wraps existing <code>.env.local</code> read/write functions. No behavior change. All 36 call sites switch to the abstraction.</li>
+  <li><strong>Phase 2 (add SaaS):</strong> Create <code>ForgeConfigProvider</code> that reads/writes <code>.forge</code> YAML. Mode detection at startup picks the right provider.</li>
+  <li><strong>Phase 3 (cleanup):</strong> Remove all direct <code>.env.local</code> references from the codebase.</li>
+</ol>
+
+<h3>Python Side: No Changes</h3>
+<pre><span class="cmt">// Node.js backend already injects env vars into subprocess calls:</span>
+<span class="kw">const</span> env = configProvider.to_env_dict();
+spawn(<span class="str">'python'</span>, [script], { env: { ...process.env, ...env } });</pre>
+<p>Python scripts read from <code>os.environ</code> as they do today. The ConfigProvider feeds the right values regardless of backing store.</p>
+
+<!-- ============================================================ -->
+<!-- 15. RUNTIME DEPENDENCIES (8b)                                 -->
+<!-- ============================================================ -->
+<h2 id="runtime-deps" class="amber">13. Runtime Dependencies (Part 8b)</h2>
+
+<h3>The Problem</h3>
+<p>Before: user had npm, uv, Python 3.11+, Databricks CLI all installed locally. After: none of that exists on the user's machine. It ALL must be available inside the DBX App runtime.</p>
+
+<h3>What the Setup App Backend Spawns</h3>
+<table>
+  <thead>
+    <tr><th>Dependency</th><th>Count</th><th>Details</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>uv run python</code></td>
+      <td>41 calls</td>
+      <td>Every call needs: uv binary, Python 3.11+, all packages from <code>pyproject.toml</code> (<code>databricks-sdk</code>, <code>mlflow</code>, <code>langchain</code>, <code>pyyaml</code>, <code>python-dotenv</code>, etc.)</td>
+    </tr>
+    <tr>
+      <td><code>databricks</code> CLI (Go binary)</td>
+      <td>5 calls</td>
+      <td><code>auth profiles</code>, <code>auth login</code>, <code>database list-database-instances</code>, <code>database get-database-instance</code>, <code>apps get</code></td>
+    </tr>
+    <tr>
+      <td><code>bash</code></td>
+      <td>2 calls</td>
+      <td><code>bash deploy/run_all_grants.sh</code>, <code>bash deploy/deploy.sh</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Agent App Startup Chain</h3>
+<pre><span class="cmt"># app.yaml startup command:</span>
+uv run python -c <span class="str">"from agent.start_server import main; main()"</span>
+<span class="cmt"># This needs: uv + Python + all Python deps + Node.js + npm (for build:client)</span>
+<span class="cmt"># Startup hook runs: npm install && npm run build:client</span>
+<span class="cmt"># Then spawns: node app/server/dist/index.mjs</span></pre>
+
+<h3>Tool Availability Matrix</h3>
+<table>
+  <thead>
+    <tr><th>Tool</th><th>Available in DBX App?</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Python 3.x</td>
+      <td>YES</td>
+      <td>Standard in DBX runtime</td>
+    </tr>
+    <tr>
+      <td>pip</td>
+      <td>YES</td>
+      <td>Standard</td>
+    </tr>
+    <tr>
+      <td>uv</td>
+      <td>NO</td>
+      <td>Must be installed: <code>pip install uv</code></td>
+    </tr>
+    <tr>
+      <td>Node.js</td>
+      <td>MAYBE</td>
+      <td>DBX Apps support Node.js apps, so Node must be available. Version unknown.</td>
+    </tr>
+    <tr>
+      <td>npm</td>
+      <td>MAYBE</td>
+      <td>If Node.js is available, npm usually is too</td>
+    </tr>
+    <tr>
+      <td>bash</td>
+      <td>YES</td>
+      <td>Standard Linux container</td>
+    </tr>
+    <tr>
+      <td>databricks CLI (Go)</td>
+      <td>MAYBE</td>
+      <td>May be pre-installed. If not, must download binary.</td>
+    </tr>
+    <tr>
+      <td>git</td>
+      <td>MAYBE</td>
+      <td>May be available but not guaranteed</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Millimeter-by-Millimeter: What Breaks</h3>
+
+<h4>mm R.1: uv not available</h4>
+<p>41 subprocess calls use <code>uv run python</code>. Fix options:</p>
+<ul>
+  <li><strong>Option A:</strong> Install uv at startup: <code>pip install uv && uv sync</code> in <code>app.yaml</code> command. Cleanest. <code>uv</code> is pip-installable. <code>uv sync</code> creates the venv from <code>pyproject.toml</code>.</li>
+  <li><strong>Option B:</strong> Replace ALL <code>uv run python</code> with just <code>python</code> (after pip-installing deps)</li>
+  <li><strong>Option C:</strong> Create a wrapper script that tries <code>uv run python</code>, falls back to <code>python</code></li>
+</ul>
+<div class="wall">
+  <strong>Wall:</strong> <code>uv sync</code> needs network access to download packages. Takes 30-60s. This happens on EVERY app restart, not just first deploy.
+  Alternative: run <code>uv sync</code> once at deploy time, commit the <code>.venv/</code> to workspace files. Then <code>uv run</code> just uses the existing venv -- fast.
+</div>
+
+<h4>mm R.2: Python packages not installed</h4>
+<p>Even if <code>uv</code> is installed, the venv needs to be created and populated. <code>pyproject.toml</code> has 20+ dependencies including large ones (<code>mlflow</code>, <code>langchain</code>, <code>pandas</code>, <code>pyarrow</code>). Full install takes 2-3 minutes.</p>
+<div class="wall">
+  <strong>Wall:</strong> If this happens on every restart, startup is painfully slow. Install once at deploy time, persist venv in workspace files. Or: use <code>pip install -r requirements.txt</code> in the <code>app.yaml</code> command with exact versions (fast pip resolve).
+</div>
+
+<h4>mm R.3: Databricks CLI (Go binary) not available</h4>
+<p>The Go binary is NOT pip-installable. It's a standalone binary.</p>
+<p>In DBX App mode, do we even need it?</p>
+<table>
+  <thead>
+    <tr><th>CLI Call</th><th>Needed in DBX App Mode?</th><th>Reason</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>databricks auth profiles</code></td>
+      <td>NO</td>
+      <td>Auth comes from SP. No CLI profiles.</td>
+    </tr>
+    <tr>
+      <td><code>databricks auth login</code></td>
+      <td>NO</td>
+      <td>No interactive login needed.</td>
+    </tr>
+    <tr>
+      <td><code>databricks database list-database-instances</code></td>
+      <td>YES</td>
+      <td>Replace with <code>GET /api/2.0/database/instances</code> via SDK</td>
+    </tr>
+    <tr>
+      <td><code>databricks database get-database-instance</code></td>
+      <td>YES</td>
+      <td>Replace with <code>GET /api/2.0/database/instances/{name}</code> via SDK</td>
+    </tr>
+    <tr>
+      <td><code>databricks apps get</code></td>
+      <td>YES</td>
+      <td>Replace with <code>GET /api/2.0/apps/{name}</code> via SDK</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Decision:</strong> Replace all <code>databricks</code> CLI calls with REST API equivalents. This removes the Go binary dependency entirely. 5 call sites in the backend. Each is a simple SDK/REST call.</p>
+
+<h4>mm R.4: Node.js / npm for Agent App build</h4>
+<p>Agent App startup: <code>npm install && npm run build:client && npm run start</code>. This requires Node.js + npm in the Agent App's DBX App runtime. The Agent App is a SEPARATE DBX App from the Setup App.</p>
+<p>Current <code>app.yaml</code> starts with <code>uv run python</code> which then spawns Node as a subprocess. This already works today -- the Agent App is already deployed as a DBX App this way. Node.js IS available in the DBX App runtime.</p>
+
+<h4>mm R.5: npm for Setup App</h4>
+<p>Setup App backend is Node.js with pre-built frontend and committed <code>node_modules</code>. No <code>npm install</code> needed at runtime. Just Node.js to run the server.</p>
+
+<h4>mm R.6: Eliminate npm from Agent App runtime (PRE-BUILD)</h4>
+<p>Currently the Agent App builds the chat frontend at startup (<code>npm install && npm run build:client</code>). But the startup hook already skips the build if <code>dist/</code> exists.</p>
+<p><strong>Solution:</strong> pre-build and include <code>app/client/dist/</code> and <code>app/server/dist/</code> in the deployment bundle. Remove <code>client/dist/</code> from <code>.databricksignore</code>. Startup sees dist exists, skips npm. <strong>npm eliminated from Agent App runtime.</strong></p>
+
+<h4>mm R.7: No rebuild needed when adding tools</h4>
+<p>Tools are Python -- no build step. The agent discovers tools at startup by scanning <code>tools/</code> directory via <code>pkgutil.iter_modules()</code>. Adding a tool = drop a <code>.py</code> file + restart agent. The factories (<code>ka_factory</code>, <code>api_factory</code>, <code>a2a_factory</code>) discover tools from env vars at startup. The <code>.forge</code> tool specs are read at startup. <strong>Zero build step for any tool change. Just restart.</strong></p>
+
+<h3>Pre-built vs Built at Runtime</h3>
+<table>
+  <thead>
+    <tr><th>Piece</th><th>Pre-built?</th><th>In bundle?</th><th>Runtime need</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Setup App frontend (React)</td><td>YES -- <code>visual/frontend/dist/</code></td><td>YES (committed)</td><td>Nothing</td></tr>
+    <tr><td>Setup App backend (Node.js)</td><td>YES -- <code>node_modules/</code> committed</td><td>YES</td><td>Node.js only</td></tr>
+    <tr><td>Setup App Python scripts</td><td>Source, no build</td><td>YES</td><td>Python + packages</td></tr>
+    <tr><td>Agent App frontend (React chat)</td><td>YES -- <code>app/client/dist/</code></td><td><strong>MUST INCLUDE</strong> (change <code>.databricksignore</code>)</td><td>Nothing</td></tr>
+    <tr><td>Agent App server (Express)</td><td>YES -- <code>app/server/dist/</code></td><td><strong>MUST INCLUDE</strong></td><td>Node.js only</td></tr>
+    <tr><td>Agent App agent (Python)</td><td>Source, no build</td><td>YES</td><td>Python + packages</td></tr>
+    <tr><td>Tools (Python)</td><td>Source, no build</td><td>YES</td><td>Discovered at startup -- restart only, no build</td></tr>
+  </tbody>
+</table>
+
+<h3>Lightest Runtime Footprint</h3>
+<table>
+  <thead>
+    <tr><th>Dependency</th><th>Setup App</th><th>Agent App</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Python 3.x</td>
+      <td>YES (subprocess)</td>
+      <td>YES (main)</td>
+      <td>Available in DBX runtime</td>
+    </tr>
+    <tr>
+      <td>uv</td>
+      <td>YES (41 calls)</td>
+      <td>YES (startup)</td>
+      <td><code>pip install uv</code> in startup command</td>
+    </tr>
+    <tr>
+      <td>Python packages</td>
+      <td>YES (via uv sync)</td>
+      <td>YES (via uv sync)</td>
+      <td>Install once at deploy/startup</td>
+    </tr>
+    <tr>
+      <td>Node.js</td>
+      <td>YES (main process)</td>
+      <td>YES (subprocess)</td>
+      <td>Available in DBX runtime</td>
+    </tr>
+    <tr>
+      <td>npm</td>
+      <td><strong>NO</strong></td>
+      <td><strong>NO</strong> (dist pre-built)</td>
+      <td>Available with Node.js</td>
+    </tr>
+    <tr>
+      <td>databricks CLI (Go)</td>
+      <td>YES (5 calls)</td>
+      <td>NO</td>
+      <td><strong>REPLACE with REST API</strong> -- removes dependency</td>
+    </tr>
+    <tr>
+      <td>bash</td>
+      <td>YES (2 calls)</td>
+      <td>NO</td>
+      <td>Available in Linux container</td>
+    </tr>
+    <tr>
+      <td>git</td>
+      <td>NO</td>
+      <td>NO</td>
+      <td>Not needed</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>The 5 Databricks CLI Calls to Replace</h3>
+<table>
+  <thead>
+    <tr><th>Current Call</th><th>Where</th><th>REST API Replacement</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>databricks auth profiles</code></td>
+      <td>Backend: list profiles for host/model setup</td>
+      <td><strong>REMOVE</strong> -- not needed in DBX App mode (no CLI profiles)</td>
+    </tr>
+    <tr>
+      <td><code>databricks auth login</code></td>
+      <td>Backend: interactive OAuth</td>
+      <td><strong>REMOVE</strong> -- not needed in DBX App mode (SP auth)</td>
+    </tr>
+    <tr>
+      <td><code>databricks database list-database-instances</code></td>
+      <td>Backend: list Lakebase instances</td>
+      <td><code>GET /api/2.0/database/instances</code> via SDK</td>
+    </tr>
+    <tr>
+      <td><code>databricks database get-database-instance</code></td>
+      <td>Backend: test Lakebase</td>
+      <td><code>GET /api/2.0/database/instances/{name}</code> via SDK</td>
+    </tr>
+    <tr>
+      <td><code>databricks apps get</code></td>
+      <td>Backend: test deploy status</td>
+      <td><code>GET /api/2.0/apps/{name}</code> via SDK</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>These 5 calls become Python SDK calls (WorkspaceClient). The backend already spawns Python for everything else -- same pattern.</p>
+<p><strong>For local mode (C):</strong> Just always use REST API in the backend, since it works in all modes.</p>
+
+<h3>The PY Abstraction (Implemented)</h3>
+<p><code>const PY = { cmd, pre }</code> is defined once at startup in <code>visual/backend/index.js</code>. All 40+ subprocess calls use it -- zero hardcoded <code>uv run python</code> strings remain.</p>
+<pre><span class="cmt">// visual/backend/index.js -- resolved once at startup</span>
+<span class="kw">const</span> FORGE_MODE = process.env.FORGE_MODE === <span class="str">'true'</span>;
+<span class="kw">const</span> PY = FORGE_MODE
+  ? { cmd: <span class="str">'python'</span>, pre: [] }              <span class="cmt">// SaaS: system Python, no uv</span>
+  : { cmd: <span class="str">'uv'</span>,    pre: [<span class="str">'run'</span>, <span class="str">'python'</span>] }; <span class="cmt">// Local: uv venv isolation</span>
+
+<span class="cmt">// Usage in every subprocess call:</span>
+spawn(PY.cmd, [...PY.pre, <span class="str">'scripts/some_script.py'</span>], { env });</pre>
+
+<p><strong>Migration:</strong> 40+ subprocess calls migrated from <code>spawn('uv', ['run', 'python', ...])</code> to <code>spawn(PY.cmd, [...PY.pre, ...])</code>. Consistent pattern, single change point.</p>
+
+<h3>Startup Command for Setup App</h3>
+<pre><span class="cmt"># Setup App app.yaml</span>
+<span class="key">command</span>:
+  - <span class="str">"pip install uv && uv sync && node visual/backend/index.js"</span></pre>
+<p>This: (1) Installs uv (fast, ~5s), (2) Creates venv and installs Python deps (slow first time, ~2-3 min; fast if .venv persisted), (3) Starts the Node.js Setup App server.</p>
+
+<h3>Startup Optimization Options</h3>
+<table>
+  <thead>
+    <tr><th>Option</th><th>How</th><th>Tradeoff</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A</td>
+      <td>Run <code>uv sync</code> at deploy time, persist <code>.venv/</code> in workspace files</td>
+      <td>Fast restart, more deploy complexity</td>
+    </tr>
+    <tr>
+      <td>B</td>
+      <td>Use <code>pip install -r requirements.txt</code> instead (no uv needed at all for Setup App)</td>
+      <td>Simplest, but then backend still calls <code>uv run python</code>...</td>
+    </tr>
+    <tr>
+      <td>C</td>
+      <td>Pre-build a Docker layer with deps (if DBX Apps support custom images)</td>
+      <td>Best perf, most setup</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 16. PACKAGING & DISTRIBUTION (8c)                             -->
+<!-- ============================================================ -->
+<h2 id="packaging" class="green">14. Packaging &amp; Distribution (Part 8c)</h2>
+
+<h3>Current Ship Size</h3>
+<table>
+  <thead>
+    <tr><th>Component</th><th>Size</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Clean repo (no .git, .venv, node_modules, __pycache__, .mypy_cache)</td>
+      <td>25 MB</td>
+    </tr>
+    <tr>
+      <td>With visual backend node_modules (committed)</td>
+      <td>33 MB</td>
+    </tr>
+    <tr>
+      <td>Compressed estimate</td>
+      <td>~10-12 MB</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Bloat to Exclude</h3>
+<table>
+  <thead>
+    <tr><th>Excluded</th><th>Size</th><th>Why safe</th><th>Reconstructed on target?</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>.mypy_cache/</code></td><td>1.1 GB</td><td>Type checker cache. Not needed at runtime.</td><td>Never. Only if someone runs <code>mypy</code>.</td></tr>
+    <tr><td><code>.venv/</code></td><td>662 MB</td><td>Python virtual environment.</td><td>Rebuilt at startup: <code>pip install -r requirements.txt</code> or <code>uv sync</code> (1-2 min first time).</td></tr>
+    <tr><td><code>app/client/node_modules/</code></td><td>100 MB</td><td>Only needed to BUILD React frontend.</td><td>Never. Pre-built <code>app/client/dist/</code> included instead.</td></tr>
+    <tr><td><code>app/server/node_modules/</code></td><td>18 MB</td><td>Only needed to BUILD Express server.</td><td>Never. Pre-built <code>app/server/dist/</code> included instead.</td></tr>
+    <tr><td><code>visual/frontend/node_modules/</code></td><td>--</td><td>Already gitignored. Only for dev.</td><td>Never. Pre-built <code>visual/frontend/dist/</code> included.</td></tr>
+    <tr><td><code>__pycache__/</code></td><td>~1 MB</td><td>Python bytecode cache.</td><td>Auto-created by Python on first import. Zero action.</td></tr>
+    <tr><td><code>.git/</code></td><td>varies</td><td>Version control history.</td><td>Not needed. User can <code>git init</code> for CI/CD.</td></tr>
+    <tr><td><code>.DS_Store</code></td><td>tiny</td><td>macOS metadata.</td><td>Never. Platform artifact.</td></tr>
+  </tbody>
+</table>
+<p><strong>Note: <code>visual/backend/node_modules/</code> (8MB) is NOT excluded.</strong> It IS included -- the Setup App backend needs it to run.</p>
+
+<h3>The Two-Runtime Problem</h3>
+<p>BrickForge needs BOTH Node.js (Setup App server) and Python (Databricks SDK, agent, data gen). No single package manager handles both. Don't try to force it.</p>
+
+<h3>Distribution Path 1: GitHub Release (FIRST PRIORITY)</h3>
+
+<h4>mm D1.1: What goes in the archive (two layers)</h4>
+<p><strong>Deploy footprint: ~13MB / ~150 files</strong> (learned from first deploy: 787 files / 175MB was 90% trash)</p>
+<pre><span class="str">SETUP APP (runs this):</span>
+  visual/backend/index.js + lib/     <span class="cmt">&lt;-- ~100KB</span>
+  visual/backend/node_modules/       <span class="cmt">&lt;-- 8MB, REQUIRED (express, dotenv, etc.)</span>
+  visual/frontend/dist/              <span class="cmt">&lt;-- 580KB, pre-built UI</span>
+
+<span class="str">AGENT APP BUNDLE (carried, deployed on user's "Deploy"):</span>
+  agent/                             <span class="cmt">&lt;-- ~40KB Python runtime</span>
+  app/client/dist/                   <span class="cmt">&lt;-- ~16MB pre-built React chat</span>
+  app/server/dist/                   <span class="cmt">&lt;-- ~2MB pre-built Express</span>
+  tools/                             <span class="cmt">&lt;-- ~48KB framework tools</span>
+  data/ conf/ eval/                  <span class="cmt">&lt;-- ~600KB scripts + config</span>
+
+<span class="str">SHARED:</span>
+  pyproject.toml, requirements.txt, scripts/, deploy/</pre>
+
+<h4>mm D1.2: What is EXCLUDED (learned from first deploy crash)</h4>
+<table>
+  <thead><tr><th>Excluded</th><th>Size</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>app/client/node_modules/</code></td><td>100MB</td><td>Pre-built <code>dist/</code> included. Build deps not needed.</td></tr>
+    <tr><td><code>app/server/node_modules/</code></td><td>18MB</td><td>Pre-built <code>dist/</code> included. Build deps not needed.</td></tr>
+    <tr><td><code>app/packages/</code></td><td>38MB</td><td>npm workspace shared packages. Only for source editing. Not needed for deploy.</td></tr>
+    <tr><td><code>app/client/src/</code></td><td>528KB</td><td>React source. Agent App runs from <code>dist/</code>.</td></tr>
+    <tr><td><code>app/server/src/</code></td><td>60KB</td><td>Express source. Agent App runs from <code>dist/</code>.</td></tr>
+  </tbody>
+</table>
+<p><strong>Result: 10x reduction.</strong> From 787 files / ~175MB to ~150 files / ~13MB.</p>
+
+<h4>mm D1.3: build-release.sh</h4>
+<pre><span class="cmt">#!/bin/bash</span>
+VERSION=${<span class="num">1</span>:-<span class="str">"dev"</span>}
+OUT=<span class="str">"brickforge-${VERSION}"</span>
+
+<span class="cmt"># Create clean directory</span>
+rm -rf <span class="str">"$OUT"</span> <span class="str">"$OUT.tar.gz"</span>
+mkdir -p <span class="str">"$OUT"</span>
+
+<span class="cmt"># Copy files (exclude bloat)</span>
+rsync -a --exclude=<span class="str">'.git'</span> --exclude=<span class="str">'.venv'</span> --exclude=<span class="str">'node_modules'</span> \
+         --exclude=<span class="str">'__pycache__'</span> --exclude=<span class="str">'.mypy_cache'</span> \
+         --exclude=<span class="str">'.DS_Store'</span> --exclude=<span class="str">'.claude'</span> \
+         --exclude=<span class="str">'.env.local'</span> --exclude=<span class="str">'.env.*.local'</span> \
+         ./ <span class="str">"$OUT/"</span>
+
+<span class="cmt"># Include ONLY the visual backend node_modules (required, pre-committed)</span>
+cp -r visual/backend/node_modules <span class="str">"$OUT/visual/backend/"</span>
+
+<span class="cmt"># Include pre-built frontend dist</span>
+cp -r visual/frontend/dist <span class="str">"$OUT/visual/frontend/"</span>
+
+<span class="cmt"># Compress</span>
+tar czf <span class="str">"$OUT.tar.gz"</span> <span class="str">"$OUT"</span>
+echo <span class="str">"Built: $OUT.tar.gz ($(du -h "$OUT.tar.gz" | cut -f1))"</span></pre>
+
+<h4>mm D1.4: start.sh launcher</h4>
+<pre><span class="cmt">#!/bin/bash</span>
+set -e
+
+echo <span class="str">"BrickForge Setup App"</span>
+echo <span class="str">"===================="</span>
+
+<span class="cmt"># Check Node.js</span>
+<span class="kw">if</span> ! command -v node &amp;&gt;/dev/null; <span class="kw">then</span>
+  echo <span class="str">"ERROR: Node.js not found. Install from https://nodejs.org/"</span>
+  exit <span class="num">1</span>
+<span class="kw">fi</span>
+
+<span class="cmt"># Check Python</span>
+PYTHON=<span class="str">""</span>
+<span class="kw">for</span> cmd <span class="kw">in</span> python3 python; <span class="kw">do</span>
+  <span class="kw">if</span> command -v <span class="str">"$cmd"</span> &amp;&gt;/dev/null; <span class="kw">then</span>
+    PYTHON=<span class="str">"$cmd"</span>
+    <span class="kw">break</span>
+  <span class="kw">fi</span>
+<span class="kw">done</span>
+<span class="kw">if</span> [ -z <span class="str">"$PYTHON"</span> ]; <span class="kw">then</span>
+  echo <span class="str">"ERROR: Python 3.11+ not found. Install from https://python.org/"</span>
+  exit <span class="num">1</span>
+<span class="kw">fi</span>
+
+<span class="cmt"># Install Python deps (first run only)</span>
+<span class="kw">if</span> [ ! -f <span class="str">".deps_installed"</span> ]; <span class="kw">then</span>
+  echo <span class="str">"Installing Python dependencies (first run)..."</span>
+  $PYTHON -m pip install -r requirements.txt --quiet
+  touch .deps_installed
+<span class="kw">fi</span>
+
+<span class="cmt"># Start</span>
+echo <span class="str">"Starting BrickForge at http://localhost:9000"</span>
+node visual/backend/index.js</pre>
+
+<h4>mm D1.5: start.bat launcher (Windows)</h4>
+<pre><span class="kw">@echo off</span>
+echo BrickForge Setup App
+echo ====================
+
+where node &gt;nul <span class="num">2</span>&gt;&amp;<span class="num">1</span> || (echo ERROR: Node.js not found. Install from https://nodejs.org/ &amp; exit /b <span class="num">1</span>)
+where python &gt;nul <span class="num">2</span>&gt;&amp;<span class="num">1</span> || (echo ERROR: Python not found. Install from https://python.org/ &amp; exit /b <span class="num">1</span>)
+
+<span class="kw">if not exist</span> <span class="str">".deps_installed"</span> (
+  echo Installing Python dependencies...
+  python -m pip install -r requirements.txt --quiet
+  echo. &gt; .deps_installed
+)
+
+echo Starting BrickForge at http://localhost:9000
+node visual\backend\index.js</pre>
+
+<h4>mm D1.6: The uv problem in start.sh</h4>
+<p><code>start.sh</code> installs deps with <code>pip</code>. But 41 subprocess calls in the backend use <code>uv run python</code>. If uv isn't installed, those fail.</p>
+<p><strong>Best answer:</strong> The <code>pythonCmd()</code> abstraction. In local mode without uv, it uses <code>python</code>. With uv, it uses <code>uv run python</code>. The release archive runs without uv.</p>
+<p>This means the release archive doesn't need uv at all. Just Python + pip + Node.js.</p>
+
+<h4>mm D1.7: GitHub Release workflow</h4>
+<ol>
+  <li>Tag a release: <code>git tag v1.0.0</code></li>
+  <li>Run <code>build-release.sh v1.0.0</code></li>
+  <li>Upload <code>brickforge-v1.0.0.tar.gz</code> to GitHub Releases</li>
+  <li>GitHub Actions can automate this (on tag push)</li>
+</ol>
+<p>User flow:</p>
+<pre>curl -L https://github.com/mehdi-dbx/brickforge/releases/latest/download/brickforge.tar.gz | tar xz
+cd brickforge-*
+./start.sh
+<span class="cmt"># Open http://localhost:9000</span></pre>
+
+<h3>Distribution Path 2: pip install brickforge + deploy-setup</h3>
+
+<p><strong>Two capabilities in one package:</strong></p>
+<ul>
+  <li><code>brickforge</code> -- run Setup App locally (needs Node.js)</li>
+  <li><code>brickforge deploy-setup</code> -- deploy Setup App to user's DBX workspace (Python only, no Node.js needed on user machine)</li>
+</ul>
+
+<h4>mm D2.1: pip package</h4>
+<pre><span class="key">[project]</span>
+<span class="key">name</span> = <span class="str">"brickforge"</span>
+<span class="key">version</span> = <span class="str">"1.0.0"</span>
+<span class="key">requires-python</span> = <span class="str">">=3.11"</span>
+<span class="key">dependencies</span> = [
+    <span class="str">"databricks-sdk>=0.102.0"</span>,
+    <span class="cmt"># ... all Python deps</span>
+]
+
+<span class="key">[project.scripts]</span>
+<span class="key">brickforge</span> = <span class="str">"brickforge.cli:main"</span>
+<span class="key">brickforge-deploy-setup</span> = <span class="str">"brickforge.deploy_setup:main"</span></pre>
+
+<h4>mm D2.2: Node.js prereq</h4>
+<p>pip can't install Node.js. For local mode (<code>brickforge</code>): user needs Node.js. For deploy (<code>brickforge deploy-setup</code>): NO Node.js needed -- it's in the DBX App runtime. 8MB of Node.js files as package data is fine (tensorflow is 500MB+).</p>
+
+<h4>mm D2.3: Publishing to PyPI</h4>
+<ol>
+  <li>Check name: <a href="https://pypi.org/project/brickforge/">pypi.org/project/brickforge/</a> (404 = available)</li>
+  <li>Create account, get API token</li>
+  <li>Build: <code>python -m build</code></li>
+  <li>Upload: <code>twine upload dist/*</code> -- live immediately</li>
+</ol>
+
+<h4>mm D2.4: deploy-setup without pip</h4>
+<p>Also works standalone:</p>
+<pre>python -c <span class="str">"$(curl -s https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/scripts/deploy-setup.py)"</span></pre>
+
+<h4>mm D2.5: What deploy-setup does</h4>
+<ol>
+  <li>Authenticate via Databricks SDK (PAT, CLI profile, or interactive login)</li>
+  <li>Create DBX App: <code>POST /api/2.0/apps</code></li>
+  <li>Upload source files to workspace</li>
+  <li>Create deployment: <code>POST /api/2.0/apps/{name}/deployments</code></li>
+  <li>Wait for start, print URL</li>
+</ol>
+
+<p><strong>Decision:</strong> pip install is a STRETCH GOAL. GitHub Release first. deploy-setup works standalone regardless.</p>
+
+<h4>mm D3.4: Auth for deploy-setup</h4>
+<p>User needs a Databricks PAT or CLI profile. The script uses the SDK which reads from: <code>DATABRICKS_HOST</code> + <code>DATABRICKS_TOKEN</code> env vars, or <code>~/.databrickscfg</code> CLI profile, or interactive <code>databricks auth login</code>. No new auth mechanism needed.</p>
+
+
+<h3>Windows Compatibility</h3>
+
+<h4>mm W.1: Two bash scripts to replace</h4>
+<table>
+  <thead>
+    <tr><th>Script</th><th>What it does</th><th>Python replacement</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>deploy/deploy.sh</code></td>
+      <td>Full DAB deploy pipeline</td>
+      <td>Being replaced with REST API (<code>deploy_via_api.py</code>) -- Part 8b</td>
+    </tr>
+    <tr>
+      <td><code>deploy/run_all_grants.sh</code></td>
+      <td>Calls 5 Python grant scripts</td>
+      <td>Trivial: <code>run_all_grants.py</code> that calls them in sequence</td>
+    </tr>
+  </tbody>
+</table>
+<p>After these two replacements, ZERO bash dependency. Works on Windows natively.</p>
+
+<h4>mm W.2: Path separators</h4>
+<p>All Python code uses <code>pathlib.Path</code> or <code>os.path</code> -- cross-platform by default. The Node.js backend uses <code>path.resolve()</code> -- cross-platform. No hardcoded <code>/</code> path separators in critical code.</p>
+
+<h4>mm W.3: The uv question on Windows</h4>
+<p><code>uv</code> works on Windows (pip-installable). But with the <code>pythonCmd()</code> abstraction, uv becomes optional on all platforms. Users who have it get venv isolation; users who don't just use system Python.</p>
+
+<h3>What NOT to Do</h3>
+<ul>
+  <li>Don't publish to npm (Python bundling nightmare)</li>
+  <li>Don't build Electron/Tauri (desktop wrapper for a web server -- wrong paradigm)</li>
+  <li>Don't build platform installers (MSI, DMG, deb -- maintenance hell)</li>
+  <li>Don't build Homebrew formula (Mac-only, another package to maintain)</li>
+  <li>Don't build snap/flatpak (Linux-only, containerization overhead)</li>
+  <li>Don't build a custom update mechanism (just release new versions on GitHub)</li>
+</ul>
+
+<h3>Delivery Priority</h3>
+<table>
+  <thead>
+    <tr><th>Priority</th><th>Method</th><th>Prereqs</th><th>Effort</th><th>When</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>GitHub Release</strong> (tar.gz/zip)</td>
+      <td>Node.js + Python</td>
+      <td><code>build-release.sh</code> script</td>
+      <td>FIRST</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>deploy-setup</strong> (one-command DBX App deploy)</td>
+      <td>Python + Databricks auth</td>
+      <td><code>deploy-setup.py</code> script</td>
+      <td>SECOND</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Docker image</strong></td>
+      <td>Docker</td>
+      <td>Dockerfile</td>
+      <td>THIRD</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>pip install</strong></td>
+      <td>Node.js + Python</td>
+      <td>pyproject.toml refactor</td>
+      <td>STRETCH</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Files to Create</h3>
+<table>
+  <thead>
+    <tr><th>File</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>build-release.sh</code></td><td>Builds the GitHub Release archive</td></tr>
+    <tr><td><code>start.sh</code> (root)</td><td>Local launcher (Mac/Linux)</td></tr>
+    <tr><td><code>start.bat</code> (root)</td><td>Local launcher (Windows)</td></tr>
+    <tr><td><code>setup-app.yaml</code></td><td>Setup App DBX App manifest</td></tr>
+    <tr><td><code>scripts/deploy-setup.py</code></td><td>One-command DBX App deploy</td></tr>
+    <tr><td><code>Dockerfile</code></td><td>Docker image build</td></tr>
+    <tr><td><code>.releaseignore</code></td><td>Files to exclude from release archive</td></tr>
+    <tr><td><code>deploy/run_all_grants.py</code></td><td>Python replacement for bash grants script</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 17. SETUP BLOCKS STASHABILITY                                 -->
+<!-- ============================================================ -->
+<h2 id="stashability" class="purple">15. Setup Blocks Stashability</h2>
+
+<table>
+  <thead>
+    <tr><th>Block</th><th>ID</th><th>Classification</th><th>In .forge?</th><th>.forge Mapping</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Databricks Host</td>
+      <td><code>host</code></td>
+      <td>INFRA</td>
+      <td>NO</td>
+      <td>From DBX App auth context</td>
+    </tr>
+    <tr>
+      <td>Authentication</td>
+      <td><code>auth</code></td>
+      <td>INFRA</td>
+      <td>NO</td>
+      <td>From DBX App SP</td>
+    </tr>
+    <tr>
+      <td>SQL Warehouse</td>
+      <td><code>warehouse</code></td>
+      <td>HYBRID</td>
+      <td>YES</td>
+      <td><code>config.warehouse_id</code></td>
+    </tr>
+    <tr>
+      <td>Unity Catalog</td>
+      <td><code>schema</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.schema</code></td>
+    </tr>
+    <tr>
+      <td>Data Tables</td>
+      <td><code>tables</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>data.tables[]</code></td>
+    </tr>
+    <tr>
+      <td>Functions</td>
+      <td><code>functions</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>data.functions[]</code></td>
+    </tr>
+    <tr>
+      <td>Model Endpoint</td>
+      <td><code>model</code></td>
+      <td>HYBRID</td>
+      <td>YES</td>
+      <td><code>config.model.endpoint</code></td>
+    </tr>
+    <tr>
+      <td>Agent Prompt</td>
+      <td><code>prompt</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>prompt.system</code></td>
+    </tr>
+    <tr>
+      <td>Genie Space</td>
+      <td><code>genie</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.genie[]</code></td>
+    </tr>
+    <tr>
+      <td>Knowledge Assistant</td>
+      <td><code>ka</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.ka[]</code></td>
+    </tr>
+    <tr>
+      <td>Vector Search</td>
+      <td><code>vs</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.vs[]</code></td>
+    </tr>
+    <tr>
+      <td>External MCP</td>
+      <td><code>mcp</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.mcp[]</code></td>
+    </tr>
+    <tr>
+      <td>External API</td>
+      <td><code>api</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.api[]</code></td>
+    </tr>
+    <tr>
+      <td>A2A Agents</td>
+      <td><code>a2a</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.a2a[]</code></td>
+    </tr>
+    <tr>
+      <td>Features</td>
+      <td><code>features</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.features</code></td>
+    </tr>
+    <tr>
+      <td>Lakebase</td>
+      <td><code>lakebase</code></td>
+      <td>HYBRID</td>
+      <td>YES</td>
+      <td><code>config.lakebase</code></td>
+    </tr>
+    <tr>
+      <td>MLflow</td>
+      <td><code>mlflow</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.mlflow</code></td>
+    </tr>
+    <tr>
+      <td>Grants</td>
+      <td><code>grants</code></td>
+      <td>PROJECT</td>
+      <td>N/A</td>
+      <td>Action, not config</td>
+    </tr>
+    <tr>
+      <td>Deploy</td>
+      <td><code>deploy</code></td>
+      <td>PROJECT</td>
+      <td>YES</td>
+      <td><code>config.app_name</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 18. OPEN QUESTIONS                                            -->
+<!-- ============================================================ -->
+<h2 id="questions" class="amber">16. Open Questions -- All 31 Answered</h2>
+
+<p><strong>Total: 31 questions. 30 DECIDED/CONFIRMED. 1 NEEDS TESTING (upload rate limits). 2 NEEDS VERIFICATION (API details). 1 TO BUILD.</strong></p>
+
+<h3>A. Setup App Deployment (6 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A1</td>
+      <td>Where does Setup App's <code>app.yaml</code> live?</td>
+      <td>Root. Current <code>app.yaml</code> (Agent App) gets renamed to <code>agent-app.yaml</code>. Setup App <code>app.yaml</code> goes at root.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>A2</td>
+      <td>Upload entire repo or subset?</td>
+      <td>Entire repo. Relative paths preserved, subprocess calls work. Exclude <code>.git/</code>, <code>stash/</code> via <code>.databricksignore</code>.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>A3</td>
+      <td>Is <code>uv</code> available in DBX App runtime?</td>
+      <td>YES. Docs confirm: "Python dependencies using <code>pip</code> or <code>uv</code>". No install needed.</td>
+      <td><span class="badge decided">Confirmed</span></td>
+    </tr>
+    <tr>
+      <td>A4</td>
+      <td>Node.js available in DBX App runtime?</td>
+      <td>YES. Docs: "If your app includes Node.js, the default command is <code>npm run start</code>". Exact version TBD.</td>
+      <td><span class="badge decided">Confirmed</span></td>
+    </tr>
+    <tr>
+      <td>A5</td>
+      <td>Is <code>npm</code> available?</td>
+      <td>YES. Docs: "Node.js dependencies using <code>npm</code>".</td>
+      <td><span class="badge decided">Confirmed</span></td>
+    </tr>
+    <tr>
+      <td>A6</td>
+      <td>Port env var?</td>
+      <td><code>DATABRICKS_APP_PORT</code> (not <code>PORT</code>). Auto-substituted into command at runtime.</td>
+      <td><span class="badge decided">Confirmed</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>B. Config Persistence (4 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>B1</td>
+      <td>Config persistence strategy?</td>
+      <td><code>.forge</code> on UC Volume IS the persistence. No <code>.env.local</code> in SaaS. ConfigProvider reads <code>.forge</code>, hydrates env vars.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>B2</td>
+      <td>Can DBX App set its own env vars at runtime?</td>
+      <td>Irrelevant -- <code>.forge</code> on UC Volume is the persistence, not app env vars.</td>
+      <td><span class="badge na">N/A</span></td>
+    </tr>
+    <tr>
+      <td>B3</td>
+      <td>How to restore on restart?</td>
+      <td>Startup reads <code>.forge</code> from UC Volume, hydrates <code>process.env</code> via ForgeConfigProvider.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>B4</td>
+      <td>Mode A (hosted): user workspace credentials?</td>
+      <td>Databricks SSO.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>C. Agent App Deployment (5 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>C1</td>
+      <td>Exact REST API for workspace file upload?</td>
+      <td>Workspace Files API or <code>PUT /api/2.0/workspace/import</code>. Verify exact endpoint on implementation.</td>
+      <td><span class="badge verification">Needs Verification</span></td>
+    </tr>
+    <tr>
+      <td>C2</td>
+      <td>Does Apps API accept workspace file path?</td>
+      <td>Verify on implementation.</td>
+      <td><span class="badge verification">Needs Verification</span></td>
+    </tr>
+    <tr>
+      <td>C3</td>
+      <td>Parallel file upload rate limits?</td>
+      <td>Test on implementation. 50-100 small files should be fine.</td>
+      <td><span class="badge testing">Needs Testing</span></td>
+    </tr>
+    <tr>
+      <td>C4</td>
+      <td>DAB CLI Go binary pip-installable?</td>
+      <td>No. But Python SDK has apps API (<code>w.apps.create/deploy</code>). DAB format preserved, Go binary not needed.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>C5</td>
+      <td>Can Setup App SP grant to Agent App SP?</td>
+      <td>SP can grant UC permissions via SDK. Same pattern as existing grant scripts. Verify on implementation.</td>
+      <td><span class="badge verification">Needs Verification</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>D. Stash Format &amp; Loading (6 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>D1</td>
+      <td>Inline vs sidecar?</td>
+      <td>Sidecar files, same structure as local stash.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>D2</td>
+      <td>UC Volume path convention?</td>
+      <td><code>/Volumes/{catalog}/{schema}/brickforge/{project_name}/</code></td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>D3</td>
+      <td>What catalog/schema for stash Volume?</td>
+      <td>The project's own catalog.schema. User picks it in Schema setup step.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>D4</td>
+      <td>How does wizard write to UC Volume?</td>
+      <td>Python subprocess via <code>volume_ops.py</code> (already exists for KA doc upload). Same pattern for all Volume writes.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>D5</td>
+      <td>Copy to workspace files or agent reads Volume directly?</td>
+      <td>Copy to workspace files at deploy time. Agent reads local relative paths at runtime -- same as today.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>D6</td>
+      <td>Developer mode: <code>.forge</code> abandoned?</td>
+      <td>Yes. <code>.forge</code> is the seed. Once exported, code is source of truth. User deploys via own CI/CD. Setup App optional from that point.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>E. Tool Generation (3 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>E1</td>
+      <td><code>tool_factory.py</code> exists?</td>
+      <td>No. Only <code>ka_factory.py</code>. Need to build <code>tool_factory.py</code> for SQL read + action patterns.</td>
+      <td><span class="badge tobuild">To Build</span></td>
+    </tr>
+    <tr>
+      <td>E2</td>
+      <td>Can ALL tools be declarative?</td>
+      <td>95% yes (7 patterns). Custom logic tools: user writes Python, puts in <code>tools/</code>. Both coexist via <code>_discover_domain_tools()</code>.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>E3</td>
+      <td><code>.forge</code>-aware tool discovery?</td>
+      <td>Both paths coexist. File-based (<code>_discover_domain_tools()</code> scans <code>tools/</code>) + <code>.forge</code>-based (<code>_discover_forge_tools()</code> reads specs). Agent uses both.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>F. Frontend (3 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>F1</td>
+      <td>Frontend rebuild after domain card load?</td>
+      <td>Not needed. Generic renderers driven by config. No domain TSX imports. Registry populated at startup from config.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>F2</td>
+      <td>Pre-build all card types as generic renderers?</td>
+      <td>Yes. <code>GenericTableCard</code>, <code>GenericMetricCard</code>, <code>GenericStatusCard</code> driven by <code>.forge</code> <code>ui:</code> config. Airops-specific cards in stash become legacy.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>F3</td>
+      <td>Dashboard config end-to-end tested?</td>
+      <td>Not yet. Test when implementing.</td>
+      <td><span class="badge nottested">Not Tested</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>G. User Code Access &amp; CI/CD (4 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>G1</td>
+      <td>How does user download generated project?</td>
+      <td>Workspace files accessible via <code>databricks workspace export-dir</code>. Or Setup App provides "Download project" button (zip + serve).</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>G2</td>
+      <td>Does Setup App know when user edits externally?</td>
+      <td>No, and doesn't need to. Once exported/linked, user owns it.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>G3</td>
+      <td>Git integration?</td>
+      <td>AUTOMATED. No PAT entry. Uses Databricks-stored git credentials. Creates Git Folder, writes files, submits job to commit+push. User provides repo URL only.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>G4</td>
+      <td>CI/CD story?</td>
+      <td>User's own pipeline. Push from Git Folder triggers CI/CD. Generated project is a standard DAB bundle.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>H. Multi-Project (3 questions)</h3>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Answer</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>H1</td>
+      <td>Multi-project coexistence?</td>
+      <td>Separate UC schema per project, separate Agent App instance, shared Setup App. <code>.forge</code> files in separate directories on UC Volume.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>H2</td>
+      <td>Project list?</td>
+      <td>Scan UC Volume <code>/Volumes/{catalog}/{schema}/brickforge/</code> for subdirectories containing <code>.forge</code> files.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+    <tr>
+      <td>H3</td>
+      <td>Project deletion?</td>
+      <td>Delete Agent App (Apps API), drop UC tables (or schema), delete <code>.forge</code> directory from UC Volume, remove MLflow experiment. Existing cleanup tab handles most of this.</td>
+      <td><span class="badge decided">Decided</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 19. EXECUTION ROADMAP                                         -->
+<!-- ============================================================ -->
+<h2 id="roadmap" class="green">17. Execution Roadmap</h2>
+
+<p><strong>Approach:</strong> Start from where we are. Take one step. Hit the wall. Solve the wall. Next step.</p>
+
+<h3>Inch 1: Setup App as DBX App (Mode B)</h3>
+<p>Create <code>app.yaml</code> for Setup App, startup command installs Python deps + starts Node.</p>
+<p><strong>Key insight:</strong> Upload entire repo as source. Relative paths preserved. Subprocess calls work.</p>
+<div class="wall">
+  <strong>Walls:</strong>
+  <ul style="margin-top:0.3rem">
+    <li><code>uv</code> not in DBX App runtime &rarr; <code>pip install uv && uv sync</code> in startup command</li>
+    <li>Port: need <code>PORT</code> env var support (single line fix)</li>
+    <li><code>node_modules</code> + frontend dist already committed (no npm needed)</li>
+  </ul>
+</div>
+
+<h3>Inch 2: Port + Auth</h3>
+<p><strong>Port:</strong> <code>const PORT = process.env.PORT || process.env.VISUAL_PORT || 9000</code></p>
+<p><strong>Auth:</strong> Mode B = app's SP inherits user permissions. Same grant pattern as Agent App.</p>
+
+<h3>Inch 3: First Deploy Test</h3>
+<p>Deploy, open URL, walk through Setup steps. Fix what breaks (uv, Node version, CORS, etc.).</p>
+
+<h3>Inch 4: Config Persistence -- Stateful Backend</h3>
+<p><strong>In SaaS mode, the Node.js backend is stateful.</strong> It holds the project zip in process memory.</p>
+<ol>
+  <li>User opens project &rarr; zip downloaded from UC Volume into memory</li>
+  <li>User fiddles with wizard &rarr; changes accumulate in the in-memory zip</li>
+  <li>Each meaningful write (config save, file gen, resource creation) &rarr; update in-memory zip + flush to UC Volume</li>
+  <li>Page refresh &rarr; backend still alive, serves from memory. No data lost.</li>
+  <li>App restart &rarr; re-download zip from Volume. Last flushed state restored.</li>
+</ol>
+<p><strong>Flush: event-driven, not periodic.</strong> User saves &rarr; flush. User idle &rarr; zero flushes. One <code>w.files.upload()</code>, &lt;1MB, ~200ms.</p>
+<p><strong>Design shift:</strong> current backend is stateless (reads disk per request). SaaS backend is stateful (holds zip in memory). ConfigProvider abstraction handles both.</p>
+
+<h3>Inch 5: Agent Deploy via Python SDK (DAB-compatible)</h3>
+<p>Replace <code>deploy.sh</code> (DAB CLI) with <code>deploy_via_api.py</code> (REST API).</p>
+<p>Upload source to workspace files &rarr; generate <code>app.yaml</code> &rarr; call Apps API &rarr; grants.</p>
+
+<div class="fbox-row">
+  <div class="fbox blue">Upload source files</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">Generate app.yaml</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">POST /api/2.0/apps</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">POST .../deployments</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox red">Run grants</div>
+</div>
+
+<h3>Inch 6: Agent App File Manifest</h3>
+<p>Define exactly which files are Agent App vs Setup App. Agent App gets: <code>agent/</code>, <code>app/</code>, <code>tools/</code>, <code>data/</code>, <code>conf/</code>, <code>eval/</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>, generated <code>app.yaml</code>.</p>
+
+<h3>Inch 7: .forge Config Injection</h3>
+<p>Setup App generates <code>app.yaml</code> for Agent App with all env vars from <code>.forge</code>.</p>
+<p>Domain files (prompts, SQL, tools) written to workspace files before deploy.</p>
+
+<h3>Inch 8: Automated Git Push + Databricks Git Folder</h3>
+<p>New setup step <code>git</code> (source control). After deploy. <strong>No PAT entry.</strong> Uses Databricks-stored git credentials.</p>
+
+<p><strong>User provides ONE field:</strong> repo URL. That's it.</p>
+
+<p><strong>Pre-check:</strong> <code>w.git_credentials.list()</code> -- if credentials exist, proceed. If not, prompt to connect GitHub in Databricks Settings (one-time).</p>
+
+<p><strong>Fully automated execute:</strong></p>
+<ol>
+  <li>Create Git Folder: <code>w.repos.create(url, provider="github")</code> -- uses stored git credentials</li>
+  <li>Write ALL files into Git Folder: <code>w.workspace.import_(path="/Repos/user/repo/file.py", ...)</code></li>
+  <li>Submit one-shot Databricks job: <code>git add . && git commit && git push</code> -- runs on serverless, uses workspace git auth</li>
+  <li>Store repo URL in <code>.forge</code></li>
+</ol>
+<p><strong>Result:</strong> Code on GitHub AND browsable in Databricks. No PAT. No OAuth. No manual git ops. Subsequent pushes = one click.</p>
+<p><strong>.forge config:</strong></p>
+<pre><span class="key">config</span>:
+  <span class="key">git</span>:
+    <span class="key">provider</span>: <span class="str">github</span>
+    <span class="key">repo_url</span>: <span class="str">"https://github.com/user/my-agent.git"</span>
+    <span class="key">branch</span>: <span class="str">main</span>
+    <span class="cmt"># No PAT. Databricks handles git auth via stored credentials.</span></pre>
+
+<h3>Inch 9: Multi-Project</h3>
+<p>Save/load/switch <code>.forge</code> projects on UC Volume. Per-project schema isolation.</p>
+
+<h3>Multi-Project Implementation</h3>
+<p><code>visual/backend/lib/project-manager.js</code> manages <code>.forge.zip</code> archives on UC Volume. The frontend project selector in the title bar lets users switch between projects without leaving the app.</p>
+<ul>
+  <li>List projects: scans <code>/Volumes/{catalog}/{schema}/brickforge/</code> for <code>*.forge.zip</code> entries</li>
+  <li>Load project: downloads zip, loads into ForgeConfigProvider in-memory store, hydrates <code>process.env</code></li>
+  <li>Save project: flushes in-memory zip back to UC Volume</li>
+  <li>New project: creates fresh <code>.forge</code> manifest from wizard, uploads as new zip</li>
+  <li>Switch project: save current, load selected</li>
+  <li>Active project stored in <code>process.env.FORGE_ACTIVE_PROJECT</code> (in-process state only)</li>
+</ul>
+<div class="fbox-row">
+  <div class="fbox blue">Title bar project selector</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox purple">project-manager.js</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox green">ForgeConfigProvider.load(name)</div>
+  <span class="fbox-arrow">&rarr;</span>
+  <div class="fbox amber">UC Volume .forge.zip</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- EXECUTION PLAN                                                -->
+<!-- ============================================================ -->
+<h2 id="execution" class="purple">19. Execution Plan -- Parallelization</h2>
+
+<h3>Dependency Graph</h3>
+<pre>TRACK A (Setup App Deploy)     TRACK B (Backend Refactor)     TRACK C (Independent)
+
+Inch 1: app.yaml + startup     Inch 4: ConfigProvider         Inch 6: File Manifest
+    |                              |
+    v                              |                           tool_factory.py
+Inch 2: Port + Auth               |
+    |                              |
+    v                              |
+Inch 3: First Deploy Test         |
+    |                              |
+    +--------- MERGE POINT --------+
+               |
+               v
+         Inch 5: Agent Deploy via SDK
+               |
+               v
+         Inch 7: .forge Config Injection
+               |
+               v
+         Inch 8: Git Push + Git Folder
+               |
+               v
+         Inch 9: Multi-Project</pre>
+
+<h3>Wave 1 -- sequenced to avoid merge conflicts</h3>
+<p><strong>Step 1 (2 min, do first):</strong> Track A -- Setup App <code>app.yaml</code> (new file) + port fix (1 line in <code>index.js</code>). Commit.</p>
+<p><strong>Step 2 (parallel via <code>isolation: "worktree"</code>):</strong></p>
+<table>
+  <thead><tr><th>Track</th><th>Work</th><th>Key Files</th><th>Overlap with other track?</th></tr></thead>
+  <tbody>
+    <tr><td><strong>B</strong></td><td>ConfigProvider + 36 call site refactor</td><td><code>config-provider.js</code> (new), <code>index.js</code> (36 function call edits)</td><td>None -- A's PORT line already committed</td></tr>
+    <tr><td><strong>C</strong></td><td>File manifest + <code>tool_factory.py</code></td><td><code>tool_factory.py</code> (new), manifest doc</td><td>None -- touches zero of B's files</td></tr>
+  </tbody>
+</table>
+<p><strong>Why this order:</strong> A and B both touch <code>index.js</code>. A is 1 line (PORT). B is 36 call sites. Do A first, commit. Then B+C in parallel worktrees -- zero overlap.</p>
+<p><strong>Checkpoint:</strong> Merge worktrees, deploy Setup App (Inch 3), test.</p>
+
+<h3>Wave 2 (sequential, depends on Wave 1)</h3>
+<table>
+  <thead><tr><th>Inch</th><th>Work</th><th>Depends On</th></tr></thead>
+  <tbody>
+    <tr><td>4b</td><td>ForgeConfigProvider (in-memory zip)</td><td>Track B</td></tr>
+    <tr><td>5</td><td>Agent Deploy via SDK</td><td>Tracks A+B+C</td></tr>
+    <tr><td>7</td><td>.forge config injection</td><td>Tracks B+C</td></tr>
+  </tbody>
+</table>
+<p><strong>Checkpoint:</strong> End-to-end: Setup App -> configure -> deploy Agent App -> live URL.</p>
+
+<h3>Wave 3 (sequential, depends on Wave 2)</h3>
+<table>
+  <thead><tr><th>Inch</th><th>Work</th></tr></thead>
+  <tbody>
+    <tr><td>8</td><td>Git push + Databricks Git Folder</td></tr>
+    <tr><td>9</td><td>Multi-project save/load/switch</td></tr>
+  </tbody>
+</table>
+
+<h3>Session Planning</h3>
+<ul>
+  <li><strong>Session 1:</strong> Wave 1 (tracks A+B+C in parallel) + Inch 3 deploy test</li>
+  <li><strong>Session 2:</strong> Wave 2 (agent deploy + config injection) + end-to-end test</li>
+  <li><strong>Session 3:</strong> Wave 3 (git + multi-project)</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- UI INVOCATION MAP                                             -->
+<!-- ============================================================ -->
+<h2 id="invocation-map" class="amber">20. Setup App UI -- Invocation Map</h2>
+
+<p>Every backend action invoked by the Setup App UI, classified by method and deployed-mode compatibility.</p>
+
+<h3>Legend</h3>
+<table>
+  <thead><tr><th>Method</th><th>Description</th><th>Works deployed?</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge decided">SDK</span></td><td>Python <code>WorkspaceClient()</code></td><td>YES</td></tr>
+    <tr><td><span class="badge verification">REST</span></td><td>Raw <code>urllib.request</code> HTTP calls</td><td>YES</td></tr>
+    <tr><td><span class="badge tobuild">PY</span></td><td>Python script via subprocess</td><td>YES</td></tr>
+    <tr><td><span class="badge na">Config</span></td><td>Read/write config (ConfigProvider)</td><td>YES</td></tr>
+    <tr><td><span class="badge stretch">CLI</span></td><td><code>databricks</code> Go binary</td><td>NO</td></tr>
+    <tr><td><span class="badge stretch">Bash</span></td><td>Shell script (<code>deploy.sh</code>)</td><td>NO</td></tr>
+  </tbody>
+</table>
+
+<h3>Setup Steps</h3>
+<table>
+  <thead><tr><th>Step</th><th>Action</th><th>Method</th><th>Deployed?</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="3"><strong>Host</strong></td><td>use existing CLI profile</td><td><span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>enter manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Auth</strong></td><td>generate 7-day PAT</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter token manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Warehouse</strong></td><td>pick from workspace</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Schema</strong></td><td>pick existing catalog</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td><strong>Tables</strong></td><td>provision tables</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td><strong>Functions</strong></td><td>create all</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td rowspan="4"><strong>Model</strong></td><td>same workspace</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td>use existing profile</td><td><span class="badge stretch">CLI</span>+<span class="badge decided">SDK</span></td><td>NO</td></tr>
+    <tr><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>enter manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Prompt</strong></td><td>generate from domain</td><td><span class="badge tobuild">PY</span> (LLM)</td><td>YES</td></tr>
+    <tr><td>view / edit prompts</td><td>Filesystem</td><td>YES</td></tr>
+    <tr><td rowspan="3"><strong>Genie</strong></td><td>pick existing space</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>create new room</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>KA</strong></td><td>provision from PDFs</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="3"><strong>Lakebase</strong></td><td>pick existing</td><td><span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>create instance</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter name manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>MLflow</strong></td><td>create new experiment</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>enter id manually</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Grants</strong></td><td>run grant script</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>view issues</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="4"><strong>Deploy</strong></td><td>deploy now (DAB)</td><td><span class="badge stretch">Bash</span>+<span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>dry run</td><td><span class="badge stretch">Bash</span>+<span class="badge stretch">CLI</span></td><td>NO</td></tr>
+    <tr><td>deploy agent (SDK)</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>set app name</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td rowspan="2"><strong>Git</strong></td><td>push to GitHub/GitLab</td><td><span class="badge tobuild">PY</span>+<span class="badge decided">SDK</span></td><td>YES</td></tr>
+    <tr><td>skip</td><td>-</td><td>YES</td></tr>
+    <tr><td><strong>MCP / API / A2A</strong></td><td>add server / connection / agent</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td><strong>VS</strong></td><td>enter index path</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+    <tr><td><strong>Features</strong></td><td>toggle on/off</td><td><span class="badge na">Config</span></td><td>YES</td></tr>
+  </tbody>
+</table>
+
+<h3>Test Endpoints</h3>
+<table>
+  <thead><tr><th>Step</th><th>Method</th><th>Deployed?</th></tr></thead>
+  <tbody>
+    <tr><td>host</td><td><span class="badge verification">REST</span> (<code>/api/2.0/preview/scim/v2/Me</code>)</td><td>YES</td></tr>
+    <tr><td>auth</td><td><span class="badge verification">REST</span> (SCIM with token)</td><td>YES</td></tr>
+    <tr><td>warehouse</td><td><span class="badge decided">SDK</span> (<code>w.warehouses.get()</code>)</td><td>YES</td></tr>
+    <tr><td>schema</td><td><span class="badge decided">SDK</span> (<code>w.schemas.get()</code>)</td><td>YES</td></tr>
+    <tr><td>model</td><td><span class="badge verification">REST</span> (POST to endpoint)</td><td>YES</td></tr>
+    <tr><td>genie</td><td><span class="badge decided">SDK</span> (<code>w.genie.get_space()</code>)</td><td>YES</td></tr>
+    <tr><td>ka</td><td><span class="badge decided">SDK</span> (<code>w.serving_endpoints.get()</code>)</td><td>YES</td></tr>
+    <tr><td>mlflow</td><td><span class="badge decided">SDK</span> (<code>w.experiments.get_experiment()</code>)</td><td>YES</td></tr>
+    <tr><td>lakebase</td><td><span class="badge decided">SDK</span> (<code>w.database.get_database_instance()</code>)</td><td>YES</td></tr>
+    <tr><td>deploy</td><td><span class="badge decided">SDK</span> (<code>w.apps.get()</code>)</td><td>YES</td></tr>
+  </tbody>
+</table>
+
+<h3>What Breaks on Deployed</h3>
+<div class="wall"><strong>5 broken actions out of ~50 total.</strong> All caused by CLI dependency. All fixable by hiding in FORGE_MODE or replacing with SDK equivalents.</div>
+<table>
+  <thead><tr><th>Step</th><th>Broken Action</th><th>Method</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>host</td><td>use existing CLI profile</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE, or replace with SDK workspace discovery</td></tr>
+    <tr><td>host</td><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE, use manual entry</td></tr>
+    <tr><td>model</td><td>use existing profile</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE</td></tr>
+    <tr><td>model</td><td>set up new workspace</td><td><span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE</td></tr>
+    <tr><td>deploy</td><td>deploy now / dry run</td><td><span class="badge stretch">Bash</span>+<span class="badge stretch">CLI</span></td><td>Hide in FORGE_MODE, use SDK deploy</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- CURRENT STATE                                                 -->
+<!-- ============================================================ -->
+<h2 id="current-state" class="green">21. Current State</h2>
+
+<p><strong>Status as of May 2026: Setup App deployed and running on Databricks. All plan gaps closed. Only Gap 9 (start.bat Windows launcher) intentionally skipped.</strong></p>
+
+<h3>Foundation (Done before SaaS transition)</h3>
+<ul class="checklist">
+  <li>Domain extraction complete (<code>stash/airops/</code>)</li>
+  <li><code>.forge</code> manifest exists (<code>airops.forge</code>)</li>
+  <li>Agent dynamic tool discovery (<code>_discover_domain_tools()</code>)</li>
+  <li>Agent lazy WorkspaceClient init (no SDK call at import time)</li>
+  <li>KA tool factory (<code>ka_factory.py</code>)</li>
+  <li>Dynamic Genie/KA env var discovery</li>
+  <li>Frontend domain plugin registry</li>
+  <li>Graph builder auto-discovers from filesystem</li>
+  <li>Deploy pipeline dynamic (no hardcoded keys)</li>
+  <li>Setup App pre-built frontend (no npm needed)</li>
+  <li>Setup App single-server mode (port 9000)</li>
+  <li>Nuclear scan: zero domain references in framework</li>
+  <li>Git checkpoint: tag <code>pre-saas-transition</code> on branch <code>forge-saas-databricks</code></li>
+  <li>dbc/ courseware isolated to <code>forge-dbc</code> branch</li>
+</ul>
+
+<h3>SaaS Gaps Closed (Implemented)</h3>
+<ul class="checklist">
+  <li><strong>ConfigProvider pattern</strong> -- <code>LocalConfigProvider</code> + <code>ForgeConfigProvider</code> both implemented in <code>visual/backend/lib/config-provider.js</code>. Full interface: <code>list()</code>, <code>get()</code>, <code>set()</code>, <code>setMany()</code>, <code>toggle()</code>, <code>listByPrefix()</code>, <code>toEnvDict()</code>, <code>deleteKey()</code>.</li>
+  <li><strong>PY abstraction</strong> -- <code>const PY = { cmd, pre }</code> in <code>index.js</code>. Returns <code>{cmd:'uv', pre:['run','python']}</code> locally or <code>{cmd:'python', pre:[]}</code> in Forge mode. 40+ subprocess calls migrated.</li>
+  <li><strong>ForgeConfigProvider in-memory zip</strong> -- downloads <code>.forge.zip</code> from UC Volume at startup, holds in memory (AdmZip), event-driven flush on each write. Zero disk I/O after startup.</li>
+  <li><strong>deploy/deploy_setup_app.py</strong> -- deploys Setup App via Databricks CLI. Pure Python, no bash wrapper.</li>
+  <li><strong>deploy/deploy_agent_app.py</strong> -- generates <code>app.yaml</code> + <code>databricks.yml</code> from <code>.forge</code> config, builds zip bundle, uploads via SDK, calls Apps REST API.</li>
+  <li><strong>deploy/git_push.py</strong> -- automated git push via Databricks Git Folders. No PAT required.</li>
+  <li><strong>deploy/grant/run_all_grants.py</strong> -- replaces <code>run_all_grants.sh</code>. 7 grant steps, Step 7 (secrets) uses SDK directly instead of CLI.</li>
+  <li><strong>FORGE_STASH_DIR</strong> -- env var support in <code>create_all_assets.py</code>, <code>create_all_functions.py</code>, <code>create_all_procedures.py</code>. Resolves data paths to stash directory in SaaS mode.</li>
+  <li><strong>GET /api/stash/health</strong> -- scans stash directory, parses <code>.forge</code> manifests, verifies all referenced files exist. Returns structured JSON with per-file status.</li>
+  <li><strong>project-manager.js</strong> -- manages <code>.forge.zip</code> archives on UC Volume. Frontend project selector in title bar for multi-project support.</li>
+</ul>
+
+<h3>Intentionally Skipped</h3>
+<table>
+  <thead><tr><th>Gap</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Gap 9: <code>start.bat</code> (Windows launcher)</td>
+      <td>SKIPPED. Primary deployment target is Databricks (Linux container). Windows local mode not a priority.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Open Items</h3>
+<ul>
+  <li>C1 / C2 / C3: Workspace file upload API details + rate limits -- verify on next end-to-end test</li>
+  <li>C5: Setup App SP grant to Agent App SP -- verify on implementation</li>
+  <li>F3: Dashboard config end-to-end test -- not yet run</li>
+  <li>E1: <code>tool_factory.py</code> (SQL read + action patterns) -- still to build</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="runtime-modes" class="purple">22. Runtime Modes - Comprehensive Reference (Part 12)</h2>
+
+<p>BrickForge runs in 5 distinct modes. Each has different prerequisites, config mechanisms, and capabilities.</p>
+
+<!-- MODE 1 -->
+<h3>MODE 1: LOCAL (git clone)</h3>
+<p><strong>How:</strong> <code>git clone</code> + <code>./start.sh</code></p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Python 3.11+, Node.js, uv, git</td></tr>
+<tr><td>Build tools needed</td><td>npm (first run: <code>npm ci</code>), uv (<code>uv sync</code>)</td></tr>
+<tr><td>Code location</td><td>Cloned repo on user's disk</td></tr>
+<tr><td>Entry point</td><td><code>node visual/backend/index.js</code></td></tr>
+<tr><td>FORGE_MODE</td><td><code>false</code></td></tr>
+<tr><td>ConfigProvider</td><td>LocalConfigProvider</td></tr>
+<tr><td>Config storage</td><td><code>.env.local</code> file in repo root</td></tr>
+<tr><td>Stash storage</td><td><code>stash/</code> directory in repo</td></tr>
+<tr><td>Python subprocess</td><td><code>uv run python</code></td></tr>
+<tr><td>Auth</td><td>CLI profile, PAT, or bridge-forge</td></tr>
+<tr><td>IP for API calls</td><td>User's machine IP (typically whitelisted)</td></tr>
+<tr><td>Cross-cloud</td><td>Works</td></tr>
+<tr><td>Updates</td><td><code>git pull</code></td></tr>
+</table>
+
+<!-- MODE 2 -->
+<h3>MODE 2: LOCAL (installable) - FUTURE</h3>
+<p><strong>How:</strong> <code>curl -sL https://brickforge.dev/install | bash</code> then <code>brickforge</code></p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Python 3.11+, Node.js (eliminable via SEA compilation)</td></tr>
+<tr><td>Build tools needed</td><td>None. Everything pre-built and bundled.</td></tr>
+<tr><td>Code location</td><td><code>~/.brickforge/app/</code></td></tr>
+<tr><td>Entry point</td><td><code>brickforge</code> CLI &rarr; <code>node ~/.brickforge/app/visual/backend/index.js</code></td></tr>
+<tr><td>FORGE_MODE</td><td><code>false</code> (hybrid mode)</td></tr>
+<tr><td>ConfigProvider</td><td>LocalForgeConfigProvider (NEW - reads <code>.forge</code> zip from disk)</td></tr>
+<tr><td>Config storage</td><td><code>~/.brickforge/stashes/active.forge.zip</code></td></tr>
+<tr><td>Stash storage</td><td><code>~/.brickforge/stashes/</code></td></tr>
+<tr><td>Python subprocess</td><td><code>python</code> (deps pre-installed via <code>pip install -r</code> on first launch)</td></tr>
+<tr><td>Auth</td><td>PAT or bridge-forge</td></tr>
+<tr><td>IP for API calls</td><td>User's machine IP (typically whitelisted)</td></tr>
+<tr><td>Cross-cloud</td><td>Works</td></tr>
+<tr><td>Updates</td><td><code>brickforge update</code> (NEW)</td></tr>
+</table>
+<p><strong>Eliminates:</strong> git, uv, npm. User never sees source code.</p>
+
+<!-- MODE 3 -->
+<h3>MODE 3: LOCAL (Git or Installable) + REMOTE STASH - FUTURE</h3>
+<p><strong>How:</strong> Same as MODE 1 or MODE 2, with "sync to UC Volume" toggle enabled</p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Same as MODE 1 or 2</td></tr>
+<tr><td>ConfigProvider</td><td>LocalForgeConfigProvider + UC Volume sync on write</td></tr>
+<tr><td>Config storage</td><td>Local <code>.forge</code> zip + flushed to <code>/Volumes/{catalog}/{schema}/brickforge/stash/</code></td></tr>
+<tr><td>Stash storage</td><td>Local disk + UC Volume (bidirectional)</td></tr>
+<tr><td>Cross-cloud</td><td>Works</td></tr>
+<tr><td>Offline</td><td>Partial (local stash works, Volume sync queued)</td></tr>
+</table>
+<p><strong>Adds over MODE 2:</strong> Stash portability. Switch machines, pick up where you left off. Prerequisite: workspace step configured (host + token + schema).</p>
+
+<!-- MODE 4 -->
+<h3>MODE 4: DEPLOYED (DBX App)</h3>
+<p><strong>How:</strong> Pre-deployed by admin, or <code>databricks apps deploy</code>. User opens browser URL.</p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>User installs</td><td>Nothing. Browser only.</td></tr>
+<tr><td>Build tools needed</td><td>None for user. <code>uv sync</code> + tar extract at app startup.</td></tr>
+<tr><td>Code location</td><td><code>/app/python/source_code/</code> on DBX compute</td></tr>
+<tr><td>FORGE_MODE</td><td><code>true</code></td></tr>
+<tr><td>ConfigProvider</td><td>ForgeConfigProvider</td></tr>
+<tr><td>Config storage</td><td>In-memory zip, flushed to UC Volume</td></tr>
+<tr><td>Stash storage</td><td>UC Volume only</td></tr>
+<tr><td>Python subprocess</td><td><code>python</code> (venv from <code>uv sync</code> at startup)</td></tr>
+<tr><td>Auth</td><td>SP OAuth (platform-injected) + bridge-forge for target workspace</td></tr>
+<tr><td>IP for API calls</td><td>DBX App egress IP (dynamic, serverless pool)</td></tr>
+<tr><td>Cross-cloud</td><td>Same-cloud only. Cross-cloud blocked by IP ACL unless NCC configured.</td></tr>
+<tr><td>Updates</td><td>Redeploy</td></tr>
+</table>
+<p><strong>Startup command</strong> (<code>app.yaml</code>):</p>
+<pre>uv sync && cd visual/backend && tar xzf node_modules.tar.gz && cd ../.. && node visual/backend/index.js</pre>
+
+<!-- AGENT APP -->
+<h3>AGENT APP (deployed by any Setup App mode)</h3>
+<p>Not a mode of the Setup App. This is the output - the agent application deployed to Databricks by any of the 4 modes above.</p>
+<p><strong>How:</strong> User clicks "Deploy" in Setup App. Bundles stash + framework into zip, uploads, deploys.</p>
+<table>
+<tr><th>Category</th><th>Detail</th></tr>
+<tr><td>Runs on</td><td>Databricks App compute</td></tr>
+<tr><td>Entry point</td><td><code>python agent.start_server:main</code></td></tr>
+<tr><td>Config source</td><td><code>app.yaml</code> env vars (baked at deploy time from stash)</td></tr>
+<tr><td>Stash at runtime</td><td>Not needed. Config = env vars. Domain files = in zip.</td></tr>
+<tr><td>Python deps</td><td><code>uv sync</code> at startup</td></tr>
+<tr><td>Node.js</td><td>Yes (runs <code>node app/server/dist/index.mjs</code> for chat UI)</td></tr>
+<tr><td>Bundle size</td><td>~13MB / ~150 files</td></tr>
+</table>
+<p><strong>Key point:</strong> The stash is a build-time artifact. At runtime the agent reads env vars and bundled files. No stash dependency at runtime.</p>
+
+<!-- DEPS MATRIX -->
+<h3>Dependencies by Mode</h3>
+<table>
+<tr><th>Dependency</th><th>MODE 1 (clone)</th><th>MODE 2 (install)</th><th>MODE 3 (install+sync)</th><th>MODE 4 (deployed)</th><th>AGENT APP</th></tr>
+<tr><td>Python 3.11+</td><td>USER</td><td>USER</td><td>USER</td><td>PLATFORM</td><td>PLATFORM</td></tr>
+<tr><td>Node.js</td><td>USER</td><td>USER*</td><td>USER*</td><td>PLATFORM</td><td>PLATFORM</td></tr>
+<tr><td>npm</td><td>USER</td><td>-</td><td>-</td><td>STARTUP</td><td>FALLBACK</td></tr>
+<tr><td>uv</td><td>USER</td><td>-</td><td>-</td><td>STARTUP</td><td>STARTUP</td></tr>
+<tr><td>git</td><td>USER</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>Databricks CLI</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>Browser</td><td>USER</td><td>USER</td><td>USER</td><td>USER</td><td>USER</td></tr>
+</table>
+<p style="font-size:0.85rem; color:var(--text3);">
+  <strong>USER</strong> = user must install. <strong>PLATFORM</strong> = pre-installed on DBX compute. <strong>STARTUP</strong> = used at app startup, pre-installed. <strong>*</strong> = eliminable via Node SEA compilation. <strong>-</strong> = not needed.
+</p>
+
+<!-- KEY INSIGHTS -->
+<h3>Key Insights</h3>
+<ol>
+  <li><strong>Stash is build-time only.</strong> Agent app never reads it. Clean separation.</li>
+  <li><strong>Installable eliminates git, uv, npm.</strong> Only Python + Node.js remain. Node.js eliminable via SEA.</li>
+  <li><strong>LocalForgeConfigProvider is the missing piece.</strong> Sync disk-based <code>.forge</code> zip reader. Bridges local and deployed.</li>
+  <li><strong>Remote stash sync is additive.</strong> Local-only first, UC Volume toggle second, GitHub third.</li>
+  <li><strong>Cross-cloud is network, not auth.</strong> Local modes bypass it. Deployed needs same-cloud or NCC.</li>
+  <li><strong>One Setup App per cloud for deployed coverage.</strong> AWS instance + Azure instance.</li>
+  <li><strong><code>.env.local</code> is a legacy artifact.</strong> Installable mode replaces it with <code>.forge</code> zip everywhere.</li>
+</ol>
+
+<hr>
+<p style="text-align:center; color:var(--text3); font-size:0.85rem; padding: 2rem 0;">
+  BrickForge SaaS Blueprint &mdash; Single source of truth &mdash; Do not split. Do not overwrite. Only append.
+</p>
+
+</div><!-- /.container -->
+</body>
+</html>

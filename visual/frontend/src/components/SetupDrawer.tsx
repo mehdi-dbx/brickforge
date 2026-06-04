@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pencil, Upload, Link, Trash2, FileText } from 'lucide-react'
-import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxGenieSpace, ExecLine, TableDef } from '../types'
+import type { StepId, SetupPhase, DbxProfile, DbxWarehouse, DbxEndpoint, DbxGenieSpace, ExecLine, TableDef } from '../types'
 import { GenTerminal } from './GenTerminal'
 import { SETUP_STEPS } from '../setupSteps'
 
@@ -12,6 +12,7 @@ interface SetupDrawerProps {
   selectedChoice: number | null
   execLines: ExecLine[]
   currentValues: Record<string, string>
+  stepStatus: string
   testCache: Partial<Record<StepId, TestResult>>
   onTestResult: (step: StepId, result: TestResult) => void
   onSelectChoice: (i: number) => void
@@ -21,6 +22,9 @@ interface SetupDrawerProps {
   onExecDone: (ok: boolean) => void
   onRefresh: () => void
   onNext?: () => void
+  selectedInstanceKey?: string | null
+  instances?: { key: string; value: string; enabled: boolean; label: string }[]
+  forgeMode?: boolean
 }
 
 // ─── Resource hook ─────────────────────────────────────────────────────────────
@@ -46,45 +50,89 @@ function useFetchOnce<T>(url: string | null) {
 
 // ─── Resource pickers ──────────────────────────────────────────────────────────
 
-function ProfileList({ selected, onSelect }: { selected: string; onSelect: (n: string) => void }) {
+function ProfileList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (n: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxProfile[]>('/api/setup/profiles')
   const profiles = (data as DbxProfile[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading profiles…" />
   if (error)   return <ErrMsg msg={error} />
+  const filtered = filter.trim()
+    ? profiles.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()) || p.host.toLowerCase().includes(filter.toLowerCase()))
+    : profiles
   return (
     <>
       <Label>select cli profile</Label>
       <InfoBox>Profiles marked valid are authenticated and ready to use.</InfoBox>
-      {profiles.map(p => (
-        <PickRow key={p.name} active={selected === p.name} disabled={!p.valid} onClick={() => p.valid && onSelect(p.name)}>
+      <FilterInput value={filter} onChange={setFilter} count={profiles.length} />
+      {filtered.map(p => (
+        <PickRow key={p.name} active={selected === p.name} disabled={!p.valid}
+          onClick={() => p.valid && onSelect(p.name)}
+          onDoubleClick={() => { if (p.valid) { onSelect(p.name); onConfirm?.() } }}>
           <Dot color={p.valid ? 'green' : 'gray'} />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{p.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono truncate max-w-[160px]">{p.host.replace('https://', '')}</span>
           {p.valid && <Tag color="green">valid</Tag>}
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
 
-function WarehouseList({ selected, onSelect }: { selected: string; onSelect: (id: string, name: string) => void }) {
+function WarehouseList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (id: string, name: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxWarehouse[]>('/api/setup/resources?type=warehouses')
   const warehouses = (data as DbxWarehouse[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading warehouses…" />
   if (error)   return <ErrMsg msg={error} />
+  const filtered = filter.trim()
+    ? warehouses.filter(wh => wh.name.toLowerCase().includes(filter.toLowerCase()))
+    : warehouses
   return (
     <>
       <Label>available warehouses</Label>
-      {warehouses.map(wh => {
+      <FilterInput value={filter} onChange={setFilter} count={warehouses.length} />
+      {filtered.map(wh => {
         const running = wh.state?.toUpperCase().includes('RUNNING')
         return (
-          <PickRow key={wh.id} active={selected === wh.id} onClick={() => onSelect(wh.id, wh.name)}>
+          <PickRow key={wh.id} active={selected === wh.id}
+            onClick={() => onSelect(wh.id, wh.name)}
+            onDoubleClick={() => { onSelect(wh.id, wh.name); onConfirm?.() }}>
             <Dot color={running ? 'green' : 'gray'} />
             <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{wh.name}</span>
             {running && <Tag color="green">running</Tag>}
           </PickRow>
         )
       })}
+      <NoMatches visible={!!filter && filtered.length === 0} />
+    </>
+  )
+}
+
+function EndpointList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (name: string) => void; onConfirm?: () => void }) {
+  const { data, loading, error } = useFetchOnce<DbxEndpoint[]>('/api/setup/resources?type=endpoints')
+  const endpoints = (data as DbxEndpoint[]) || []
+  const [filter, setFilter] = useState('')
+  if (loading) return <Spinner label="scanning endpoints…" />
+  if (error)   return <ErrMsg msg={error} />
+  if (endpoints.length === 0) return <ErrMsg msg="no Foundation Model endpoints found on this workspace" />
+  const filtered = filter.trim()
+    ? endpoints.filter(ep => ep.name.toLowerCase().includes(filter.toLowerCase()))
+    : endpoints
+  return (
+    <>
+      <Label>available FM endpoints</Label>
+      <FilterInput value={filter} onChange={setFilter} count={endpoints.length} />
+      {filtered.map(ep => (
+        <PickRow key={ep.name} active={selected === ep.name}
+          onClick={() => onSelect(ep.name)}
+          onDoubleClick={() => { onSelect(ep.name); onConfirm?.() }}>
+          <Dot color="green" />
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{ep.name}</span>
+          <Tag color="blue">{ep.type}</Tag>
+        </PickRow>
+      ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
     </>
   )
 }
@@ -94,17 +142,23 @@ function CatalogPicker({ catalog, schema, onCatalog, onSchema }: {
 }) {
   const { data, loading, error } = useFetchOnce<string[]>('/api/setup/resources?type=catalogs')
   const catalogs = (data as string[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading catalogs…" />
   if (error)   return <ErrMsg msg={error} />
+  const filtered = filter.trim()
+    ? catalogs.filter(c => c.toLowerCase().includes(filter.toLowerCase()))
+    : catalogs
   return (
     <>
       <Label>available catalogs</Label>
-      {catalogs.map(c => (
+      <FilterInput value={filter} onChange={setFilter} count={catalogs.length} />
+      {filtered.map(c => (
         <PickRow key={c} active={catalog === c} onClick={() => onCatalog(c)}>
           <Dot color="green" />
           <span className="font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{c}</span>
         </PickRow>
       ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
       <div className="mt-3">
         <Label>schema name</Label>
         <input
@@ -118,21 +172,267 @@ function CatalogPicker({ catalog, schema, onCatalog, onSchema }: {
   )
 }
 
-function GenieList({ selected, onSelect }: { selected: string; onSelect: (id: string, name: string) => void }) {
+function GenieList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (id: string, name: string) => void; onConfirm?: () => void }) {
   const { data, loading, error } = useFetchOnce<DbxGenieSpace[]>('/api/setup/resources?type=genie')
   const spaces = (data as DbxGenieSpace[]) || []
+  const [filter, setFilter] = useState('')
   if (loading) return <Spinner label="loading genie spaces…" />
   if (error)   return <ErrMsg msg={error} />
   if (spaces.length === 0) return <InfoBox>No genie spaces found — use "create new room" instead.</InfoBox>
+  const filtered = filter.trim()
+    ? spaces.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()))
+    : spaces
   return (
     <>
       <Label>available genie spaces</Label>
-      {spaces.map(s => (
-        <PickRow key={s.id} active={selected === s.id} onClick={() => onSelect(s.id, s.name)}>
+      <FilterInput value={filter} onChange={setFilter} count={spaces.length} />
+      {filtered.map(s => (
+        <PickRow key={s.id} active={selected === s.id}
+          onClick={() => onSelect(s.id, s.name)}
+          onDoubleClick={() => { onSelect(s.id, s.name); onConfirm?.() }}>
           <Dot color="green" />
           <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{s.name}</span>
           <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{s.id.slice(0, 8)}…</span>
         </PickRow>
+      ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
+    </>
+  )
+}
+
+function KaPickerList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (endpoint: string, displayName: string) => void; onConfirm?: () => void }) {
+  const [endpoints, setEndpoints] = useState<{ name: string; endpoint: string; type: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('')
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/setup/serving-endpoints?filter=ka')
+      .then(r => r.json())
+      .then(data => setEndpoints(data.endpoints || []))
+      .catch(() => setEndpoints([]))
+      .finally(() => setLoading(false))
+  }, [])
+  if (loading) return <Spinner label="scanning Knowledge Assistants..." />
+  if (endpoints.length === 0) return <InfoBox>No Knowledge Assistants found on this workspace.</InfoBox>
+  const filtered = filter.trim()
+    ? endpoints.filter(ep => ep.name.toLowerCase().includes(filter.toLowerCase()) || ep.endpoint.toLowerCase().includes(filter.toLowerCase()))
+    : endpoints
+  return (
+    <>
+      <Label>available Knowledge Assistants</Label>
+      <FilterInput value={filter} onChange={setFilter} count={endpoints.length} />
+      {filtered.map(ep => (
+        <PickRow key={ep.endpoint} active={selected === ep.endpoint}
+          onClick={() => onSelect(ep.endpoint, ep.name)}
+          onDoubleClick={() => { onSelect(ep.endpoint, ep.name); onConfirm?.() }}>
+          <Dot color="green" />
+          <div className="flex-1 min-w-0">
+            <div className="font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{ep.name}</div>
+            <div className="font-mono text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 truncate">{ep.endpoint}</div>
+          </div>
+          <Tag color="purple">KA</Tag>
+        </PickRow>
+      ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
+    </>
+  )
+}
+
+
+function MlflowList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (id: string) => void; onConfirm?: () => void }) {
+  const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=mlflow')
+  const experiments = (data as { id: string; name: string; state: string }[]) || []
+  const [filter, setFilter] = useState('')
+  if (loading) return <Spinner label="loading mlflow experiments…" />
+  if (error)   return <ErrMsg msg={error} />
+  if (experiments.length === 0) return <InfoBox>No MLflow experiments found -- use "create new experiment" instead.</InfoBox>
+  const filtered = filter.trim()
+    ? experiments.filter(e => e.name.toLowerCase().includes(filter.toLowerCase()) || e.id.includes(filter))
+    : experiments
+  return (
+    <>
+      <Label>available mlflow experiments</Label>
+      <FilterInput value={filter} onChange={setFilter} count={experiments.length} />
+      {filtered.map(e => (
+        <PickRow key={e.id} active={selected === e.id}
+          onClick={() => onSelect(e.id)}
+          onDoubleClick={() => { onSelect(e.id); onConfirm?.() }}>
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100 truncate">{e.name}</span>
+          <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono flex-shrink-0">{e.id}</span>
+        </PickRow>
+      ))}
+      <NoMatches visible={!!filter && filtered.length === 0} />
+    </>
+  )
+}
+
+// ─── Feature toggle list ─────────────────────────────────────────────────────
+
+interface FeatureItem {
+  key: string
+  env_key: string
+  label: string
+  desc: string
+  default: string
+  enabled: boolean
+  configured: boolean
+}
+
+function FeatureToggleRow({ f, onToggle, children }: { f: FeatureItem; onToggle: (key: string, enabled: boolean) => void; children?: React.ReactNode }) {
+  return (
+    <div className="mb-1.5">
+      <button
+        onClick={() => onToggle(f.key, !f.enabled)}
+        className={`
+          w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all duration-150
+          ${f.enabled
+            ? 'border-dbx-blue/40 dark:border-dbx-green/40 bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+            : 'border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-600'}
+          ${children && f.enabled ? 'rounded-b-none' : ''}
+        `}
+      >
+        <div className={`w-8 h-4 rounded-full flex-shrink-0 relative transition-colors ${f.enabled ? '' : 'bg-dbx-gray-300 dark:bg-dbx-gray-600'}`}
+          style={f.enabled ? { backgroundColor: '#00A972', boxShadow: '0 0 8px rgba(0, 169, 114, 0.5)' } : undefined}>
+          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${f.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-medium font-mono text-dbx-gray-800 dark:text-dbx-gray-100">{f.label}</div>
+          <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">{f.desc}</div>
+        </div>
+        <span className={`text-[10px] font-mono flex-shrink-0 ${f.enabled ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400 dark:text-dbx-gray-500'}`}>
+          {f.enabled ? 'on' : 'off'}
+        </span>
+      </button>
+      {children && f.enabled && (
+        <div className="border border-t-0 border-dbx-blue/40 dark:border-dbx-green/40 rounded-b-lg px-3 py-2.5 bg-dbx-blue-bg/50 dark:bg-dbx-green-bg/5">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LakebaseConfig({ selected, onSelect, onCreateName }: { selected: string; onSelect: (name: string) => void; onCreateName: (name: string) => void }) {
+  const { data, loading, error } = useFetchOnce<{ id: string; name: string; state: string }[]>('/api/setup/resources?type=lakebase')
+  const instances = (data as { id: string; name: string; state: string }[]) || []
+  const [mode, setMode] = useState<'pick' | 'create' | 'manual'>('pick')
+  const [manualName, setManualName] = useState(selected)
+  const [createName, setCreateName] = useState('')
+  const [filter, setFilter] = useState('')
+
+  const filtered = filter.trim()
+    ? instances.filter(i => i.name.toLowerCase().includes(filter.toLowerCase()))
+    : instances
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">lakebase instance required for memory</div>
+      {selected && <div className="text-[10px] font-mono text-dbx-blue dark:text-dbx-green">[+] selected: {selected}</div>}
+      <div className="flex gap-1">
+        {(['pick', 'create', 'manual'] as const).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-2 py-0.5 text-[10px] font-mono rounded-md border transition-colors ${mode === m
+              ? 'border-dbx-blue dark:border-dbx-green text-dbx-blue dark:text-dbx-green bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+              : 'border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300'}`}>
+            {m === 'pick' ? 'pick existing' : m === 'create' ? 'create new' : 'enter name'}
+          </button>
+        ))}
+      </div>
+      {mode === 'pick' && (
+        loading ? <Spinner label="loading lakebase instances..." /> :
+        error ? <ErrMsg msg={error} /> :
+        instances.length === 0 ? <InfoBox>No instances found -- try "create new" or "enter name".</InfoBox> :
+        <>
+          <FilterInput value={filter} onChange={setFilter} count={instances.length} />
+          <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+            {filtered.map(i => (
+              <PickRow key={i.name} active={selected === i.name}
+                onClick={() => { onSelect(i.name); setManualName(i.name) }}>
+                <Dot color={i.state === 'AVAILABLE' ? 'green' : i.state === 'CREATING' ? 'amber' : 'red'} />
+                <span className="flex-1 font-mono text-[12px] text-dbx-gray-800 dark:text-dbx-gray-100">{i.name}</span>
+                <span className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-600 font-mono">{i.state}</span>
+              </PickRow>
+            ))}
+            <NoMatches visible={!!filter && filtered.length === 0} />
+          </div>
+        </>
+      )}
+      {mode === 'create' && (
+        <div className="flex gap-1.5 items-center">
+          <input value={createName} onChange={e => setCreateName(e.target.value)} placeholder="my-lakebase-instance"
+            className="flex-1 px-2 py-1 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100" />
+          <button onClick={() => { if (createName.trim()) onCreateName(createName.trim()) }}
+            disabled={!createName.trim()}
+            className="px-2.5 py-1 text-[11px] font-mono rounded-md bg-dbx-blue dark:bg-dbx-green text-white disabled:opacity-40 transition-opacity">
+            create
+          </button>
+        </div>
+      )}
+      {mode === 'manual' && (
+        <input value={manualName} onChange={e => { setManualName(e.target.value); onSelect(e.target.value) }} placeholder="instance-name"
+          className="px-2 py-1 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100" />
+      )}
+    </div>
+  )
+}
+
+function FeatureList({ toggles, onToggle, lakebaseName, onLakebaseSelect, onLakebaseCreate }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void; lakebaseName: string; onLakebaseSelect: (name: string) => void; onLakebaseCreate: (name: string) => void }) {
+  if (toggles.length === 0) return <InfoBox>No features available.</InfoBox>
+  return (
+    <>
+      <Label>agent features</Label>
+      {toggles.map(f => (
+        <FeatureToggleRow key={f.key} f={f} onToggle={onToggle}>
+          {f.key === 'MEMORY' ? (
+            <LakebaseConfig selected={lakebaseName} onSelect={onLakebaseSelect} onCreateName={onLakebaseCreate} />
+          ) : undefined}
+        </FeatureToggleRow>
+      ))}
+    </>
+  )
+}
+
+function KaConfig({ selected, onSelect }: { selected: string; onSelect: (endpoint: string, name: string) => void }) {
+  const [mode, setMode] = useState<'pick' | 'manual'>('pick')
+  const [manualVal, setManualVal] = useState(selected)
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[11px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">KA endpoint required</div>
+      {selected && <div className="text-[10px] font-mono text-dbx-blue dark:text-dbx-green">[+] selected: {selected}</div>}
+      <div className="flex gap-1">
+        {(['pick', 'manual'] as const).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-2 py-0.5 text-[10px] font-mono rounded-md border transition-colors ${mode === m
+              ? 'border-dbx-blue dark:border-dbx-green text-dbx-blue dark:text-dbx-green bg-dbx-blue-bg dark:bg-dbx-green-bg/10'
+              : 'border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300'}`}>
+            {m === 'pick' ? 'pick existing' : 'enter manually'}
+          </button>
+        ))}
+      </div>
+      {mode === 'pick' && (
+        <div className="max-h-40 overflow-y-auto">
+          <KaPickerList selected={selected} onSelect={onSelect} />
+        </div>
+      )}
+      {mode === 'manual' && (
+        <input value={manualVal} onChange={e => { setManualVal(e.target.value); onSelect(e.target.value, e.target.value) }} placeholder="ka-endpoint-name"
+          className="px-2 py-1 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100" />
+      )}
+    </div>
+  )
+}
+
+function BricksList({ toggles, onToggle, kaEndpoint, onKaSelect }: { toggles: FeatureItem[]; onToggle: (key: string, enabled: boolean) => void; kaEndpoint: string; onKaSelect: (endpoint: string, name: string) => void }) {
+  if (toggles.length === 0) return <InfoBox>No bricks available.</InfoBox>
+  return (
+    <>
+      <Label>agent bricks</Label>
+      {toggles.map(f => (
+        <FeatureToggleRow key={f.key} f={f} onToggle={onToggle}>
+          {f.key === 'KA' ? (
+            <KaConfig selected={kaEndpoint} onSelect={onKaSelect} />
+          ) : undefined}
+        </FeatureToggleRow>
       ))}
     </>
   )
@@ -149,6 +449,7 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [urlInput, setUrlInput] = useState('')
+  const [urlFilename, setUrlFilename] = useState('')
   const [urlUploading, setUrlUploading] = useState(false)
   const [feedback, setFeedback] = useState<{ text: string; ok: boolean }[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -196,16 +497,27 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
     }
   }
 
+  const ALLOWED_DOC_EXTS = ['.md', '.pdf', '.docx', '.txt', '.html', '.csv', '.json']
+  const urlFilenameValid = urlFilename.trim().length > 0 && ALLOWED_DOC_EXTS.some(ext => urlFilename.trim().toLowerCase().endsWith(ext))
+
+  const deriveFilename = (url: string) => {
+    try {
+      const path = new URL(url).pathname
+      const last = decodeURIComponent(path.split('/').pop() || '')
+      return last && last !== '/' ? last : ''
+    } catch { return '' }
+  }
+
   const handleUrlUpload = async () => {
     const url = urlInput.trim()
-    if (!url) return
+    if (!url || !urlFilenameValid) return
     setUrlUploading(true)
     setFeedback([])
     try {
       const resp = await fetch('/api/ka/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, filename: urlFilename.trim() }),
       })
       const data = await resp.json()
       const steps = (data.steps || []).map((s: string) => ({
@@ -214,7 +526,7 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
       }))
       steps.push({ text: data.ok ? `[+] ${data.name}` : `[x] ${data.name} -- ${data.error || 'failed'}`, ok: data.ok })
       setFeedback(steps)
-      if (data.ok) setUrlInput('')
+      if (data.ok) { setUrlInput(''); setUrlFilename('') }
       fetchDocs()
     } catch (err) {
       setFeedback([{ text: `[x] fetch failed: ${err}`, ok: false }])
@@ -298,26 +610,47 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
           {uploading ? 'uploading...' : 'upload local files'}
         </button>
 
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Link className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-dbx-gray-400" />
-            <input
-              type="text"
-              value={urlInput}
-              onChange={e => setUrlInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleUrlUpload() }}
-              placeholder="paste URL..."
-              disabled={urlUploading || !volumePath}
-              className="w-full bg-white dark:bg-dbx-gray-900 font-mono text-[11px] text-dbx-gray-600 dark:text-dbx-gray-300 outline-none border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg pl-7 pr-3 py-2 focus:border-dbx-red dark:focus:border-[#FF6B5A] transition-colors disabled:opacity-50"
-            />
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Link className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-dbx-gray-400" />
+              <input
+                type="text"
+                value={urlInput}
+                onChange={e => { setUrlInput(e.target.value); setUrlFilename(deriveFilename(e.target.value)) }}
+                onKeyDown={e => { if (e.key === 'Enter' && urlFilenameValid) handleUrlUpload() }}
+                placeholder="paste URL..."
+                disabled={urlUploading || !volumePath}
+                className="w-full bg-white dark:bg-dbx-gray-900 font-mono text-[11px] text-dbx-gray-600 dark:text-dbx-gray-300 outline-none border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg pl-7 pr-3 py-2 focus:border-dbx-red dark:focus:border-[#FF6B5A] transition-colors disabled:opacity-50"
+              />
+            </div>
+            <button
+              onClick={handleUrlUpload}
+              disabled={!urlInput.trim() || !urlFilenameValid || urlUploading || !volumePath}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-gray-400 dark:hover:border-dbx-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {urlUploading ? '...' : 'fetch'}
+            </button>
           </div>
-          <button
-            onClick={handleUrlUpload}
-            disabled={!urlInput.trim() || urlUploading || !volumePath}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-gray-400 dark:hover:border-dbx-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {urlUploading ? '...' : 'fetch'}
-          </button>
+          {urlInput.trim() && (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={urlFilename}
+                onChange={e => setUrlFilename(e.target.value)}
+                placeholder="document-name.pdf"
+                disabled={urlUploading}
+                className={`flex-1 bg-white dark:bg-dbx-gray-900 font-mono text-[11px] outline-none border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 ${
+                  urlFilename.trim() && !urlFilenameValid
+                    ? 'border-dbx-amber text-dbx-amber'
+                    : 'border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-600 dark:text-dbx-gray-300 focus:border-dbx-red dark:focus:border-[#FF6B5A]'
+                }`}
+              />
+              {urlFilename.trim() && !urlFilenameValid && (
+                <span className="text-[9px] font-mono text-dbx-amber flex-shrink-0">.md .pdf .docx .txt .html .csv .json</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -339,21 +672,159 @@ function KaDocsPicker({ onReady }: { onReady: (ready: boolean) => void }) {
 
 // ─── Dynamic table list (fetched from API) ───────────────────────────────────
 
-function SchemaTableList({ prefix }: { prefix: string }) {
-  const [tables, setTables] = useState<string[]>([])
+function SchemaTableList({ prefix, selectable, selected, onSelectionChange }: {
+  prefix: string
+  selectable?: boolean
+  selected?: Set<string>
+  onSelectionChange?: (selected: Set<string>) => void
+}) {
+  const [tables, setTables] = useState<{ name: string; type: string; columns?: { name: string; type: string }[] }[]>([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
-    fetch('/api/gen/tables')
+    setLoading(true)
+    fetch('/api/setup/schema-tables')
       .then(r => r.json())
-      .then(data => setTables((data.tables || []).map((t: { name: string }) => t.name)))
+      .then(data => {
+        const t = data.tables || []
+        setTables(t)
+        // Select all by default
+        if (selectable && onSelectionChange && (!selected || selected.size === 0)) {
+          onSelectionChange(new Set(t.map((x: { name: string }) => x.name)))
+        }
+      })
       .catch(() => setTables([]))
+      .finally(() => setLoading(false))
   }, [])
-  if (tables.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no tables found</div>
+  if (loading) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1 animate-pulse">loading tables...</div>
+  if (tables.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no tables in schema</div>
+  const sel = selected || new Set<string>()
+  const allSelected = tables.every(t => sel.has(t.name))
+  const toggleAll = () => {
+    if (!onSelectionChange) return
+    onSelectionChange(allSelected ? new Set() : new Set(tables.map(t => t.name)))
+  }
+  const toggle = (name: string) => {
+    if (!onSelectionChange) return
+    const next = new Set(sel)
+    next.has(name) ? next.delete(name) : next.add(name)
+    onSelectionChange(next)
+  }
   return (
     <>
+      <div className="flex items-center gap-2 py-1">
+        {selectable && (
+          <StyledCheckbox checked={allSelected} color="blue" onChange={toggleAll} />
+        )}
+        <span className="text-[12px] font-mono text-dbx-gray-400">{sel.size}/{tables.length} table(s) in {prefix || 'schema'}</span>
+      </div>
       {tables.map(t => (
-        <div key={t} className="flex items-center gap-2 py-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
-          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t}` : t}</span>
+        <div key={t.name} className="flex items-center gap-2 py-1 cursor-pointer" onClick={() => selectable && toggle(t.name)}>
+          {selectable
+            ? <StyledCheckbox checked={sel.has(t.name)} color="green" onChange={() => toggle(t.name)} />
+            : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+          }
+          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${t.name}` : t.name}</span>
+          {t.columns && t.columns.length > 0 && (
+            <span className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 ml-auto">{t.columns.length} cols</span>
+          )}
+        </div>
+      ))}
+    </>
+  )
+}
+
+// ─── Custom styled checkbox (SVG fine-line checkmark) ───────────────────────
+
+function StyledCheckbox({ checked, color, onChange }: {
+  checked: boolean
+  color: 'blue' | 'green'
+  onChange: () => void
+}) {
+  const border = checked
+    ? color === 'blue' ? 'border-blue-500' : 'border-emerald-500'
+    : 'border-dbx-gray-400'
+  const bg = checked
+    ? color === 'blue' ? 'bg-blue-500/10' : 'bg-emerald-500/10'
+    : 'bg-transparent'
+  const stroke = color === 'blue' ? '#3b82f6' : '#10b981'
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onChange() }}
+      className={`w-3.5 h-3.5 rounded-[3px] border ${border} ${bg} flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors`}
+    >
+      {checked && (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 5.2 L4.2 7.4 L8 2.6" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
+// ─── Dynamic routine list (functions + procedures from API) ─────────────────
+
+function SchemaRoutineList({ prefix, host, selectable, selected, onSelectionChange }: {
+  prefix: string
+  host?: string
+  selectable?: boolean
+  selected?: Set<string>
+  onSelectionChange?: (selected: Set<string>) => void
+}) {
+  const [funcs, setFuncs] = useState<{ name: string; type: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/setup/schema-functions')
+      .then(r => r.json())
+      .then(data => {
+        const f = data.functions || []
+        setFuncs(f)
+        if (selectable && onSelectionChange && (!selected || selected.size === 0)) {
+          onSelectionChange(new Set(f.map((x: { name: string }) => x.name)))
+        }
+      })
+      .catch(() => setFuncs([]))
+      .finally(() => setLoading(false))
+  }, [])
+  if (loading) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1 animate-pulse">loading functions...</div>
+  if (funcs.length === 0) return <div className="text-[12px] font-mono text-dbx-gray-400 py-1">no functions in schema</div>
+  const sel = selected || new Set<string>()
+  const allSelected = funcs.every(f => sel.has(f.name))
+  const toggleAll = () => {
+    if (!onSelectionChange) return
+    onSelectionChange(allSelected ? new Set() : new Set(funcs.map(f => f.name)))
+  }
+  const toggle = (name: string) => {
+    if (!onSelectionChange) return
+    const next = new Set(sel)
+    next.has(name) ? next.delete(name) : next.add(name)
+    onSelectionChange(next)
+  }
+  return (
+    <>
+      <div className="flex items-center gap-2 py-1">
+        {selectable && (
+          <StyledCheckbox checked={allSelected} color="blue" onChange={toggleAll} />
+        )}
+        <span className="text-[12px] font-mono text-dbx-gray-400">
+          {sel.size}/{funcs.length} function(s) in{' '}
+          {prefix && host ? (
+            <a href={`${host.replace(/\/$/, '')}/explore/data/${prefix.replace('.', '/')}?activeListType=FUNCTION`}
+              target="_blank" rel="noopener noreferrer"
+              className="text-dbx-blue dark:text-dbx-green hover:underline">
+              {prefix}
+            </a>
+          ) : (prefix || 'schema')}
+        </span>
+      </div>
+      {funcs.map(f => (
+        <div key={f.name} className="flex items-center gap-2 py-0.5 cursor-pointer" onClick={() => selectable && toggle(f.name)}>
+          {selectable
+            ? <StyledCheckbox checked={sel.has(f.name)} color="green" onChange={() => toggle(f.name)} />
+            : <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+          }
+          <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{prefix ? `${prefix}.${f.name}` : f.name}</span>
         </div>
       ))}
     </>
@@ -674,7 +1145,7 @@ function PromptGenerator({ onDone }: { onDone: () => void }) {
 
 // ─── Editable schema field ────────────────────────────────────────────────────
 
-function EditableSchemaField({ value, onSaved }: { value: string; onSaved?: () => void }) {
+function EditableSchemaField({ value, host, onSaved }: { value: string; host?: string; onSaved?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
@@ -740,9 +1211,18 @@ function EditableSchemaField({ value, onSaved }: { value: string; onSaved?: () =
         </div>
       ) : (
         <div className="flex items-center gap-2 group">
-          <span className={`text-[12px] font-mono ${value ? 'text-dbx-blue dark:text-dbx-green' : 'text-dbx-gray-400'}`}>
-            {value || 'not set'}
-          </span>
+          {value ? (
+            <a
+              href={`${(host || '').replace(/\/$/, '')}/explore/data/${value.replace('.', '/')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[12px] font-mono text-dbx-blue dark:text-dbx-green truncate hover:underline"
+            >
+              {value}
+            </a>
+          ) : (
+            <span className="text-[12px] font-mono text-dbx-gray-400">not set</span>
+          )}
           {saved && <span className="text-[10px] font-mono text-emerald-400 animate-fade-in">[+] saved</span>}
           <button
             onClick={() => setEditing(true)}
@@ -789,19 +1269,41 @@ function Dot({ color }: { color: 'green' | 'gray' | 'amber' | 'red' }) {
   return <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cls[color]}`} />
 }
 
-function Tag({ color, children }: { color: 'green' | 'purple'; children: React.ReactNode }) {
+function FilterInput({ value, onChange, count }: { value: string; onChange: (v: string) => void; count: number }) {
+  if (count <= 5) return null
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder="filter…"
+      autoFocus
+      className="w-full mb-2 px-2 py-1 text-[12px] font-mono rounded border border-dbx-gray-300 dark:border-dbx-gray-600 bg-transparent text-dbx-gray-800 dark:text-dbx-gray-100 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+    />
+  )
+}
+
+function NoMatches({ visible }: { visible: boolean }) {
+  if (!visible) return null
+  return <div className="text-[12px] text-dbx-gray-400 font-mono py-2">no matches</div>
+}
+
+function Tag({ color, children }: { color: 'green' | 'purple' | 'blue'; children: React.ReactNode }) {
   const cls = color === 'green'
     ? 'bg-dbx-blue-bg dark:bg-dbx-green-bg/10 text-dbx-blue-dk dark:text-dbx-green border border-dbx-blue/20 dark:border-dbx-green/20'
+    : color === 'blue'
+    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
     : 'bg-dbx-red-bg dark:bg-dbx-red-bg-dk text-dbx-red dark:text-[#FF6B5A] border border-dbx-red/20'
   return <span className={`text-[10px] rounded-full px-2 py-0.5 font-mono font-medium ${cls}`}>{children}</span>
 }
 
-function PickRow({ active, disabled = false, onClick, children }: {
-  active: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode
+function PickRow({ active, disabled = false, onClick, onDoubleClick, children }: {
+  active: boolean; disabled?: boolean; onClick: () => void; onDoubleClick?: () => void; children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       disabled={disabled}
       className={`
         w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border mb-1.5 text-left transition-all duration-150
@@ -830,8 +1332,9 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (v: 
 
 // ─── Terminal ──────────────────────────────────────────────────────────────────
 
-function Terminal({ lines }: { lines: ExecLine[] }) {
+function Terminal({ lines, showCopy = true }: { lines: ExecLine[]; showCopy?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight }, [lines])
 
   function color(text: string, stream: string) {
@@ -842,15 +1345,88 @@ function Terminal({ lines }: { lines: ExecLine[] }) {
     return 'text-dbx-gray-400'
   }
 
+  const copyAll = () => {
+    const text = lines.map(l => l.text.replace(/\x1b\[[0-9;]*m/g, '').trimEnd()).join('\n')
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+
   return (
-    <div ref={ref} className="bg-dbx-gray-950 rounded-lg p-3 font-mono text-[13px] leading-relaxed h-[280px] overflow-y-auto border border-dbx-gray-800/50 shadow-inner">
-      {lines.length === 0 && <div className="text-dbx-gray-600 animate-pulse">running…</div>}
-      {lines.map((l, i) => {
-        const clean = l.text.replace(/\x1b\[[0-9;]*m/g, '')
-        return <div key={i} className={`animate-fade-in ${color(clean.trim(), l.stream)}`}>{clean.trimEnd()}</div>
-      })}
+    <div className="relative">
+      {showCopy && lines.length > 0 && (
+        <button onClick={copyAll} className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-dbx-gray-800/80 hover:bg-dbx-gray-700 text-dbx-gray-500 hover:text-dbx-gray-300 transition-colors" title="Copy log">
+          {copied ? (
+            <svg className="w-3.5 h-3.5 text-dbx-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          )}
+        </button>
+      )}
+      <div ref={ref} className="bg-dbx-gray-950 rounded-lg p-3 font-mono text-[13px] leading-relaxed h-[280px] overflow-y-auto border border-dbx-gray-800/50 shadow-inner">
+        {lines.length === 0 && <div className="text-dbx-gray-600 animate-pulse">waiting for output...</div>}
+        {lines.map((l, i) => {
+          const clean = l.text.replace(/\x1b\[[0-9;]*m/g, '')
+          return <div key={i} className={`animate-fade-in ${color(clean.trim(), l.stream)}`}>{clean.trimEnd()}</div>
+        })}
+      </div>
     </div>
   )
+}
+
+// ─── Progress stepper ─────────────────────────────────────────────────────────
+
+function ProgressStepper({ stages, currentStage }: { stages: string[]; currentStage: number }) {
+  return (
+    <div className="flex items-center gap-1 px-1 py-2 font-mono text-[10px]">
+      {stages.map((label, i) => (
+        <div key={label} className="flex items-center gap-1">
+          {i > 0 && <div className={`w-3 h-px ${i <= currentStage ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300 dark:bg-dbx-gray-700'}`} />}
+          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+            i < currentStage ? 'bg-dbx-blue dark:bg-dbx-green' :
+            i === currentStage ? 'bg-dbx-amber animate-pulse' :
+            'bg-dbx-gray-300 dark:bg-dbx-gray-700'
+          }`} />
+          <span className={`${
+            i < currentStage ? 'text-dbx-blue dark:text-dbx-green' :
+            i === currentStage ? 'text-dbx-amber' :
+            'text-dbx-gray-400 dark:text-dbx-gray-600'
+          }`}>{label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const STAGE_MAPS: Record<string, { match: string; label: string }[]> = {
+  'exec-deploy-agent': [
+    { match: 'validat', label: 'Validate' },
+    { match: 'config sync', label: 'Config' },
+    { match: 'pre-flight', label: 'Pre-flight' },
+    { match: 'bundl', label: 'Bundle' },
+    { match: 'upload', label: 'Upload' },
+    { match: 'deploy', label: 'Deploy' },
+    { match: 'running', label: 'Ready' },
+  ],
+  'exec-lakebase': [
+    { match: 'creat', label: 'Create' },
+    { match: 'available', label: 'Ready' },
+  ],
+  'exec-tables': [
+    { match: 'catalog', label: 'Schema' },
+    { match: 'provis', label: 'Tables' },
+    { match: 'load', label: 'Data' },
+  ],
+  'exec-ka': [
+    { match: 'creat', label: 'Create' },
+    { match: 'upload', label: 'Upload' },
+    { match: 'ready', label: 'Ready' },
+  ],
+  'exec-functions': [
+    { match: 'function', label: 'Functions' },
+    { match: 'procedure', label: 'Procedures' },
+  ],
+  'exec-grants': [
+    { match: 'grant', label: 'Grants' },
+  ],
 }
 
 // ─── Current value helper ──────────────────────────────────────────────────────
@@ -859,41 +1435,359 @@ function currentValueLabel(stepId: StepId, values: Record<string, string>): stri
   const v = values
   switch (stepId) {
     case 'host':      return v.DATABRICKS_HOST?.replace('https://', '') || ''
-    case 'auth':      return v.DATABRICKS_TOKEN ? v.DATABRICKS_TOKEN.slice(0, 4) + '*'.repeat(Math.max(0, v.DATABRICKS_TOKEN.length - 4)) : ''
     case 'warehouse': return v.DATABRICKS_WAREHOUSE_ID || ''
     case 'schema':    return v.PROJECT_UNITY_CATALOG_SCHEMA || ''
     case 'tables':    return v.TABLE_COUNT ? `${v.TABLE_COUNT} table(s)` : ''
     case 'functions': return v.ROUTINE_COUNT ? `${v.ROUTINE_COUNT} routine(s)` : ''
-    case 'model':     return v.AGENT_MODEL_ENDPOINT?.replace('https://', '') || ''
+    case 'model':     return v.AGENT_MODEL?.replace('https://', '') || ''
     case 'prompt':    return v.PROMPT_FILES || 'conf/prompt/'
-    case 'genie':     return v.PROJECT_GENIE_CHECKIN || ''
-    case 'ka':        return v.PROJECT_KA_PASSENGERS || ''
+    case 'genie':     return ''
+    case 'bricks':    return ''
+    case 'vs':        return v.PROJECT_VS_INDEX || ''
     case 'mlflow':    return v.MLFLOW_EXPERIMENT_ID || ''
     case 'deploy':    return v.DBX_APP_NAME || ''
     default:          return ''
   }
 }
 
+// ─── Step key map (step -> primary env key for inline edit) ─────────────────
+
+const STEP_KEY_MAP: Record<string, string> = {
+  host: 'DATABRICKS_HOST',
+  auth: 'DATABRICKS_TOKEN',
+  warehouse: 'DATABRICKS_WAREHOUSE_ID',
+  schema: 'PROJECT_UNITY_CATALOG_SCHEMA',
+  model: 'AGENT_MODEL',
+  vs: 'PROJECT_VS_INDEX',
+  mlflow: 'MLFLOW_EXPERIMENT_ID',
+  deploy: 'DBX_APP_NAME',
+}
+
+// ─── Inline editable value ──────────────────────────────────────────────────
+
+function InlineEditable({ value, stepId, onSave, onClear }: {
+  value: string
+  stepId: string
+  onSave: (val: string) => void
+  onClear: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus() }, [editing])
+  useEffect(() => { setDraft(value) }, [value])
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && draft.trim()) {
+              let val = draft.trim()
+              // Auto-prepend https:// for host step
+              if (stepId === 'host' && !val.startsWith('http')) val = 'https://' + val
+              if (stepId === 'host' && !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(val)) return
+              onSave(val); setEditing(false)
+            }
+            if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+          }}
+          onBlur={() => { setDraft(value); setEditing(false) }}
+          className="flex-1 text-[13px] font-mono px-1.5 py-0.5 rounded border border-dbx-blue/40 dark:border-dbx-green/40 bg-transparent text-dbx-blue dark:text-dbx-green outline-none"
+        />
+        {stepId === 'host' && editing && (() => {
+          const v = draft.trim().startsWith('http') ? draft.trim() : 'https://' + draft.trim()
+          return !/^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(v) && draft.trim().length > 5
+        })() && (
+          <span className="text-[10px] text-dbx-amber ml-1 flex-shrink-0">must be a valid Databricks URL</span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      {stepId === 'host' && value ? (
+        <a href={value.startsWith('http') ? value : `https://${value}`} target="_blank" rel="noopener noreferrer"
+          className="text-[13px] font-mono text-dbx-blue truncate hover:underline">
+          {value}
+        </a>
+      ) : value ? (
+        <span className="text-[13px] font-mono text-dbx-blue truncate">{value}</span>
+      ) : (
+        <button onClick={() => setEditing(true)} className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors">
+          enter workspace url
+        </button>
+      )}
+      {value && (
+        <button onClick={() => { navigator.clipboard.writeText(value) }} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="copy">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      )}
+      {STEP_KEY_MAP[stepId] && (
+        <button onClick={() => setEditing(true)} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="edit">
+          <Pencil className="w-3 h-3" />
+        </button>
+      )}
+      {value && (
+        <button onClick={onClear} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-red transition-colors" title="clear">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Bridge auth panel ──────────────────────────────────────────────────────
+
+function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const [nonce, setNonce] = useState<{ nonce_id: string; nonce: string; ws_default?: string } | null>(null)
+  const [status, setStatus] = useState<'loading' | 'waiting' | 'connected' | 'error'>('loading')
+  const [connInfo, setConnInfo] = useState<{ host: string; user: string; warning?: string } | null>(null)
+  const [copied, setCopied] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Fetch nonce on mount
+  useEffect(() => {
+    fetch('/api/auth/bridge-nonce')
+      .then(r => r.json())
+      .then((data: { nonce_id: string; nonce: string; ws_default?: string }) => {
+        setNonce(data)
+        setStatus('waiting')
+      })
+      .catch(() => setStatus('error'))
+  }, [])
+
+  // Poll for connection
+  useEffect(() => {
+    if (status !== 'waiting') return
+    pollRef.current = setInterval(() => {
+      fetch('/api/auth/bridge-status')
+        .then(r => r.json())
+        .then((data: { status: string; host?: string; user?: string; warning?: string }) => {
+          if (data.status === 'connected') {
+            setStatus('connected')
+            setConnInfo({ host: data.host || '', user: data.user || '', warning: data.warning || '' })
+            if (pollRef.current) clearInterval(pollRef.current)
+            setTimeout(onDone, 1500)
+          }
+        })
+        .catch(() => {})
+    }, 2000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [status, onDone])
+
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const command = nonce ? `curl -sL "${appUrl}/api/auth/bridge-script?nonce=${nonce.nonce_id}" | bash` : ''
+
+  const copyCommand = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">
+        {status === 'loading' && (
+          <div className="text-sm text-dbx-gray-400 animate-pulse">Generating secure session...</div>
+        )}
+
+        {status === 'error' && (
+          <div className="text-sm text-dbx-red">Failed to initialize bridge session. Try again.</div>
+        )}
+
+        {(status === 'waiting' || status === 'connected') && nonce && (
+          <>
+            <div className="text-[13px] font-semibold text-dbx-gray-700 dark:text-dbx-gray-200 mb-2">
+              Connect to workspace
+            </div>
+
+            <div className="rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2 mb-3">
+              <div className="text-[11px] text-dbx-amber font-medium">A 7-day PAT will be created on the target workspace</div>
+              <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">Your browser will open for SSO authentication.</div>
+            </div>
+
+            {typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (
+              <>
+                {/* Local mode: curl | bash */}
+                <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
+                  Run this in your terminal:
+                </div>
+                <div className="relative group">
+                  <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50">
+                    {command}
+                  </pre>
+                  <button
+                    onClick={copyCommand}
+                    className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
+                  >
+                    {copied ? 'copied' : 'copy'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Deployed mode: curl from GitHub */}
+                <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
+                  Run this in your terminal:
+                </div>
+                <div className="relative group">
+                  <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50 whitespace-pre-wrap break-all">
+                    {`bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`}
+                  </pre>
+                  <button
+                    onClick={() => {
+                      const cmd = `bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`
+                      navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000)
+                    }}
+                    className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
+                  >
+                    {copied ? 'copied' : 'copy'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Status */}
+            <div className="mt-5 flex items-center gap-2">
+              {status === 'waiting' ? (
+                <>
+                  <span className="inline-block w-2 h-2 rounded-full bg-dbx-amber animate-pulse" />
+                  <span className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500">
+                    Waiting for connection...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="inline-block w-2 h-2 rounded-full bg-dbx-green" />
+                  <span className="text-[12px] text-dbx-green font-medium">
+                    Connected to {connInfo?.host}
+                    {connInfo?.user ? ` as ${connInfo.user}` : ''}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {connInfo?.warning && (
+              <div className="mt-3 rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2">
+                <div className="text-[11px] text-dbx-amber font-medium">IP Access List warning</div>
+                <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">{connInfo.warning}</div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800">
+        <button
+          onClick={onBack}
+          className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-700 font-mono transition-all duration-150"
+        >
+          back
+        </button>
+      </div>
+    </>
+  )
+}
+
 // ─── Main drawer ───────────────────────────────────────────────────────────────
 
 export function SetupDrawer({
-  activeStep, phase, selectedChoice, execLines, currentValues,
+  activeStep, phase, selectedChoice, execLines, currentValues, stepStatus,
   testCache, onTestResult,
   onSelectChoice, onContinue, onBack, onReconfigure, onExecDone, onRefresh, onNext,
+  selectedInstanceKey, instances, forgeMode,
 }: SetupDrawerProps) {
   const step      = SETUP_STEPS.find(s => s.id === activeStep)!
-  const choice    = selectedChoice !== null ? step.choices[selectedChoice] : null
+
+  // Hide CLI-dependent choices in forge/deployed mode
+  const CLI_ACTIONS = new Set(['cfg-profile', 'cfg-new'])
+  const DEPLOY_CLI_ACTIONS = new Set<string>()
+  const filteredChoices = forgeMode
+    ? step.choices.filter(c => !CLI_ACTIONS.has(c.action) && !DEPLOY_CLI_ACTIONS.has(c.action))
+    : step.choices
+
+  const choice    = selectedChoice !== null ? filteredChoices[selectedChoice] : null
   const keepLabel = currentValueLabel(activeStep, currentValues)
 
   const abortRef = useRef<AbortController | null>(null)
+  const [lastExecOk, setLastExecOk] = useState(true)
+  const [showPat, setShowPat] = useState(false)
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set())
+  const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(new Set())
+  const tablesHydrated = useRef(false)
+  const funcsHydrated = useRef(false)
+  const [selKaEndpoint, setSelKaEndpoint] = useState('')
+  const [selKaName, setSelKaName] = useState('')
+
+  // Hydrate table/function selection from saved config
+  useEffect(() => {
+    fetch('/api/env')
+      .then(r => r.json())
+      .then((entries: { key: string; value: string }[]) => {
+        const tables = entries.find(e => e.key === 'PROJECT_TABLES')?.value
+        if (tables && tables.trim()) {
+          setSelectedTables(new Set(tables.split(',').filter(Boolean)))
+          tablesHydrated.current = true
+        }
+        const funcs = entries.find(e => e.key === 'PROJECT_FUNCTIONS')?.value
+        if (funcs && funcs.trim()) {
+          setSelectedFunctions(new Set(funcs.split(',').filter(Boolean)))
+          funcsHydrated.current = true
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Persist table selection to config on change (skip auto-select saves before hydration)
+  const handleTableSelection = useCallback((sel: Set<string>) => {
+    setSelectedTables(sel)
+    if (tablesHydrated.current) {
+      fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_TABLES: Array.from(sel).join(',') }),
+      })
+    } else {
+      // First call is auto-select-all from SchemaTableList, mark as hydrated
+      tablesHydrated.current = true
+    }
+  }, [])
+
+  // Persist function selection to config on change
+  const handleFunctionSelection = useCallback((sel: Set<string>) => {
+    setSelectedFunctions(sel)
+    if (funcsHydrated.current) {
+      fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_FUNCTIONS: Array.from(sel).join(',') }),
+      })
+    } else {
+      funcsHydrated.current = true
+    }
+  }, [])
+
+  // Reset exec status when step changes
+  useEffect(() => { setLastExecOk(true) }, [activeStep])
+
+  // Wrap onExecDone to track success/failure for renderDone
+  const wrappedExecDone = useCallback((ok: boolean) => {
+    setLastExecOk(ok)
+    onExecDone(ok)
+  }, [onExecDone])
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
-    onExecDone(false)
-  }, [onExecDone])
+    wrappedExecDone(false)
+  }, [wrappedExecDone])
 
-  const TESTABLE_STEPS: StepId[] = ['host', 'auth', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'ka', 'mlflow', 'deploy']
+  const TESTABLE_STEPS: StepId[] = ['host', 'warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'vs', 'mlflow', 'deploy']
   const testState: TestResult = testCache[activeStep] ?? { status: 'idle', message: '' }
   const setTestState = useCallback((r: TestResult) => onTestResult(activeStep, r), [activeStep, onTestResult])
 
@@ -927,6 +1821,7 @@ export function SetupDrawer({
   const [selProfile, setSelProfile]     = useState('')
   const [selWhId, setSelWhId]           = useState('')
   const [selWhName, setSelWhName]       = useState('')
+  const [selEndpoint, setSelEndpoint]   = useState('')
   const [selCatalog, setSelCatalog]     = useState('')
   const [catSchema, setCatSchema]       = useState('main')
   const [selGenieId, setSelGenieId]     = useState('')
@@ -935,14 +1830,116 @@ export function SetupDrawer({
   const [genieName, setGenieName]       = useState('')
   const [assetsSchema, setAssetsSchema] = useState('')
   const [kaDocsReady, setKaDocsReady]   = useState(false)
+  const [mcpSlug, setMcpSlug]           = useState('')
+  const [mcpHeader, setMcpHeader]       = useState('')
+  const [apiMethod, setApiMethod]       = useState('GET')
+  const [apiPath, setApiPath]           = useState('/')
+  const [apiDesc, setApiDesc]           = useState('')
+  const [apiParams, setApiParams]       = useState('')
+  const [selMlflowId, setSelMlflowId]     = useState('')
+  const [csvFiles, setCsvFiles]           = useState<File[]>([])
+  const [csvUploading, setCsvUploading]   = useState(false)
+  const csvInputRef                       = useRef<HTMLInputElement>(null)
+  const [connectSchema, setConnectSchema] = useState(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
+  const [instanceTest, setInstanceTest] = useState<TestResult>({ status: 'idle', message: '' })
+  const [instanceTools, setInstanceTools] = useState<{ name: string; description: string }[] | null>(null)
+  const [toolsLoading, setToolsLoading] = useState(false)
+  const [featureKeyInput, setFeatureKeyInput] = useState('')
+  const [featureKeySaving, setFeatureKeySaving] = useState(false)
+  const [logoUrlInput, setLogoUrlInput] = useState('')
+  const [logoSearchInput, setLogoSearchInput] = useState('')
+  const [logoSearching, setLogoSearching] = useState(false)
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
+  const [featureItems, setFeatureItems] = useState<FeatureItem[]>([])
+  const [featureLakebaseName, setFeatureLakebaseName] = useState(currentValues.LAKEBASE_INSTANCE_NAME || '')
+  const [featuresDirty, setFeaturesDirty] = useState<Record<string, boolean>>({})  // key -> new enabled state
+  const [brickItems, setBrickItems] = useState<FeatureItem[]>([])
+  const [bricksDirty, setBricksDirty] = useState<Record<string, boolean>>({})
+  const [currentStage, setCurrentStage] = useState(0)
+  const [elapsedSec, setElapsedSec]     = useState(0)
+
+  // Elapsed timer — ticks every second while executing
+  useEffect(() => {
+    if (phase !== 'execute') { setElapsedSec(0); setCurrentStage(0); return }
+    const t = setInterval(() => setElapsedSec(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [phase])
+
+  // Test a specific instance by env key
+  const handleInstanceTest = useCallback(async (key: string) => {
+    setInstanceTest({ status: 'loading', message: '' })
+    try {
+      const r = await fetch(`/api/setup/test?step=${activeStep}&key=${encodeURIComponent(key)}`)
+      const text = await r.text()
+      let data: { ok: boolean; message: string }
+      try { data = JSON.parse(text) } catch { data = { ok: false, message: text.slice(0, 120) } }
+      setInstanceTest({ status: data.ok ? 'ok' : 'fail', message: data.message })
+    } catch (e) {
+      setInstanceTest({ status: 'fail', message: String(e) })
+    }
+  }, [activeStep])
+
+  // Auto-test instance on selection + fetch tools for MCP/A2A + load logo URL
+  useEffect(() => {
+    setInstanceTest({ status: 'idle', message: '' })
+    setInstanceTools(null)
+    if (selectedInstanceKey) {
+      const timer = setTimeout(() => handleInstanceTest(selectedInstanceKey), 200)
+      // Fetch tools for MCP/A2A instances
+      if (['mcp', 'a2a'].includes(activeStep)) {
+        setToolsLoading(true)
+        fetch(`/api/setup/mcp-tools?key=${encodeURIComponent(selectedInstanceKey)}`)
+          .then(r => r.json())
+          .then(data => { if (data.tools) setInstanceTools(data.tools); })
+          .catch(() => {})
+          .finally(() => setToolsLoading(false))
+      }
+      // Load current logo URL when LOGO panel opens
+      if (selectedInstanceKey === 'PROJECT_TOOL_LOGO') {
+        fetch('/api/env').then(r => r.json()).then((entries: { key: string; value: string }[]) => {
+          const entry = entries.find((e: { key: string }) => e.key === 'PROJECT_LOGO_URL')
+          if (entry?.value) {
+            setLogoUrlInput(entry.value)
+            setLogoPreviewUrl(entry.value)
+          } else {
+            setLogoUrlInput('')
+            setLogoPreviewUrl(null)
+          }
+        }).catch(() => {})
+      }
+      return () => clearTimeout(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInstanceKey])
 
   useEffect(() => {
     setSelProfile(''); setSelWhId(''); setSelWhName('')
     setSelCatalog(''); setCatSchema('main')
     setSelGenieId(''); setSelGenieName('')
     setManualVal(''); setGenieName(''); setKaDocsReady(false)
+    setMcpSlug(''); setMcpHeader('')
     setAssetsSchema(currentValues.PROJECT_UNITY_CATALOG_SCHEMA || '')
+    setCsvFiles([]); setConnectSchema('')
+    setFeaturesDirty({}); setBricksDirty({})
   }, [activeStep, selectedChoice, currentValues.PROJECT_UNITY_CATALOG_SCHEMA])
+
+  // Fetch feature registry when cfg-features is selected
+  useEffect(() => {
+    if (choice?.action !== 'cfg-features') return
+    fetch('/api/setup/resources?type=features')
+      .then(r => r.json())
+      .then(data => { if (data.items) setFeatureItems(data.items) })
+      .catch(() => {})
+  }, [choice])
+
+  // Fetch bricks registry when cfg-bricks is selected
+  useEffect(() => {
+    if (choice?.action !== 'cfg-bricks') return
+    fetch('/api/setup/resources?type=bricks')
+      .then(r => r.json())
+      .then(data => { if (data.items) setBrickItems(data.items) })
+      .catch(() => {})
+  }, [choice])
 
   // SSE runner
   useEffect(() => {
@@ -950,9 +1947,80 @@ export function SetupDrawer({
     let action = choice.action
     const params: Record<string, string> = {}
 
+    // Features: save all toggled features + lakebase if memory enabled
+    if (action === 'cfg-features') {
+      const dirty = Object.entries(featuresDirty)
+      if (dirty.length === 0 && !featureLakebaseName) { onExecDone(true); onRefresh(); return }
+      ;(async () => {
+        for (const [key, enabled] of dirty) {
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-feature-toggle', params: { key, enabled: enabled ? 'true' : 'false' } }),
+          })
+        }
+        // Save lakebase instance name when memory is enabled
+        const memoryEnabled = featureItems.find(f => f.key === 'MEMORY')?.enabled
+        if (memoryEnabled && featureLakebaseName.trim()) {
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-lakebase', params: { name: featureLakebaseName.trim() } }),
+          })
+        }
+        setFeaturesDirty({})
+        onExecDone(true)
+        onRefresh()
+      })()
+      return
+    }
+    // Bricks: save all toggled bricks + KA endpoint if KA enabled
+    if (action === 'cfg-bricks') {
+      const dirty = Object.entries(bricksDirty)
+      ;(async () => {
+        for (const [key, enabled] of dirty) {
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-brick-toggle', params: { key, enabled: enabled ? 'true' : 'false' } }),
+          })
+        }
+        // Save KA endpoint when KA brick is enabled
+        const kaEnabled = brickItems.find(b => b.key === 'KA')?.enabled
+        if (kaEnabled && selKaEndpoint) {
+          const slug = selKaName.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'DEFAULT'
+          await fetch('/api/setup/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save-multi-instance', params: { prefix: 'PROJECT_KA_', slug, url: selKaEndpoint } }),
+          })
+        }
+        setBricksDirty({})
+        onExecDone(true)
+        onRefresh()
+      })()
+      return
+    }
+    if (action === 'cfg-model'     && selEndpoint) { action = 'save-model-endpoint'; Object.assign(params, { name: selEndpoint }) }
     if (action === 'cfg-warehouse' && selWhId)    { action = 'save-warehouse'; Object.assign(params, { id: selWhId, name: selWhName }) }
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
     if (action === 'cfg-genie'     && selGenieId) { action = 'save-genie';     Object.assign(params, { id: selGenieId, name: selGenieName }) }
+    if (action === 'cfg-mlflow'    && selMlflowId)   { action = 'save-mlflow';   Object.assign(params, { id: selMlflowId }) }
+    if (action === 'pick-ka' && selKaEndpoint) {
+      const slug = selKaName.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'DEFAULT'
+      action = 'save-multi-instance'
+      Object.assign(params, { prefix: 'PROJECT_KA_', slug, url: selKaEndpoint })
+    }
+    // "Pick from existing" for functions: just confirm, no provisioning
+    // "Pick from existing" for functions: save selection to config
+    if (action === 'exec-functions' && activeStep === 'functions') {
+      fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PROJECT_FUNCTIONS: Array.from(selectedFunctions).join(',') }),
+      }).then(() => { onExecDone(true); onRefresh() })
+      return
+    }
     if (action === 'exec-genie'    && genieName)  { Object.assign(params, { name: genieName }) }
     // Host: cfg-profile saves host from selected profile
     if (action === 'cfg-profile' && activeStep === 'host' && selProfile) { action = 'save-host'; Object.assign(params, { profile: selProfile }) }
@@ -960,10 +2028,45 @@ export function SetupDrawer({
     if (action === 'cfg-profile' && activeStep === 'model' && selProfile) { action = 'save-model-profile'; Object.assign(params, { profile: selProfile }) }
     // cfg-new: run databricks auth login with provided host/profile
     if (action === 'cfg-new' && manualVal) { action = 'exec-auth-login'; Object.assign(params, { host: manualVal, profile: genieName || '' }) }
-    // Deploy: cfg-deploy-name saves app name to .env.local
+    // Manual: host step saves token (host already set via pen icon)
+    if (action === 'manual' && activeStep === 'host' && manualVal) {
+      action = 'save-manual'
+      Object.assign(params, { key: 'DATABRICKS_TOKEN', value: manualVal.trim() })
+    }
+    // Manual: save typed value directly to env for other steps
+    else if (action === 'manual' && manualVal && activeStep !== 'mcp' && activeStep !== 'a2a') {
+      const envKey = STEP_KEY_MAP[activeStep]
+      if (envKey) {
+        action = 'save-manual'
+        Object.assign(params, { key: envKey, value: manualVal.trim() })
+      }
+    }
+    // Deploy: cfg-deploy-name saves app name to config.json
     if (action === 'cfg-deploy-name' && manualVal) { action = 'save-deploy-name'; Object.assign(params, { name: manualVal.trim() }) }
+    // API: cfg-api-uc or cfg-api-direct saves API config to config.json
+    if (action === 'cfg-api-uc' && mcpSlug && manualVal) {
+      const slug = mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
+      action = 'save-api'
+      Object.assign(params, { slug, type: 'uc', conn: manualVal.trim(), method: apiMethod || 'GET', path: apiPath || '/', desc: apiDesc, apiParams, header: '' })
+    }
+    if (action === 'cfg-api-direct' && mcpSlug && manualVal) {
+      const slug = mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
+      action = 'save-api'
+      Object.assign(params, { slug, type: 'direct', url: manualVal.trim(), method: apiMethod || 'GET', path: apiPath || '/', desc: apiDesc, apiParams, header: mcpHeader })
+    }
     // KA: cfg-ka configure phase uploads docs, execute phase creates the KA endpoint
     if (action === 'cfg-ka') { action = 'exec-ka' }
+    // MCP/A2A: manual action saves slug + url + optional header
+    if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a') && mcpSlug && manualVal) {
+      const prefix = activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'
+      action = 'save-multi-instance'
+      Object.assign(params, { prefix, slug: mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_'), url: manualVal.trim(), header: mcpHeader.trim() })
+    }
+    // connect-tables: save the schema reference directly
+    if (action === 'connect-tables' && connectSchema.trim()) {
+      action = 'save-manual'
+      Object.assign(params, { key: 'PROJECT_UNITY_CATALOG_SCHEMA', value: connectSchema.trim() })
+    }
     // Create all assets: pass confirmed schema so backend saves it first
     if (action === 'exec-assets' && assetsSchema) { Object.assign(params, { schema: assetsSchema.trim() }) }
 
@@ -971,6 +2074,36 @@ export function SetupDrawer({
     const controller = new AbortController()
     abortRef.current = controller
     async function run() {
+      // upload-csv: multipart upload then SSE provision
+      if (choice?.action === 'upload-csv' && csvFiles.length > 0) {
+        try {
+          setCsvUploading(true)
+          window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `[~] uploading ${csvFiles.length} CSV file(s)...`, stream: 'stdout' } }))
+          const form = new FormData()
+          for (const f of csvFiles) form.append('files', f)
+          const upResp = await fetch('/api/setup/upload-csv', { method: 'POST', body: form, signal: controller.signal })
+          const upData = await upResp.json()
+          setCsvUploading(false)
+          if (!upData.ok) {
+            const failedFiles = (upData.uploaded || []).filter((u: any) => !u.ok).map((u: any) => `${u.name}: ${u.error || 'unknown'}`).join(', ')
+            window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `[x] upload failed: ${failedFiles || 'unknown'}`, stream: 'stderr' } }))
+            wrappedExecDone(false)
+            return
+          }
+          for (const f of (upData.uploaded || [])) {
+            const sym = f.ok ? '[+]' : '[x]'
+            window.dispatchEvent(new CustomEvent('exec-line', { detail: { text: `${sym} ${f.name}`, stream: 'stdout' } }))
+          }
+          // Now provision the uploaded CSVs via SSE
+          action = 'exec-tables-uploaded'
+        } catch (e) {
+          setCsvUploading(false)
+          if (controller.signal.aborted) return
+          wrappedExecDone(false)
+          return
+        }
+      }
+
       try {
         const resp = await fetch('/api/setup/exec', {
           method: 'POST',
@@ -978,7 +2111,7 @@ export function SetupDrawer({
           body: JSON.stringify({ action, params }),
           signal: controller.signal,
         })
-        if (!resp.body) { onExecDone(false); return }
+        if (!resp.body) { wrappedExecDone(false); return }
         const reader  = resp.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
@@ -997,14 +2130,24 @@ export function SetupDrawer({
             }
             if (!evtData) continue
             const parsed = JSON.parse(evtData)
-            if (evtType === 'line')      window.dispatchEvent(new CustomEvent('exec-line', { detail: parsed }))
-            else if (evtType === 'done' && !aborted) onExecDone(parsed.ok)
+            if (evtType === 'line') {
+              window.dispatchEvent(new CustomEvent('exec-line', { detail: parsed }))
+              // Advance progress stepper stage
+              const stageMap = STAGE_MAPS[action] || []
+              const lineText = (parsed.text ?? '').toLowerCase()
+              setCurrentStage(prev => {
+                for (let i = prev; i < stageMap.length; i++) {
+                  if (lineText.includes(stageMap[i].match)) return i + 1
+                }
+                return prev
+              })
+            } else if (evtType === 'done' && !aborted) wrappedExecDone(parsed.ok)
           }
         }
       } catch (e) {
         if (controller.signal.aborted) return  // user cancelled
         console.error('[exec]', e)
-        if (!aborted) onExecDone(false)
+        if (!aborted) wrappedExecDone(false)
       }
     }
     run()
@@ -1016,14 +2159,29 @@ export function SetupDrawer({
   const phaseIdx = PHASES.indexOf(phase)
 
   // ── Choose ─────────────────────────────────────────────────────────────────
+  // Steps that require host to be configured first
+  const NEEDS_HOST = new Set(['warehouse', 'schema', 'tables', 'functions', 'model', 'genie', 'bricks', 'vs', 'mlflow', 'grants', 'deploy', 'git'])
+  const hostMissing = NEEDS_HOST.has(activeStep) && !currentValues.DATABRICKS_HOST
+
   function renderChoose() {
+    if (hostMissing) {
+      return (
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center">
+            <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">configure databricks host first</div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <>
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
-          {step.choices.map((c, i) => (
+          {filteredChoices.map((c, i) => (
               <button
                 key={i}
                 onClick={() => onSelectChoice(i)}
+                onDoubleClick={() => { onSelectChoice(i); setTimeout(onContinue, 0) }}
                 className={`
                   w-full flex items-start gap-3 px-3.5 py-3 rounded-lg border mb-2 text-left transition-all duration-150 animate-slide-up
                   ${selectedChoice === i
@@ -1050,7 +2208,7 @@ export function SetupDrawer({
               <>
                 <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                   <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">tables</div>
-                  <SchemaTableList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} />
+                  <SchemaTableList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} selectable selected={selectedTables} onSelectionChange={handleTableSelection} />
                 </div>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'data' }))}
@@ -1060,7 +2218,13 @@ export function SetupDrawer({
                 </button>
               </>
             )}
-            {activeStep === 'ka' && (
+            {activeStep === 'functions' && (
+              <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
+                <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">routines</div>
+                <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
+              </div>
+            )}
+            {activeStep === 'bricks' && (
               <div className="mt-3 pt-2.5 border-t border-dbx-gray-200 dark:border-dbx-gray-700">
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'ka' }))}
@@ -1095,55 +2259,287 @@ export function SetupDrawer({
     if (!choice) return null
     const action = choice.action
 
-    const validSchema = /^\w+\.\w+$/.test(assetsSchema.trim())
+    const validSchema = /^[\w-]+\.[\w-]+$/.test(assetsSchema.trim())
 
     function canRun() {
+      if (action === 'cfg-features')  return true
+      if (action === 'cfg-bricks')    return true
+      if (action === 'cfg-model')     return !!selEndpoint
       if (action === 'cfg-profile')   return !!selProfile
       if (action === 'cfg-warehouse') return !!selWhId
       if (action === 'cfg-catalog')   return !!selCatalog && !!catSchema
       if (action === 'cfg-genie')     return !!selGenieId
+      if (action === 'cfg-mlflow')    return !!selMlflowId
       if (action === 'exec-genie')    return !!genieName
       if (action === 'cfg-new')         return !!manualVal.trim()
       if (action === 'cfg-deploy-name') return !!manualVal.trim()
       if (action === 'exec-assets')     return validSchema
+      if (action === 'upload-csv')     return csvFiles.length > 0 && !csvUploading
+      if (action === 'connect-tables') return /^[\w-]+\.[\w-]+$/.test(connectSchema.trim())
       if (action === 'cfg-ka')        return kaDocsReady
+      if (action === 'pick-ka')      return !!selKaEndpoint
+      if (action === 'cfg-api-uc')     return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'cfg-api-direct') return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a')) return !!mcpSlug.trim() && !!manualVal.trim()
+      if (action === 'manual' && activeStep === 'host') return /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
+      if (action === 'manual' && activeStep === 'schema') return /^[\w-]+\.[\w-]+$/.test(manualVal.trim())
       if (action === 'manual')        return !!manualVal.trim()
       return true
     }
 
     let body: React.ReactNode
-    if (action === 'cfg-profile')
-      body = <ProfileList selected={selProfile} onSelect={setSelProfile} />
+    if (action === 'cfg-features')
+      body = <FeatureList toggles={featureItems} onToggle={(key, enabled) => {
+        setFeatureItems(prev => prev.map(f => f.key === key ? { ...f, enabled } : f))
+        setFeaturesDirty(prev => ({ ...prev, [key]: enabled }))
+      }} lakebaseName={featureLakebaseName} onLakebaseSelect={setFeatureLakebaseName}
+        onLakebaseCreate={(name) => {
+          setFeatureLakebaseName(name)
+          // Fire exec-lakebase to create the instance
+          fetch('/api/setup/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'exec-lakebase', params: {} }) })
+        }} />
+    else if (action === 'cfg-bricks')
+      body = <BricksList toggles={brickItems} onToggle={(key, enabled) => {
+        setBrickItems(prev => prev.map(b => b.key === key ? { ...b, enabled } : b))
+        setBricksDirty(prev => ({ ...prev, [key]: enabled }))
+      }} kaEndpoint={selKaEndpoint} onKaSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} />
+    else if (action === 'cfg-model')
+      body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'cfg-profile')
+      body = <ProfileList selected={selProfile} onSelect={setSelProfile} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-warehouse')
-      body = <WarehouseList selected={selWhId} onSelect={(id, name) => { setSelWhId(id); setSelWhName(name) }} />
+      body = <WarehouseList selected={selWhId} onSelect={(id, name) => { setSelWhId(id); setSelWhName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-catalog')
       body = <CatalogPicker catalog={selCatalog} schema={catSchema} onCatalog={setSelCatalog} onSchema={setCatSchema} />
     else if (action === 'cfg-genie')
-      body = <GenieList selected={selGenieId} onSelect={(id, name) => { setSelGenieId(id); setSelGenieName(name) }} />
+      body = <GenieList selected={selGenieId} onSelect={(id, name) => { setSelGenieId(id); setSelGenieName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'cfg-mlflow')
+      body = <MlflowList selected={selMlflowId} onSelect={setSelMlflowId} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'pick-ka')
+      body = <KaPickerList selected={selKaEndpoint} onSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} onConfirm={() => setTimeout(onContinue, 0)} />
+    else if (action === 'exec-functions')
+      body = (<>
+        <Label>select functions for the agent</Label>
+        <SchemaRoutineList prefix={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST || ''} selectable selected={selectedFunctions} onSelectionChange={handleFunctionSelection} />
+      </>)
     else if (action === 'exec-genie')
       body = (<><Label>genie room name</Label><Input value={genieName} onChange={setGenieName} placeholder="Checkin Metrics" /></>)
+    else if (action === 'cfg-api-uc')
+      body = (<>
+        <Label>API name</Label>
+        <Input value={mcpSlug} onChange={setMcpSlug} placeholder="weather" />
+        <div className="mt-3"><Label>UC connection name</Label></div>
+        <Input value={manualVal} onChange={setManualVal} placeholder="my-weather-api" />
+        <div className="mt-3"><Label>method</Label></div>
+        <Input value={apiMethod} onChange={setApiMethod} placeholder="GET" />
+        <div className="mt-3"><Label>path</Label></div>
+        <Input value={apiPath} onChange={setApiPath} placeholder="/v1/current" />
+        <div className="mt-3"><Label>description</Label></div>
+        <Input value={apiDesc} onChange={setApiDesc} placeholder="Get current weather for a city" />
+        <div className="mt-3"><Label>params (optional, comma-separated name:type)</Label></div>
+        <Input value={apiParams} onChange={setApiParams} placeholder="city:str,units:str" />
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_CONN to config.json
+        </div>
+      </>)
+    else if (action === 'cfg-api-direct')
+      body = (<>
+        <Label>API name</Label>
+        <Input value={mcpSlug} onChange={setMcpSlug} placeholder="weather" />
+        <div className="mt-3"><Label>base URL</Label></div>
+        <Input value={manualVal} onChange={setManualVal} placeholder="https://api.weather.com" />
+        <div className="mt-3"><Label>method</Label></div>
+        <Input value={apiMethod} onChange={setApiMethod} placeholder="GET" />
+        <div className="mt-3"><Label>path</Label></div>
+        <Input value={apiPath} onChange={setApiPath} placeholder="/v1/current" />
+        <div className="mt-3"><Label>description</Label></div>
+        <Input value={apiDesc} onChange={setApiDesc} placeholder="Get current weather for a city" />
+        <div className="mt-3"><Label>params (optional, comma-separated name:type)</Label></div>
+        <Input value={apiParams} onChange={setApiParams} placeholder="city:str,units:str" />
+        <div className="mt-3"><Label>auth header (optional)</Label></div>
+        <Input value={mcpHeader} onChange={setMcpHeader} placeholder="X-API-Key:sk-abc123" />
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves PROJECT_API_{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'}_URL to config.json
+        </div>
+      </>)
+    else if (action === 'upload-csv')
+      body = (<>
+        <Label>select CSV files</Label>
+        <InfoBox>Choose one or more .csv files. Each file becomes a Delta table named after the file (e.g. flights.csv becomes the flights table).</InfoBox>
+        <input
+          ref={csvInputRef}
+          type="file"
+          multiple
+          accept=".csv"
+          onChange={e => { if (e.target.files) setCsvFiles(Array.from(e.target.files)) }}
+          className="hidden"
+        />
+        <button
+          onClick={() => csvInputRef.current?.click()}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[12px] font-mono font-medium border border-dashed border-dbx-gray-300 dark:border-dbx-gray-600 text-dbx-gray-500 dark:text-dbx-gray-400 hover:border-dbx-red dark:hover:border-[#FF6B5A] hover:text-dbx-red dark:hover:text-[#FF6B5A] transition-all"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          {csvFiles.length > 0 ? `${csvFiles.length} file(s) selected` : 'choose CSV files'}
+        </button>
+        {csvFiles.length > 0 && (
+          <div className="mt-2 space-y-0.5">
+            {csvFiles.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 py-0.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-dbx-blue dark:bg-dbx-green flex-shrink-0" />
+                <span className="text-[12px] font-mono text-dbx-gray-600 dark:text-dbx-gray-300">{f.name}</span>
+                <span className="text-[11px] font-mono text-dbx-gray-400">{(f.size / 1024).toFixed(0)} KB</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </>)
+    else if (action === 'connect-tables')
+      body = (<>
+        <Label>catalog.schema</Label>
+        <InfoBox>Enter the Unity Catalog catalog.schema where your tables already exist. The project will use these tables without creating or modifying them.</InfoBox>
+        <Input value={connectSchema} onChange={setConnectSchema} placeholder="my_catalog.my_schema" />
+        {connectSchema.trim() && !/^[\w-]+\.[\w-]+$/.test(connectSchema.trim()) && (
+          <div className="mt-1 text-[11px] font-mono text-dbx-amber">format: catalog.schema</div>
+        )}
+      </>)
+    else if (action === 'manual' && (activeStep === 'mcp' || activeStep === 'a2a'))
+      body = (<>
+        <Label>name</Label>
+        <Input value={mcpSlug} onChange={setMcpSlug} placeholder={activeStep === 'mcp' ? 'weather' : 'planner'} />
+        <div className="mt-3"><Label>{activeStep === 'mcp' ? 'server URL' : 'agent URL'}</Label></div>
+        <Input value={manualVal} onChange={setManualVal} placeholder="https://..." />
+        <div className="mt-3"><Label>auth header (optional)</Label></div>
+        <Input value={mcpHeader} onChange={setMcpHeader} placeholder="Authorization:Bearer sk-..." />
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves as {activeStep === 'mcp' ? 'PROJECT_MCP_' : 'PROJECT_A2A_'}{mcpSlug ? mcpSlug.toUpperCase().replace(/[^A-Z0-9]/g, '_') : '<NAME>'} in config.json
+        </div>
+      </>)
+    else if (action === 'manual' && activeStep === 'host') {
+      const wsHost = currentValues.DATABRICKS_HOST || ''
+      const hostValid = /^https?:\/\/.+\.(databricks\.com|databricks\.net|azuredatabricks\.net)/.test(wsHost)
+      const detectCl = (h: string) => h.includes('.azuredatabricks.net') ? 'Azure' : h.includes('.gcp.databricks.com') || h.includes('.gcp.databricksapps.com') ? 'GCP' : h.includes('.cloud.databricks.com') || h.includes('.aws.databricksapps.com') ? 'AWS' : null
+      const appHost = typeof window !== 'undefined' ? window.location.hostname : ''
+      const appCloud = detectCl(appHost)
+      const targetCloud = detectCl(wsHost)
+      const crossCloud = appCloud && targetCloud && appCloud !== targetCloud
+      const patValid = /^dapi[a-f0-9]{32,}$/.test(manualVal.trim())
+      const patStarted = manualVal.trim().length > 0
+      body = (<>
+        <Label>token (PAT)</Label>
+        <div className="relative">
+          <input
+            type={showPat ? 'text' : 'password'}
+            value={manualVal}
+            onChange={e => setManualVal(e.target.value)}
+            placeholder="dapi..."
+            className="w-full text-[14px] font-mono bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg px-3 py-2.5 pr-10 outline-none focus:border-dbx-red focus:shadow-dbx dark:focus:border-[#FF6B5A] text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-300 dark:placeholder:text-dbx-gray-600 transition-all duration-150"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPat(!showPat)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dbx-gray-400 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 transition-colors"
+            title={showPat ? 'hide token' : 'show token'}
+          >
+            {showPat ? (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            )}
+          </button>
+        </div>
+        <div className="mt-1 text-[11px] font-mono">
+          {patStarted && patValid && <span className="text-dbx-green">valid PAT</span>}
+          {patStarted && !patValid && <span className="text-dbx-gray-500">token should start with <span className="text-dbx-blue dark:text-dbx-green">dapi</span> followed by 32+ hex characters</span>}
+        </div>
+        {hostValid && (
+          <div className="mt-3 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-dbx-menu dark:bg-dbx-gray-800/30 px-3 py-2.5">
+            <div className="text-[11px] font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-wider mb-1.5">how to generate a PAT</div>
+            <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 leading-relaxed">
+              1. Open{' '}
+              <a
+                href={`${wsHost.replace(/\/+$/, '')}/#setting/account/token`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-dbx-blue dark:text-dbx-green hover:underline font-medium"
+              >
+                {wsHost.replace('https://', '').replace(/\/+$/, '')} token settings
+              </a>
+              <br/>
+              2. Click <strong>Generate new token</strong><br/>
+              3. Name: <span className="font-mono text-dbx-blue dark:text-dbx-green">brickforge</span>, Lifetime: <strong>7 days</strong><br/>
+              4. Scope: select <strong>All APIs</strong><br/>
+              5. Copy the <span className="font-mono">dapi...</span> token and paste above
+            </div>
+          </div>
+        )}
+        {!hostValid && (
+          <div className="mt-2 text-[11px] text-dbx-amber font-mono">
+            Set a valid workspace URL first (use the pencil icon above)
+          </div>
+        )}
+        {crossCloud && (
+          <div className="mt-3 rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2">
+            <div className="text-[11px] text-dbx-amber font-medium">IP Access List warning</div>
+            <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">
+              Target workspace ({targetCloud}) is on a different cloud than this Setup App ({appCloud}). The Setup App's IP may not be in the workspace's IP Access List. If API calls fail, ask your workspace admin to whitelist it.
+            </div>
+          </div>
+        )}
+      </>)
+    }
+    else if (action === 'manual' && activeStep === 'schema')
+      body = (<>
+        <Label>catalog . schema</Label>
+        <div className="flex items-center gap-0">
+          <input
+            value={manualVal.split('.')[0] || ''}
+            onChange={e => {
+              const schema = manualVal.split('.')[1] || ''
+              setManualVal(e.target.value + (schema ? '.' + schema : ''))
+            }}
+            placeholder="catalog"
+            className="flex-1 text-[13px] font-mono px-3 py-2 rounded-l-lg border border-r-0 border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-200 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+          />
+          <span className="text-[18px] font-bold text-dbx-gray-400 dark:text-dbx-gray-500 px-1.5 py-2 border-t border-b border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800">.</span>
+          <input
+            value={manualVal.split('.')[1] || ''}
+            onChange={e => {
+              const catalog = manualVal.split('.')[0] || ''
+              setManualVal(catalog + '.' + e.target.value)
+            }}
+            placeholder="schema"
+            className="flex-1 text-[13px] font-mono px-3 py-2 rounded-r-lg border border-l-0 border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-200 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+          />
+        </div>
+        <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">
+          saves as PROJECT_UNITY_CATALOG_SCHEMA={manualVal || 'catalog.schema'}
+        </div>
+      </>)
     else if (action === 'manual')
-      body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">writes directly to .env.local</div></>)
+      body = (<><Label>value</Label><Input value={manualVal} onChange={setManualVal} placeholder="paste value…" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">writes directly to config.json</div></>)
     else if (action === 'cfg-new')
       body = (<><Label>workspace url</Label><Input value={manualVal} onChange={setManualVal} placeholder="https://....cloud.databricks.com" /><div className="mt-3"><Label>profile name (optional)</Label><Input value={genieName} onChange={setGenieName} placeholder="my-workspace" /></div><InfoBox>Will run `databricks auth login` automatically and open the browser for OAuth.</InfoBox></>)
     else if (action === 'cfg-deploy-name')
-      body = (<><Label>app name</Label><Input value={manualVal} onChange={setManualVal} placeholder="my-agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">sets DBX_APP_NAME in .env.local -- used as the Databricks App name for deployment</div></>)
+      body = (<><Label>app name</Label><Input value={manualVal} onChange={setManualVal} placeholder="my-agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">sets DBX_APP_NAME in config.json -- used as the Databricks App name for deployment</div></>)
     else if (action === 'cfg-prompt')
       return (
         <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
-          <PromptEditor onDone={() => { onExecDone(true) }} />
+          <PromptEditor onDone={() => { wrappedExecDone(true) }} />
         </div>
       )
     else if (action === 'cfg-prompt-gen')
       return (
         <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
-          <PromptGenerator onDone={() => { onExecDone(true) }} />
+          <PromptGenerator onDone={() => { wrappedExecDone(true) }} />
         </div>
       )
     else if (action === 'cfg-ka')
       body = <KaDocsPicker onReady={setKaDocsReady} />
     else if (action === 'cfg-grants')
       body = <InfoBox>Run the grant script to apply UC table, routine, and warehouse permissions to the app service principal.</InfoBox>
+    else if (action === 'forge-bridge')
+      return <BridgeAuthPanel onDone={() => { onRefresh(); wrappedExecDone(true) }} onBack={onBack} />
     else
       body = <InfoBox>This action will execute automatically.</InfoBox>
 
@@ -1161,7 +2557,7 @@ export function SetupDrawer({
                 : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'}
             `}
           >
-            {action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
+            {action === 'cfg-features' ? 'save features →' : action === 'cfg-bricks' ? 'save bricks →' : action === 'cfg-ka' ? 'provision KA endpoint →' : 'run →'}
           </button>
           <button
             onClick={onBack}
@@ -1176,9 +2572,19 @@ export function SetupDrawer({
 
   // ── Execute ────────────────────────────────────────────────────────────────
   function renderExecute() {
+    const stageLabels = choice && STAGE_MAPS[choice.action] ? STAGE_MAPS[choice.action].map(s => s.label) : null
+    const elapsed = `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`
     return (
       <>
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">
+          {stageLabels && (
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-1">
+                <ProgressStepper stages={stageLabels} currentStage={currentStage} />
+                <span className="text-[10px] font-mono text-dbx-gray-400 flex-shrink-0">{elapsed}</span>
+              </div>
+            </div>
+          )}
           <Terminal lines={execLines} />
         </div>
         <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex gap-2">
@@ -1201,14 +2607,34 @@ export function SetupDrawer({
 
   // ── Done ───────────────────────────────────────────────────────────────────
   function renderDone() {
+    const failed = !lastExecOk
+
     return (
       <>
-        <div className="flex-1 flex flex-col items-center justify-center px-4 pt-4 pb-2 animate-pop">
-          <div className="w-16 h-16 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
-            <span className="text-[32px] text-dbx-blue dark:text-dbx-green leading-none">✓</span>
+        <div className="flex-1 flex flex-col px-4 pt-4 pb-2 overflow-y-auto">
+          <div className="flex flex-col items-center mb-3 animate-pop">
+            {failed ? (
+              <>
+                <div className="w-12 h-12 rounded-full bg-dbx-error/10 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(226,75,74,0.2)]">
+                  <span className="text-[24px] text-dbx-error leading-none">&#10007;</span>
+                </div>
+                <div className="text-[14px] font-semibold text-dbx-error">failed</div>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-full bg-dbx-blue-bg dark:bg-dbx-green-bg/10 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(46,125,209,0.2)] dark:shadow-[0_0_20px_rgba(0,169,114,0.2)]">
+                  <span className="text-[24px] text-dbx-blue dark:text-dbx-green leading-none">&#10003;</span>
+                </div>
+                <div className="text-[14px] font-semibold text-dbx-blue dark:text-dbx-green">configured</div>
+                {currentValues.PROJECT_UNITY_CATALOG_SCHEMA && (
+                  <div className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mt-0.5">
+                    {currentValues.PROJECT_UNITY_CATALOG_SCHEMA}
+                  </div>
+                )}
+              </>
+            )}
           </div>
-          <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 mb-1">configured</div>
-          <div className="text-[13px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">{step.title}</div>
+          {execLines.length > 0 && <Terminal lines={execLines} />}
         </div>
         <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-2">
           {onNext && (
@@ -1216,7 +2642,7 @@ export function SetupDrawer({
               onClick={onNext}
               className="w-full text-[14px] py-2.5 rounded-lg bg-dbx-blue dark:bg-dbx-green text-white font-mono font-medium hover:bg-dbx-blue-dk dark:hover:bg-dbx-green-dk shadow-[0_2px_8px_rgba(46,125,209,0.25)] dark:shadow-[0_2px_8px_rgba(0,169,114,0.25)] hover:shadow-[0_0_16px_rgba(46,125,209,0.3)] dark:hover:shadow-[0_0_16px_rgba(0,169,114,0.3)] transition-all duration-200 active:scale-[0.98]"
             >
-              next →
+              next &#8594;
             </button>
           )}
           <button
@@ -1246,24 +2672,40 @@ export function SetupDrawer({
           )}
         </div>
         <div className="text-[16px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">{step.title}</div>
-        {(keepLabel || TESTABLE_STEPS.includes(activeStep)) && (
+        {(keepLabel || TESTABLE_STEPS.includes(activeStep) || activeStep === 'host') && (
           <>
             {/* Line 1: current value — editable for schema step, read-only for others */}
             <div className="flex items-center gap-2 mt-1.5">
-              {activeStep === 'schema' ? (
-                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
-              ) : testState.status === 'loading'
+              {testState.status === 'loading'
                 ? <div className="text-[13px] font-mono text-dbx-blue dark:text-dbx-green truncate flex-1 animate-pulse">verifying…</div>
+                : activeStep === 'schema' ? (
+                <EditableSchemaField value={currentValues.PROJECT_UNITY_CATALOG_SCHEMA || ''} host={currentValues.DATABRICKS_HOST} onSaved={() => { onRefresh(); setTestState({ status: 'idle', message: '' }) }} />
+              )
                 : testState.status === 'fail'
                   ? <div className="text-[13px] font-mono text-dbx-amber truncate flex-1">please configure {step.label}</div>
-                  : keepLabel
-                    ? <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <span className="text-[13px] font-mono text-dbx-blue truncate">{keepLabel}</span>
-                        <button onClick={onReconfigure} className="flex-shrink-0 text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors" title="edit">
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      </div>
-                    : <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">not configured</div>
+                  : (keepLabel || activeStep === 'host')
+                    ? <InlineEditable
+                        value={keepLabel}
+                        stepId={activeStep}
+                        onSave={async (val) => {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ [STEP_KEY_MAP[activeStep] || '']: val }),
+                          })
+                          onRefresh()
+                        }}
+                        onClear={() => {
+                          fetch('/api/setup/clear-step', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ step: activeStep }),
+                          }).then(() => { onRefresh(); onReconfigure() })
+                        }}
+                      />
+                    : stepStatus !== 'missing'
+                      ? <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">configured</div>
+                      : <div className="text-[13px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">not configured</div>
               }
               {TESTABLE_STEPS.includes(activeStep) && testState.status !== 'loading' && (
                 <button
@@ -1274,10 +2716,15 @@ export function SetupDrawer({
                 </button>
               )}
             </div>
-            {/* Line 2: test result message (only when ok) */}
+            {/* Line 2: test result message */}
             {testState.status === 'ok' && testState.message && (
               <div className="text-[11px] font-mono text-dbx-green mt-0.5 truncate animate-fade-in">
                 [+] {testState.message}
+              </div>
+            )}
+            {testState.status === 'fail' && testState.message && (
+              <div className="text-[11px] font-mono text-dbx-red mt-0.5 truncate animate-fade-in">
+                [x] {testState.message}
               </div>
             )}
           </>
@@ -1298,8 +2745,274 @@ export function SetupDrawer({
         ))}
       </div>
 
+      {/* Instance detail panel (when a sub-instance is clicked) */}
+      {selectedInstanceKey && phase === 'choose' && (() => {
+        const inst = instances?.find(i => i.key === selectedInstanceKey)
+        return (
+          <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
+            <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 p-4 animate-slide-up">
+              <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">{activeStep === 'genie' ? 'space' : 'instance'}</div>
+              {activeStep === 'genie' && inst ? (() => {
+                const [editing, setEditing] = useState(false)
+                const [name, setName] = useState(inst.label || '')
+                const [saving, setSaving] = useState(false)
+                const save = async () => {
+                  if (!name.trim() || name === inst.label) { setEditing(false); return }
+                  setSaving(true)
+                  try {
+                    await fetch('/api/setup/exec', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'save-genie-rename', params: { space_id: inst.value, name: name.trim() } })
+                    })
+                    setEditing(false)
+                  } catch {}
+                  setSaving(false)
+                }
+                return editing ? (
+                  <div className="flex items-center gap-1 mb-1">
+                    <input value={name} onChange={e => setName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+                      autoFocus
+                      className="text-[14px] font-semibold font-mono bg-transparent border-b border-dbx-blue dark:border-dbx-green text-dbx-gray-800 dark:text-dbx-gray-100 outline-none w-full"
+                    />
+                    {saving && <span className="text-[10px] text-dbx-amber animate-pulse">saving...</span>}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 mb-1 group cursor-pointer" onClick={() => setEditing(true)}>
+                    <span className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono">{inst.label}</span>
+                    <svg className="w-3 h-3 text-dbx-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </div>
+                )
+              })() : (
+                <div className="text-[14px] font-semibold text-dbx-gray-800 dark:text-dbx-gray-100 font-mono mb-1">
+                  {inst?.label || selectedInstanceKey}
+                </div>
+              )}
+              <div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mb-1">
+                {selectedInstanceKey}
+              </div>
+              <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 font-mono mb-4 break-all">
+                {inst?.value || '(not set)'}
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${inst?.enabled ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300'}`} />
+                <span className="text-[11px] text-dbx-gray-500 dark:text-dbx-gray-400">{inst?.enabled ? 'enabled' : 'disabled'}</span>
+              </div>
+
+              {/* Test button */}
+              <button
+                onClick={() => handleInstanceTest(selectedInstanceKey)}
+                disabled={instanceTest.status === 'loading'}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all"
+              >
+                {instanceTest.status === 'loading' ? (
+                  <span className="text-dbx-amber animate-pulse">testing...</span>
+                ) : instanceTest.status === 'ok' ? (
+                  <span className="text-dbx-blue dark:text-dbx-green">&#10003; {instanceTest.message}</span>
+                ) : instanceTest.status === 'fail' ? (
+                  <span className="text-dbx-error">&#10007; {instanceTest.message}</span>
+                ) : (
+                  <span className="text-dbx-gray-500">test connection</span>
+                )}
+              </button>
+
+              {/* Voice feature: API key configuration */}
+              {activeStep === 'features' && selectedInstanceKey === 'PROJECT_TOOL_VOICE' && (
+                <div className="mt-4">
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">openai api key</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={featureKeyInput}
+                      onChange={(e) => setFeatureKeyInput(e.target.value)}
+                      placeholder="sk-..."
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                    />
+                    <button
+                      disabled={!featureKeyInput.trim() || featureKeySaving}
+                      onClick={async () => {
+                        setFeatureKeySaving(true)
+                        try {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ OPENAI_API_KEY: featureKeyInput.trim() }),
+                          })
+                          setFeatureKeyInput('')
+                          // Re-test after saving
+                          handleInstanceTest(selectedInstanceKey)
+                          onRefresh()
+                        } catch {}
+                        setFeatureKeySaving(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {featureKeySaving ? 'saving...' : 'save & test'}
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
+                    writes OPENAI_API_KEY to config.json
+                  </div>
+                </div>
+              )}
+
+              {/* Logo feature: API key + company search + direct URL */}
+              {activeStep === 'features' && selectedInstanceKey === 'PROJECT_TOOL_LOGO' && (
+                <div className="mt-4">
+                  {/* Brandfetch API key */}
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">brandfetch api key</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={featureKeyInput}
+                      onChange={(e) => setFeatureKeyInput(e.target.value)}
+                      placeholder="pk_..."
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                    />
+                    <button
+                      disabled={!featureKeyInput.trim() || featureKeySaving}
+                      onClick={async () => {
+                        setFeatureKeySaving(true)
+                        try {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ BRANDFETCH_API_KEY: featureKeyInput.trim() }),
+                          })
+                          setFeatureKeyInput('')
+                          onRefresh()
+                        } catch {}
+                        setFeatureKeySaving(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {featureKeySaving ? 'saving...' : 'save'}
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono leading-relaxed">
+                    get your free API key at{' '}
+                    <a href="https://brandfetch.com/developers" target="_blank" rel="noopener noreferrer" className="underline text-dbx-blue dark:text-dbx-green hover:opacity-80">brandfetch.com/developers</a>
+                    {' '}— sign up, go to dashboard, copy your API key (starts with pk_). free tier: 500K searches/month. optional — you can paste a logo URL directly below instead.
+                  </div>
+
+                  {/* Search by company name */}
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2 mt-4">search by company name</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={logoSearchInput}
+                      onChange={(e) => setLogoSearchInput(e.target.value)}
+                      placeholder="Amadeus, Delta, ..."
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                      onKeyDown={(e) => { if (e.key === 'Enter' && logoSearchInput.trim()) { e.preventDefault(); document.getElementById('logo-search-btn')?.click() } }}
+                    />
+                    <button
+                      id="logo-search-btn"
+                      disabled={!logoSearchInput.trim() || logoSearching}
+                      onClick={async () => {
+                        setLogoSearching(true)
+                        try {
+                          const r = await fetch(`/api/setup/brand?name=${encodeURIComponent(logoSearchInput.trim())}`)
+                          const data = await r.json()
+                          if (r.ok && data.logoUrl) {
+                            setLogoUrlInput(data.logoUrl)
+                            setLogoPreviewUrl(data.logoUrl)
+                          } else {
+                            setLogoPreviewUrl(null)
+                            alert(data.error || 'No logo found')
+                          }
+                        } catch { alert('Search failed') }
+                        setLogoSearching(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {logoSearching ? 'searching...' : 'search'}
+                    </button>
+                  </div>
+
+                  {/* Direct URL input */}
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2 mt-3">or paste logo url</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={logoUrlInput}
+                      onChange={(e) => {
+                        setLogoUrlInput(e.target.value)
+                        if (e.target.value.trim()) setLogoPreviewUrl(e.target.value.trim())
+                      }}
+                      placeholder="https://example.com/logo.svg"
+                      className="flex-1 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 px-2.5 py-1.5 text-xs font-mono text-dbx-gray-800 dark:text-dbx-gray-100 placeholder:text-dbx-gray-400 dark:placeholder:text-dbx-gray-600 focus:outline-none focus:ring-1 focus:ring-dbx-blue dark:focus:ring-dbx-green"
+                    />
+                    <button
+                      disabled={!logoUrlInput.trim() || featureKeySaving}
+                      onClick={async () => {
+                        setFeatureKeySaving(true)
+                        try {
+                          await fetch('/api/env', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ PROJECT_LOGO_URL: logoUrlInput.trim() }),
+                          })
+                          setLogoPreviewUrl(logoUrlInput.trim())
+                          onRefresh()
+                        } catch {}
+                        setFeatureKeySaving(false)
+                      }}
+                      className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-3 py-1.5 text-xs font-medium hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-700 transition-all disabled:opacity-50"
+                    >
+                      {featureKeySaving ? 'saving...' : 'save'}
+                    </button>
+                  </div>
+
+                  {/* Preview */}
+                  {logoPreviewUrl && (
+                    <div className="mt-3 flex items-center gap-3 rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 p-3">
+                      <img
+                        src={logoPreviewUrl}
+                        alt="logo preview"
+                        className="max-h-10 max-w-[120px] object-contain"
+                        onError={() => setLogoPreviewUrl(null)}
+                      />
+                      <span className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 truncate flex-1">{logoPreviewUrl.length > 60 ? logoPreviewUrl.slice(0, 60) + '...' : logoPreviewUrl}</span>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-1.5 font-mono">
+                    writes PROJECT_LOGO_URL to config.json — displayed in the chat app header
+                  </div>
+                </div>
+              )}
+
+              {/* Tools list for MCP/A2A */}
+              {['mcp', 'a2a'].includes(activeStep) && (
+                <div className="mt-4">
+                  <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-2">
+                    {toolsLoading ? 'discovering tools...' : instanceTools ? `${instanceTools.length} tool${instanceTools.length !== 1 ? 's' : ''} available` : 'tools'}
+                  </div>
+                  {toolsLoading && <div className="text-[11px] text-dbx-amber animate-pulse font-mono">connecting...</div>}
+                  {instanceTools && instanceTools.length > 0 && (
+                    <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+                      {instanceTools.map(t => (
+                        <div key={t.name} className="rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-dbx-gray-50 dark:bg-dbx-gray-800/50 px-3 py-2">
+                          <div className="text-[12px] font-semibold font-mono text-dbx-gray-800 dark:text-dbx-gray-100">{t.name}</div>
+                          {t.description && <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5 leading-relaxed">{t.description}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {instanceTools && instanceTools.length === 0 && (
+                    <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">no tools exposed</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Body + footer */}
-      {phase === 'choose'    && renderChoose()}
+      {(!selectedInstanceKey || phase !== 'choose') && phase === 'choose' && renderChoose()}
       {phase === 'configure' && renderConfigure()}
       {phase === 'execute'   && renderExecute()}
       {phase === 'done'      && renderDone()}

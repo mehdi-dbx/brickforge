@@ -1,0 +1,68 @@
+# Next Steps - May 26, 2026
+
+## What's Done
+
+- Python backend rewrite (Node.js eliminated)
+- pip package on PyPI (brickforge 0.1.0a3)
+- Self-contained: all project files inside brickforge/
+- 44 scripts fixed to use ENV_FILE env var
+- 10/10 endpoint tests pass from standalone pip install
+- UI loads, bridge-forge generates nonces, graph renders, stash detected
+
+## What's NOT Tested Yet
+
+These are the actions that actually DO things on a Databricks workspace. They were broken before the ENV_FILE fix. The fix is in place but unverified end-to-end.
+
+### 1. Bridge-forge connect (pip install, not editable)
+- Install brickforge on EC2 via `pip install brickforge --pre`
+- Run `brickforge`, open in browser via tunnel
+- Copy curl command, run bridge-forge script
+- Verify: workspace connected, PAT created, token stored
+- **Tests:** IP whitelisting (new EC2 IP), token delivery via fragment URL
+
+### 2. Create catalog/schema
+- From the pip-installed app, enter catalog.schema manually
+- Verify: subprocess finds `create_catalog_schema.py` via PACKAGE_ROOT
+- Verify: `load_dotenv(ENV_FILE)` works (no `.env.local` at relative path)
+- Verify: SDK calls succeed (token passed via env)
+
+### 3. Provision tables
+- From the pip-installed app, run "provision tables"
+- Verify: `create_all_assets.py` finds SQL files at `PACKAGE_ROOT/data/init/`
+- Verify: CSV files found at `PACKAGE_ROOT/data/demo/csv/`
+
+### 4. Generate data
+- From the pip-installed app, open data gen wizard
+- Verify: `generate_tables.py` starts, SSE streams output
+- Verify: generated files written to `PACKAGE_ROOT/data/gen/`
+
+### 5. Deploy agent -- NOT YET IMPLEMENTED
+- app/ now inside brickforge/app/ (source ships in pip wheel, 162 files)
+- Chat UI trimmed: shiki/mermaid/cytoscape/katex externalized (16MB -> 1.8MB dist)
+- Deploy needs to support 3 build paths (not yet wired):
+  1. **Pre-built dist exists** (editable install / local dev) -- bundle tarballs as-is, fastest
+  2. **Node available locally** (pip install + node on machine) -- build locally then bundle
+  3. **No node locally** (pip install only) -- ship source, build on Databricks Apps at startup
+- Detection is automatic: check for dist/ -> check for node -> fallback to source
+- Databricks Apps compute has node.js, npm pulls from npm-proxy.cloud.databricks.com
+- Only external dependency: node.js (for local build path). Python deps handled by pip.
+
+## Test Environment
+
+- **EC2** (`aws-field-eng`): fresh pip install, direct internet, IP whitelisting tested
+- **Local (editable)**: dev workflow, everything works
+- **Target workspace**: e2-demo-field-eng.cloud.databricks.com (IP must be whitelisted)
+
+## Confidence: 60%
+
+Doubt factors:
+- `parents[N]` depth changes done mechanically with sed -- one wrong file = silent runtime failure
+- Subprocess `cwd=PACKAGE_ROOT` untested with actual script execution
+- Inline scripts in routes reference relative paths (`data/init/...`) -- if cwd is wrong, script not found
+- `generate_tables.py` writes to `ROOT / "data" / "gen" / "csv"` -- in pip install that's inside `site-packages/`, which may be read-only on some systems
+- Zero subprocess actions tested from non-editable install
+- The PYTHONPATH and ENV_FILE fixes are correct in theory but have never been exercised end-to-end
+
+## Priority
+
+1 > 2 > 3 > 4 > 5. If 1 and 2 work, the core flow is validated. 3-4 are important but secondary. 5 needs the 3-path build logic wired into deploy_agent_app.py and the startup script.

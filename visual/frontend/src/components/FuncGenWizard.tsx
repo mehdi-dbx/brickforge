@@ -13,6 +13,7 @@ interface Props {
 export function FuncGenWizard({ onSwitchToTables }: Props) {
   const [step, setStep] = useState<FuncGenStep>('domain')
   const [modelReady, setModelReady] = useState(false)
+  const [statusLoaded, setStatusLoaded] = useState(false)
   const [domain, setDomain] = useState('')
   const [targetSchema, setTargetSchema] = useState('')
 
@@ -64,9 +65,10 @@ export function FuncGenWizard({ onSwitchToTables }: Props) {
       .then(r => r.json())
       .then(s => {
         setModelReady(s.modelReady)
+        setStatusLoaded(true)
         if (s.tableSchemas?.length) setTableSchemas(s.tableSchemas)
       })
-      .catch(() => setModelReady(false))
+      .catch(() => { setModelReady(false); setStatusLoaded(true) })
 
     fetch('/api/env')
       .then(r => r.json())
@@ -288,7 +290,7 @@ export function FuncGenWizard({ onSwitchToTables }: Props) {
         </div>
 
         {/* Model warning */}
-        {!modelReady && (
+        {statusLoaded && !modelReady && (
           <div className="mb-6 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 flex items-start gap-3 animate-fade-in">
             <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>

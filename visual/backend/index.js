@@ -9,9 +9,10 @@ const { spawn }      = require('child_process')
 const { execFile }   = require('child_process')
 const multer         = require('multer')
 const { buildGraph } = require('./lib/graph-builder')
+const { LocalConfigProvider } = require('./lib/config-provider')
 
 const DIST_DIR    = path.resolve(__dirname, '../frontend/dist')
-const PORT        = process.env.VISUAL_PORT || 9000
+const PORT        = process.env.DATABRICKS_APP_PORT || process.env.VISUAL_PORT || 9000
 const LAYOUT_FILE = path.resolve(__dirname, '../graph-layout.json')
 const ENV_FILE    = path.resolve(__dirname, '../../.env.local')
 const PROJECT_ROOT = path.resolve(__dirname, '../..')
@@ -20,7 +21,7 @@ const app         = express()
 // Prevent uv "VIRTUAL_ENV does not match" warning in all subprocess calls
 delete process.env.VIRTUAL_ENV
 
-const SENSITIVE_PATTERN = /TOKEN|SECRET|PASSWORD|PAT\b/i
+const SENSITIVE_PATTERN = /TOKEN|SECRET|PASSWORD|PAT\b|API_KEY/i
 
 // Parse .env.local into ordered list of active entries, preserving raw lines
 function parseEnvFile() {
@@ -71,7 +72,9 @@ function writeEnvValues(updates) {
     }
   }
 
-  fs.writeFileSync(ENV_FILE, lines.join('\n'))
+  // Ensure file ends with a newline
+  const content = lines.join('\n')
+  fs.writeFileSync(ENV_FILE, content.endsWith('\n') ? content : content + '\n')
 }
 
 // Comment out specific keys in .env.local (for switching to same-workspace mode)
@@ -165,6 +168,113 @@ function toggleEnvKey(key) {
   return true
 }
 
+// ConfigProvider instance — mode detection at startup
+const { ForgeConfigProvider } = require('./lib/config-provider')
+const FORGE_MODE = process.env.FORGE_MODE === 'true' || process.env.DATABRICKS_APP_PORT != null
+let config
+if (FORGE_MODE) {
+  config = new ForgeConfigProvider()
+  // Async init — download zip from UC Volume if schema is known
+  config.init().then(() => {
+    console.log('[forge] ForgeConfigProvider initialized' + (config.get('PROJECT_UNITY_CATALOG_SCHEMA') ? ` (schema: ${config.get('PROJECT_UNITY_CATALOG_SCHEMA')})` : ' (bootstrap phase)'))
+  }).catch(e => {
+    console.error('[forge] init failed, falling back to empty config:', e.message)
+  })
+  // Disable CLI profile in deployed mode -- no CLI, no profiles, auth via SP or bridge
+  delete process.env.DATABRICKS_CONFIG_PROFILE
+} else {
+  config = new LocalConfigProvider(ENV_FILE, {
+    parseEnvFile,
+    writeEnvValues,
+    commentOutKeys,
+    toggleEnvKey,
+    parseMultiInstanceKeys,
+  })
+}
+console.log(`[config] mode: ${FORGE_MODE ? 'FORGE (SaaS)' : 'LOCAL (.env.local)'}`)
+
+// Python command abstraction: 'uv run python' locally, 'python' in Forge/DBX App mode
+const PY = FORGE_MODE ? { cmd: 'python', pre: [] } : { cmd: 'uv', pre: ['run', 'python'] }
+
+// Build a clean subprocess env: config values + process.env, minus auth conflicts
+function buildSubEnv(extraEnv = {}) {
+  const env = { ...process.env }
+  // Overlay config values
+  for (const { key, value } of config.list()) env[key] = value
+  // Apply extras
+  Object.assign(env, extraEnv)
+  // If PAT token is set, remove SP OAuth vars to avoid SDK "more than one auth method" conflict
+  if (env.DATABRICKS_TOKEN && env.DATABRICKS_CLIENT_ID) {
+    delete env.DATABRICKS_CLIENT_ID
+    delete env.DATABRICKS_CLIENT_SECRET
+  }
+  // Remove CLI profile in deployed mode
+  if (FORGE_MODE) delete env.DATABRICKS_CONFIG_PROFILE
+  return env
+}
+
+// Check if the current OAuth JWT token is expired. Returns error message or null.
+// Detect cloud provider from a Databricks hostname
+function detectCloud(host) {
+  if (!host) return null
+  if (host.includes('.azuredatabricks.net')) return 'azure'
+  if (host.includes('.gcp.databricks.com')) return 'gcp'
+  if (host.includes('.cloud.databricks.com')) return 'aws'
+  return null
+}
+const APP_CLOUD = detectCloud(process.env.DATABRICKS_HOST || '')
+
+// Check if the current OAuth JWT token is expired. If a refresh token is available,
+// silently refresh and return null. Otherwise return an error message.
+function checkTokenExpiry() {
+  const token = config.get('DATABRICKS_TOKEN') || process.env.DATABRICKS_TOKEN || ''
+  if (!token || !token.startsWith('eyJ')) return null  // PATs (dapi...) don't expire via JWT
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+    const exp = payload.exp
+    if (exp && Date.now() / 1000 > exp) {
+      // Token is expired -- try to refresh silently
+      const refreshToken = config.get('DATABRICKS_REFRESH_TOKEN') || ''
+      const tokenEndpoint = config.get('DATABRICKS_TOKEN_ENDPOINT') || ''
+      if (refreshToken && tokenEndpoint) {
+        try {
+          // Synchronous refresh using child_process (can't use async in this check)
+          const { execFileSync } = require('child_process')
+          const script = `
+import urllib.request, urllib.parse, json
+data = urllib.parse.urlencode({
+    'grant_type': 'refresh_token',
+    'refresh_token': '${refreshToken}',
+    'client_id': 'databricks-cli',
+}).encode()
+req = urllib.request.Request('${tokenEndpoint}', data=data, method='POST')
+req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+with urllib.request.urlopen(req, timeout=10) as r:
+    resp = json.loads(r.read())
+print(json.dumps(resp))
+`
+          const result = execFileSync(PY.cmd, [...PY.pre, '-c', script], { timeout: 15000, env: buildSubEnv() })
+          const resp = JSON.parse(result.toString().trim())
+          if (resp.access_token) {
+            config.setMany({ DATABRICKS_TOKEN: resp.access_token })
+            process.env.DATABRICKS_TOKEN = resp.access_token
+            if (resp.refresh_token) {
+              config.setMany({ DATABRICKS_REFRESH_TOKEN: resp.refresh_token })
+            }
+            console.log('[auth] Token auto-refreshed silently')
+            return null  // refreshed successfully
+          }
+        } catch (e) {
+          console.log(`[auth] Token refresh failed: ${e.message || e}`)
+        }
+      }
+      const ago = Math.round((Date.now() / 1000 - exp) / 60)
+      return `Token expired ${ago} minute${ago !== 1 ? 's' : ''} ago. Re-authenticate via "connect via terminal" or enter a new token.`
+    }
+  } catch { /* not a valid JWT, skip */ }
+  return null
+}
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS')
@@ -227,7 +337,7 @@ app.put('/api/layout', (req, res) => {
 
 app.get('/api/env', (_req, res) => {
   try {
-    res.json(parseEnvFile())
+    res.json(config.list())
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -240,7 +350,7 @@ app.put('/api/env', (req, res) => {
     if (typeof updates !== 'object' || Array.isArray(updates)) {
       return res.status(400).json({ error: 'expected { KEY: value, ... }' })
     }
-    writeEnvValues(updates)
+    config.setMany(updates)
     res.json({ ok: true })
   } catch (err) {
     console.error('[env] save error:', err)
@@ -248,29 +358,330 @@ app.put('/api/env', (req, res) => {
   }
 })
 
+// ─── Stash health endpoint ──────────────────────────────────────────────────
+
+app.get('/api/stash/health', (_req, res) => {
+  try {
+    const stashDir = path.join(PROJECT_ROOT, 'stash')
+    if (!fs.existsSync(stashDir)) return res.json({ stashes: [] })
+
+    const stashes = []
+    for (const name of fs.readdirSync(stashDir)) {
+      const dir = path.join(stashDir, name)
+      if (!fs.statSync(dir).isDirectory()) continue
+
+      const forgeFile = fs.readdirSync(dir).find(f => f.endsWith('.forge'))
+      if (!forgeFile) {
+        stashes.push({ name, status: 'error', message: 'no .forge manifest', checks: [] })
+        continue
+      }
+
+      // Parse YAML-like .forge manifest (simple key extraction)
+      const raw = fs.readFileSync(path.join(dir, forgeFile), 'utf8')
+      const checks = []
+      let ok = 0, missing = 0
+
+      // Check referenced files
+      const fileRefs = []
+      const lines = raw.split('\n')
+      for (const line of lines) {
+        // Match file references: "file:", "ddl:", "seed:", "system:", "knowledge_base:", "starters:", "config:", "dataset:", "runner:"
+        const m = line.match(/^\s+(?:file|ddl|seed|system|knowledge_base|starters|config|dataset|runner):\s*(.+)/)
+        if (m) {
+          const ref = m[1].trim()
+          if (ref && !ref.startsWith('{') && !ref.startsWith('[')) fileRefs.push(ref)
+        }
+        // Match list items that look like file paths (e.g. "    - some_file.sql")
+        const listMatch = line.match(/^\s+-\s+([\w/._-]+\.(?:sql|py|yml|yaml|csv|jsonl|prompt|base|txt))$/)
+        if (listMatch) {
+          // Determine directory context from preceding section headers
+          const idx = lines.indexOf(line)
+          let ctx = ''
+          for (let i = idx - 1; i >= 0; i--) {
+            if (lines[i].match(/^\s+functions:/)) { ctx = 'data/func/'; break }
+            if (lines[i].match(/^\s+procedures:/)) { ctx = 'data/proc/'; break }
+          }
+          if (ctx) fileRefs.push(ctx + listMatch[1])
+        }
+      }
+
+      for (const ref of fileRefs) {
+        const full = path.join(dir, ref)
+        if (fs.existsSync(full)) {
+          checks.push({ item: ref, status: 'ok' })
+          ok++
+        } else {
+          checks.push({ item: ref, status: 'missing' })
+          missing++
+        }
+      }
+
+      // Check expected directories
+      for (const d of ['tools', 'data', 'conf']) {
+        if (fs.existsSync(path.join(dir, d))) {
+          checks.push({ item: d + '/', status: 'ok' })
+          ok++
+        } else {
+          checks.push({ item: d + '/', status: 'missing' })
+          missing++
+        }
+      }
+
+      // Check bundle templates
+      for (const f of ['app.yaml', 'databricks.yml']) {
+        if (fs.existsSync(path.join(dir, f))) {
+          checks.push({ item: f, status: 'ok' })
+          ok++
+        } else {
+          checks.push({ item: f, status: 'warning', note: 'optional — generated at deploy time' })
+        }
+      }
+
+      const status = missing === 0 ? 'ok' : 'warning'
+      stashes.push({ name, forgeFile, status, ok, missing, checks })
+    }
+
+    res.json({ stashes })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─── Bridge auth endpoints ──────────────────────────────────────────────────
+
+const crypto = require('crypto')
+const bridgeNonces = new Map()  // nonce_id -> { value, expires }
+let bridgeState = { status: 'waiting' }
+
+// Cleanup expired nonces
+function cleanExpiredNonces() {
+  const now = Date.now()
+  for (const [id, n] of bridgeNonces) {
+    if (now > n.expires) bridgeNonces.delete(id)
+  }
+}
+
+// GET /api/setup/cloud -- return the cloud the Setup App is running on
+app.get('/api/setup/cloud', (_req, res) => {
+  res.json({ cloud: APP_CLOUD })
+})
+
+// GET /api/auth/bridge-nonce -- generate a one-time nonce (5 min TTL)
+app.get('/api/auth/bridge-nonce', (_req, res) => {
+  cleanExpiredNonces()
+  const nonceId = crypto.randomBytes(16).toString('hex')
+  const nonceValue = crypto.randomBytes(32).toString('hex')
+  bridgeNonces.set(nonceId, { value: nonceValue, expires: Date.now() + 5 * 60 * 1000 })
+  bridgeState = { status: 'waiting' }
+  console.log(`[bridge] nonce generated: id=${nonceId.substring(0, 8)}... TTL=5min, active nonces=${bridgeNonces.size}`)
+  const wsDefault = config.get('DATABRICKS_HOST') || ''
+  res.json({ nonce_id: nonceId, nonce: nonceValue, ws_default: wsDefault })
+})
+
+// POST /api/auth/bridge-receive -- receive encrypted token from local script
+app.post('/api/auth/bridge-receive', (req, res) => {
+  cleanExpiredNonces()
+  const { ciphertext, nonce_id, host, user } = req.body
+  console.log(`[bridge] receive: nonce_id=${(nonce_id || '').substring(0, 8)}... host=${host || '?'} user=${user || '?'} ciphertext_len=${(ciphertext || '').length}`)
+
+  if (!ciphertext || !nonce_id) {
+    console.log('[bridge] receive REJECTED: missing ciphertext or nonce_id')
+    return res.status(400).json({ error: 'ciphertext and nonce_id required' })
+  }
+
+  const nonce = bridgeNonces.get(nonce_id)
+  if (!nonce) {
+    console.log(`[bridge] receive REJECTED: nonce not found (expired or already used). active nonces=${bridgeNonces.size}`)
+    return res.status(403).json({ error: 'invalid or expired nonce' })
+  }
+
+  try {
+    // Decrypt AES-256-CBC (openssl enc compatible format)
+    const buf = Buffer.from(ciphertext, 'base64')
+    console.log(`[bridge] decrypting: buf_len=${buf.length}, prefix=${buf.subarray(0, 8).toString('ascii')}`)
+    // openssl prefixes with "Salted__" (8 bytes) + salt (8 bytes)
+    const salt = buf.subarray(8, 16)
+    const ct = buf.subarray(16)
+    const keyIv = crypto.pbkdf2Sync(nonce.value, salt, 10000, 48, 'sha256')
+    const key = keyIv.subarray(0, 32)
+    const iv = keyIv.subarray(32, 48)
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv)
+    const token = decipher.update(ct, undefined, 'utf8') + decipher.final('utf8')
+
+    console.log(`[bridge] decrypted OK: payload_len=${token.length}, starts_with=${token.substring(0, 6)}...`)
+
+    // Parse decrypted payload -- PAT bundle or JWT bundle or plain token
+    let finalToken = '', refreshToken = '', tokenEndpoint = '', isPat = false
+    try {
+      const bundle = JSON.parse(token)
+      if (bundle.pat) {
+        // PAT path -- preferred, no refresh needed
+        finalToken = bundle.pat
+        isPat = true
+        console.log(`[bridge] PAT received: ${finalToken.substring(0, 12)}...`)
+      } else {
+        // JWT path -- fallback with refresh token
+        finalToken = bundle.access_token || ''
+        refreshToken = bundle.refresh_token || ''
+        tokenEndpoint = bundle.token_endpoint || ''
+        console.log(`[bridge] JWT bundle: access_len=${finalToken.length}, refresh_len=${refreshToken.length}`)
+      }
+    } catch {
+      // Plain token (legacy)
+      finalToken = token
+      console.log(`[bridge] plain token: len=${finalToken.length}`)
+    }
+
+    if (!finalToken || finalToken.length < 5) {
+      console.log(`[bridge] REJECTED: token is empty or too short (len=${(finalToken || '').length})`)
+      return res.status(400).json({ error: 'received empty or invalid token' })
+    }
+
+    bridgeNonces.delete(nonce_id)  // single use
+
+    // Store in config -- EITHER PAT or JWT, never both
+    const updates = {}
+    if (host) updates.DATABRICKS_HOST = host
+    updates.DATABRICKS_TOKEN = finalToken
+
+    if (isPat) {
+      // PAT set -- clean out JWT refresh artifacts
+      config.disable('DATABRICKS_REFRESH_TOKEN')
+      config.disable('DATABRICKS_TOKEN_ENDPOINT')
+      delete process.env.DATABRICKS_REFRESH_TOKEN
+      delete process.env.DATABRICKS_TOKEN_ENDPOINT
+      console.log('[bridge] PAT mode -- cleared refresh token + token endpoint')
+    } else {
+      // JWT set -- store refresh token for auto-renewal
+      if (refreshToken) updates.DATABRICKS_REFRESH_TOKEN = refreshToken
+      if (tokenEndpoint) updates.DATABRICKS_TOKEN_ENDPOINT = tokenEndpoint
+    }
+    config.setMany(updates)
+    // Remove profile + SP OAuth vars so SDK uses PAT auth only
+    for (const k of ['DATABRICKS_CONFIG_PROFILE', 'DATABRICKS_CLIENT_ID', 'DATABRICKS_CLIENT_SECRET']) {
+      config.disable(k)
+      delete process.env[k]
+    }
+    console.log('[bridge] cleared profile + SP OAuth vars from env')
+    console.log(`[bridge] config saved: host=${host || '(none)'}, token_len=${token.length}`)
+
+    // Cross-cloud detection
+    const targetCloud = detectCloud(host || '')
+    let crossCloudWarning = ''
+    if (APP_CLOUD && targetCloud && APP_CLOUD !== targetCloud) {
+      crossCloudWarning = `The target workspace (${targetCloud}) is on a different cloud than this Setup App (${APP_CLOUD}). API calls may be blocked by IP Access Lists. For best results, use the Setup App locally or deploy it on the same cloud.`
+      console.log(`[bridge] CROSS-CLOUD WARNING: app=${APP_CLOUD}, target=${targetCloud}`)
+    }
+
+    bridgeState = { status: 'connected', host: host || '', user: user || '', time: Date.now(), warning: crossCloudWarning }
+    console.log(`[bridge] state -> connected (host=${host}, user=${user})`)
+    res.json({ ok: true, warning: crossCloudWarning || undefined })
+  } catch (err) {
+    console.log(`[bridge] decryption FAILED: ${err.message || err}`)
+    res.status(400).json({ error: 'decryption failed: ' + (err.message || err) })
+  }
+})
+
+// GET /api/auth/bridge-status -- frontend polls this
+app.get('/api/auth/bridge-status', (_req, res) => {
+  if (bridgeState.status === 'connected') console.log(`[bridge] status poll -> connected (host=${bridgeState.host})`)
+  res.json(bridgeState)
+})
+
+// GET /api/auth/bridge-script -- serve downloadable .command file
+app.get('/api/auth/bridge-script', (req, res) => {
+  const nonceId = req.query.nonce
+  if (!nonceId) {
+    console.log('[bridge] script download REJECTED: missing nonce query param')
+    return res.status(400).send('nonce query param required')
+  }
+
+  const nonce = bridgeNonces.get(nonceId)
+  if (!nonce) {
+    console.log(`[bridge] script download REJECTED: nonce ${nonceId.substring(0, 8)}... not found or expired`)
+    return res.status(403).send('invalid or expired nonce')
+  }
+
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https'
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  const appUrl = `${proto}://${host}`
+  console.log(`[bridge] script download: nonce=${nonceId.substring(0, 8)}... appUrl=${appUrl}`)
+
+  // Build script from scripts/connect.sh template, injecting config vars
+  const currentHost = config.get('DATABRICKS_HOST') || ''
+  const scriptTemplate = fs.readFileSync(path.join(PROJECT_ROOT, 'scripts', 'connect.sh'), 'utf8')
+  const script = scriptTemplate
+    .replace(/^APP_URL=.*$/m, `APP_URL="${appUrl}"`)
+    .replace(/^NONCE=.*$/m, `NONCE="${nonce.value}"`)
+    .replace(/^NONCE_ID=.*$/m, `NONCE_ID="${nonceId}"`)
+    .replace(/^WS_DEFAULT=.*$/m, `WS_DEFAULT="${currentHost}"`)
+    // Remove the arg parsing lines (they're for standalone use)
+    .replace(/^APP_URL="\$\{1:.*$/m, `APP_URL="${appUrl}"`)
+    .replace(/^NONCE="\$\{2:.*$/m, `NONCE="${nonce.value}"`)
+
+  res.setHeader('Content-Disposition', 'attachment; filename=brickforge-connect.command')
+  res.setHeader('Content-Type', 'application/octet-stream')
+  res.send(script)
+})
+
 // ─── Setup endpoints ───────────────────────────────────────────────────────────
 
 const STEP_ENV_KEYS = {
-  host:      ['DATABRICKS_HOST'],
-  auth:      ['DATABRICKS_TOKEN'],
+  host:      ['DATABRICKS_HOST', 'DATABRICKS_TOKEN'],
   warehouse: ['DATABRICKS_WAREHOUSE_ID'],
   schema:    ['PROJECT_UNITY_CATALOG_SCHEMA'],
   tables:    [],  // depends on schema being set + assets created
   functions: [],  // depends on schema + SQL files in func/proc dirs
-  model:     ['AGENT_MODEL_ENDPOINT'],
+  model:     ['AGENT_MODEL'],
   prompt:    [],  // file-based, not env-based
-  genie:     ['PROJECT_GENIE_CHECKIN'],
-  ka:        ['PROJECT_KA_PASSENGERS'],
+  genie:     [],  // multi-instance, handled by parseMultiInstanceKeys
+  ka:        [],  // multi-instance, handled by parseMultiInstanceKeys
   vs:        ['PROJECT_VS_INDEX'],
+  mcp:       [],  // multi-instance, handled separately
+  api:       [],  // multi-instance, handled separately
+  a2a:       [],  // multi-instance, handled separately
+  features:  [],  // multi-instance, handled separately
+  lakebase:  ['LAKEBASE_INSTANCE_NAME'],
   mlflow:    ['MLFLOW_EXPERIMENT_ID'],
   grants:    [],  // always re-runnable, no single env key
   deploy:    ['DBX_APP_NAME'],
+  git:       [],  // optional, no env key required
 }
+
+// POST /api/setup/clear-step — clear env keys for a step
+app.post('/api/setup/clear-step', (req, res) => {
+  const { step } = req.body
+  if (!step || !STEP_ENV_KEYS[step]) return res.status(400).json({ error: 'invalid step' })
+
+  const keys = STEP_ENV_KEYS[step]
+  if (keys.length > 0) {
+    // Disable (comment out) each key
+    config.disableMany(keys)
+    // Also remove from process.env so subprocesses don't see stale values
+    for (const k of keys) delete process.env[k]
+    console.log(`[setup] cleared step "${step}": ${keys.join(', ')}`)
+  }
+
+  // For multi-instance steps (genie, ka, mcp, etc.), disable all matching keys
+  const prefixes = { genie: 'PROJECT_GENIE_', ka: 'PROJECT_KA_', vs: 'PROJECT_VS_', mcp: 'PROJECT_MCP_', a2a: 'PROJECT_A2A_', api: 'PROJECT_API_', features: 'PROJECT_TOOL_' }
+  const prefix = prefixes[step]
+  if (prefix) {
+    const instances = config.listByPrefix(prefix)
+    const instanceKeys = instances.map(i => i.key)
+    if (instanceKeys.length > 0) {
+      config.disableMany(instanceKeys)
+      for (const k of instanceKeys) delete process.env[k]
+      console.log(`[setup] cleared ${instanceKeys.length} ${step} instances`)
+    }
+  }
+
+  res.json({ ok: true })
+})
 
 // GET /api/setup/status — parse .env.local, return per-step status
 app.get('/api/setup/status', (_req, res) => {
   try {
-    const entries = parseEnvFile()
+    const entries = config.list()
     const env = {}
     for (const { key, value } of entries) env[key] = value
 
@@ -280,10 +691,10 @@ app.get('/api/setup/status', (_req, res) => {
       let status = keys.length === 0 ? 'unknown' : (allSet ? 'configured' : 'missing')
       let values = Object.fromEntries(keys.map(k => [k, env[k] || '']))
 
-      // Model: same-workspace mode — no AGENT_MODEL_ENDPOINT needed if host+token exist
+      // Model: same-workspace mode — no AGENT_MODEL needed if host+token exist
       if (step === 'model' && !allSet && env.DATABRICKS_HOST && env.DATABRICKS_HOST.trim()) {
         status = 'configured'
-        values.AGENT_MODEL_ENDPOINT = env.DATABRICKS_HOST.replace(/\/+$/, '') + ' (same workspace)'
+        values.AGENT_MODEL = env.DATABRICKS_HOST.replace(/\/+$/, '') + ' (same workspace)'
       }
 
       // Tables step: check if CSVs exist in default or gen
@@ -301,7 +712,7 @@ app.get('/api/setup/status', (_req, res) => {
       if (step === 'functions') {
         let routineCount = 0
         for (const sub of ['func', 'proc']) {
-          for (const base of ['data/default', 'data/gen']) {
+          for (const base of ['data/demo', 'data/gen']) {
             const dir = path.join(PROJECT_ROOT, base, sub)
             try { routineCount += fs.readdirSync(dir).filter(f => f.endsWith('.sql')).length } catch {}
           }
@@ -321,27 +732,57 @@ app.get('/api/setup/status', (_req, res) => {
 
       // Multi-instance steps: attach instances array
       if (step === 'genie') {
-        const instances = parseMultiInstanceKeys('PROJECT_GENIE_')
+        const instances = config.listByPrefix('PROJECT_GENIE_')
         steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values, instances }
         continue
       }
       if (step === 'ka') {
-        const instances = parseMultiInstanceKeys('PROJECT_KA_')
+        const instances = config.listByPrefix('PROJECT_KA_')
         steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values, instances }
         continue
       }
       if (step === 'vs') {
-        const instances = parseMultiInstanceKeys('PROJECT_VS_')
+        const instances = config.listByPrefix('PROJECT_VS_')
         // Filter to only index entries (not endpoint)
         const indexInstances = instances.filter(i => i.key.includes('INDEX'))
         steps[step] = { status: indexInstances.some(i => i.enabled) ? 'configured' : (indexInstances.length ? 'missing' : 'missing'), values, instances: indexInstances }
+        continue
+      }
+      if (step === 'mcp') {
+        const instances = config.listByPrefix('PROJECT_MCP_')
+        const serverInstances = instances.filter(i => !i.key.endsWith('_HEADER'))
+        steps[step] = { status: serverInstances.some(i => i.enabled) ? 'configured' : (serverInstances.length ? 'missing' : 'missing'), values: {}, instances: serverInstances }
+        continue
+      }
+      if (step === 'a2a') {
+        const instances = config.listByPrefix('PROJECT_A2A_')
+        const agentInstances = instances.filter(i => !i.key.endsWith('_HEADER'))
+        steps[step] = { status: agentInstances.some(i => i.enabled) ? 'configured' : (agentInstances.length ? 'missing' : 'missing'), values: {}, instances: agentInstances }
+        continue
+      }
+      if (step === 'api') {
+        // API slugs: filter to only _CONN or _URL entries (not _METHOD, _PATH, etc.)
+        const instances = config.listByPrefix('PROJECT_API_')
+        const apiInstances = instances.filter(i => i.key.endsWith('_CONN') || i.key.endsWith('_URL'))
+        // Derive label from slug: PROJECT_API_WEATHER_CONN -> "weather (uc)" or PROJECT_API_WEATHER_URL -> "weather (http)"
+        const labeled = apiInstances.map(i => ({
+          ...i,
+          label: i.key.replace('PROJECT_API_', '').replace(/_CONN$/, '').replace(/_URL$/, '').toLowerCase()
+            + (i.key.endsWith('_CONN') ? ' (uc)' : ' (http)')
+        }))
+        steps[step] = { status: labeled.some(i => i.enabled) ? 'configured' : (labeled.length ? 'missing' : 'missing'), values: {}, instances: labeled }
+        continue
+      }
+      if (step === 'features') {
+        const instances = config.listByPrefix('PROJECT_TOOL_')
+        steps[step] = { status: instances.some(i => i.enabled) ? 'configured' : (instances.length ? 'missing' : 'missing'), values: {}, instances }
         continue
       }
 
       steps[step] = { status, values }
     }
 
-    res.json({ steps, env })
+    res.json({ steps, env, forgeMode: FORGE_MODE })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -352,11 +793,34 @@ app.put('/api/setup/toggle', (req, res) => {
   const { key } = req.body
   if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key required' })
   // Only allow toggling PROJECT_GENIE_* and PROJECT_KA_* keys
-  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_')) {
-    return res.status(400).json({ error: 'can only toggle genie/ka/vs keys' })
+  if (!key.startsWith('PROJECT_GENIE_') && !key.startsWith('PROJECT_KA_') && !key.startsWith('PROJECT_VS_') && !key.startsWith('PROJECT_MCP_') && !key.startsWith('PROJECT_API_') && !key.startsWith('PROJECT_A2A_') && !key.startsWith('PROJECT_TOOL_')) {
+    return res.status(400).json({ error: 'can only toggle genie/ka/vs/mcp/a2a/tool keys' })
   }
-  const ok = toggleEnvKey(key)
+  const ok = config.toggle(key)
   res.json({ ok })
+})
+
+// DELETE /api/setup/instance — remove an env key (and associated _HEADER) from .env.local
+app.delete('/api/setup/instance', (req, res) => {
+  const { key } = req.body
+  if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key required' })
+  const allowed = ['PROJECT_GENIE_', 'PROJECT_KA_', 'PROJECT_VS_', 'PROJECT_MCP_', 'PROJECT_API_', 'PROJECT_A2A_']
+  if (!allowed.some(p => key.startsWith(p))) {
+    return res.status(400).json({ error: 'can only delete genie/ka/vs/mcp/a2a keys' })
+  }
+  let raw = ''
+  try { raw = fs.readFileSync(ENV_FILE, 'utf8') } catch { return res.json({ ok: false }) }
+  const keysToRemove = new Set([key, `${key}_HEADER`])
+  const out = raw.split('\n').filter(line => {
+    const trimmed = line.trim()
+    const content = trimmed.startsWith('#') ? trimmed.replace(/^#\s*/, '') : trimmed
+    const eq = content.indexOf('=')
+    if (eq < 0) return true
+    const lineKey = content.slice(0, eq).trim()
+    return !keysToRemove.has(lineKey)
+  })
+  fs.writeFileSync(ENV_FILE, out.join('\n'))
+  res.json({ ok: true })
 })
 
 // GET /api/setup/profiles — list databricks CLI profiles
@@ -383,6 +847,9 @@ app.get('/api/setup/profiles', (_req, res) => {
 // GET /api/setup/resources?type=warehouses|catalogs|genie
 app.get('/api/setup/resources', (req, res) => {
   const type = req.query.type
+
+  const expiryErr = checkTokenExpiry()
+  if (expiryErr) return res.json({ items: [], error: expiryErr })
 
   const SCRIPTS = {
     warehouses: `
@@ -411,14 +878,27 @@ except:
 out = [{'id': str(getattr(s,'space_id',None) or getattr(s,'id','')), 'name': getattr(s,'title','?')} for s in spaces]
 print(json.dumps(out))
 `.trim(),
+    lakebase: `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import json
+from databricks.sdk import WorkspaceClient
+try:
+  w = WorkspaceClient()
+  instances = list(w.database.list_database_instances())
+  out = [{'id': getattr(i,'name',''), 'name': getattr(i,'name',''), 'state': str(getattr(i,'state','UNKNOWN'))} for i in instances]
+  print(json.dumps(out))
+except Exception:
+  print('[]')
+`.trim(),
   }
 
   const script = SCRIPTS[type]
   if (!script) return res.status(400).json({ error: 'unknown type: ' + type })
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 20000,
+    env: buildSubEnv(),
   }, (err, stdout, stderr) => {
     if (err) {
       return res.json({ items: [], error: stderr || String(err) })
@@ -435,15 +915,41 @@ print(json.dumps(out))
 // POST /api/setup/exec — SSE stream, runs actual setup commands
 const PAT_SCRIPT = `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact, write_env_entry, ENV_FILE
-import os
-host = os.environ['DATABRICKS_HOST'].strip()
-profile = _profile_for_host(host)
-if not profile: print('[x] No matching CLI profile for', host); exit(1)
-w = _isolated_client(profile)
-t = w.tokens.create(comment='agent-forge-init', lifetime_seconds=604800)
-write_env_entry(ENV_FILE, 'DATABRICKS_TOKEN', t.token_value)
-print('[+] PAT generated (7d):', _redact(t.token_value))
+import os, urllib.request, json, ssl, datetime
+host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
+token = os.environ.get('DATABRICKS_TOKEN','').strip()
+if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
+if not token: print('[x] DATABRICKS_TOKEN not set -- authenticate first'); exit(1)
+today = datetime.date.today().strftime('%Y%m%d')
+comment = f'brickforge-7days-{today}'
+print(f'[~] Creating PAT "{comment}" on {host}...')
+ctx = ssl.create_default_context()
+try:
+    data = json.dumps({'lifetime_seconds': 604800, 'comment': comment}).encode()
+    req = urllib.request.Request(f'{host}/api/2.0/token/create', data=data, method='POST')
+    req.add_header('Authorization', f'Bearer {token}')
+    req.add_header('Content-Type', 'application/json')
+    with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+        resp = json.loads(r.read())
+    pat = resp.get('token_value','')
+    if not pat: print('[x] Empty PAT response'); exit(1)
+    from pathlib import Path
+    f = Path('.env.local')
+    lines = f.read_text().splitlines() if f.exists() else []
+    new = []; found = False
+    for line in lines:
+        import re
+        m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
+        if m and m.group(1) == 'DATABRICKS_TOKEN': new.append('DATABRICKS_TOKEN=' + pat); found = True
+        else: new.append(line)
+    if not found: new.append('DATABRICKS_TOKEN=' + pat)
+    f.write_text('\\n'.join(new) + '\\n')
+    print(f'[+] PAT created: {pat[:12]}... (7 days, expires {(datetime.date.today() + datetime.timedelta(days=7)).isoformat()})')
+except urllib.error.HTTPError as e:
+    body = e.read().decode()[:200] if hasattr(e, 'read') else ''
+    print(f'[x] HTTP {e.code}: {body}'); exit(1)
+except Exception as e:
+    print(f'[x] {str(e)[:150]}'); exit(1)
 `.trim()
 
 const SAVE_WAREHOUSE_SCRIPT = (id) => `
@@ -506,17 +1012,33 @@ print('[+] PROJECT_UNITY_CATALOG_SCHEMA =', spec)
 const SAVE_GENIE_SCRIPT = (id, name) => `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import re; from pathlib import Path
+slug = re.sub(r'[^a-z0-9]+', '_', '${name}'.lower()).strip('_').upper() or 'DEFAULT'
+env_key = f'PROJECT_GENIE_{slug}'
 f = Path('.env.local')
 lines = f.read_text().splitlines() if f.exists() else []
 new = []; found = False
 for line in lines:
     m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
-    if m and m.group(1) == 'PROJECT_GENIE_CHECKIN': new.append('PROJECT_GENIE_CHECKIN=${id}'); found = True
+    if m and m.group(1) == env_key: new.append(f'{env_key}=${id}'); found = True
     else: new.append(line)
-if not found: new.append('PROJECT_GENIE_CHECKIN=${id}')
+if not found: new.append(f'{env_key}=${id}')
 f.write_text('\\n'.join(new) + '\\n')
-print('[+] PROJECT_GENIE_CHECKIN = ${id}  (${name})')
+print(f'[+] {env_key} = ${id}  (${name})')
 `.trim().replace(/\$\{id\}/g, id).replace(/\$\{name\}/g, name)
+
+// GET /api/setup/exec-log?action=<name> -- retrieve latest exec log
+app.get('/api/setup/exec-log', (req, res) => {
+  const action = req.query.action
+  if (!action) return res.status(400).json({ error: 'action param required' })
+  const logDir = path.join(PROJECT_ROOT, 'logs', 'exec')
+  const latestLog = path.join(logDir, `${action}-latest.log`)
+  try {
+    const content = fs.readFileSync(latestLog, 'utf8')
+    res.json({ action, log: content, lines: content.split('\n').filter(Boolean) })
+  } catch {
+    res.json({ action, log: '', lines: [] })
+  }
+})
 
 app.post('/api/setup/exec', (req, res) => {
   const { action, params = {} } = req.body || {}
@@ -526,21 +1048,50 @@ app.post('/api/setup/exec', (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no')
   res.setHeader('Connection', 'keep-alive')
 
+  // Check token expiry before any action that needs auth
+  const NO_AUTH_ACTIONS = new Set(['save-deploy-name', 'forge-bridge'])
+  if (!NO_AUTH_ACTIONS.has(action)) {
+    const expiryErr = checkTokenExpiry()
+    if (expiryErr) {
+      res.write(`event:line\ndata:${JSON.stringify({ text: `[x] ${expiryErr}\n`, stream: 'err' })}\n\n`)
+      res.write(`event:done\ndata:${JSON.stringify({ ok: false, code: 1 })}\n\n`)
+      res.end()
+      return
+    }
+  }
+
+  // Per-execution log file
+  const logDir = path.join(PROJECT_ROOT, 'logs', 'exec')
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+  const logFile = path.join(logDir, `${action}-${Date.now()}.log`)
+  const logStream = fs.createWriteStream(logFile, { flags: 'a' })
+  logStream.write(`=== ${action} ${new Date().toISOString()} ===\n`)
+
+  // Also maintain latest log path per step (for retrieval)
+  const latestLink = path.join(logDir, `${action}-latest.log`)
+
   const write = (type, data) => {
     if (!res.writableEnded) {
       res.write(`event:${type}\ndata:${JSON.stringify(data)}\n\n`)
     }
+    // Log every line to file
+    if (type === 'line' && data.text) {
+      logStream.write(data.text.endsWith('\n') ? data.text : data.text + '\n')
+    }
   }
 
   const done = (ok, code = ok ? 0 : 1) => {
+    logStream.write(`=== ${ok ? 'OK' : 'FAILED'} (exit ${code}) ===\n`)
+    logStream.end()
+    // Update latest symlink
+    try { fs.unlinkSync(latestLink) } catch {}
+    try { fs.copyFileSync(logFile, latestLink) } catch {}
     write('done', { ok, code })
     if (!res.writableEnded) res.end()
   }
 
-  // Load .env.local vars into subprocess environment
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  // Build subprocess environment with clean auth
+  const subEnv = buildSubEnv()
 
   function runCommand(cmd, args, extraEnv = {}) {
     let finished = false
@@ -570,22 +1121,22 @@ app.post('/api/setup/exec', (req, res) => {
 
   switch (action) {
     case 'exec-pat':
-      runCommand('uv', ['run', 'python', '-c', PAT_SCRIPT])
+      runCommand(PY.cmd, [...PY.pre, '-c', PAT_SCRIPT])
       break
 
     case 'exec-assets': {
       const schemaSpec = params.schema || ''
       if (schemaSpec) {
-        writeEnvValues({ PROJECT_UNITY_CATALOG_SCHEMA: schemaSpec })
+        config.setMany({ PROJECT_UNITY_CATALOG_SCHEMA: schemaSpec })
         subEnv.PROJECT_UNITY_CATALOG_SCHEMA = schemaSpec
       }
-      runCommand('uv', ['run', 'python', 'data/init/create_all_assets.py'])
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_all_assets.py'])
       break
     }
 
     case 'exec-tables': {
       // Only create schema + tables (no functions/procedures)
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 import subprocess, sys
 from pathlib import Path
 ROOT = Path('.')
@@ -596,15 +1147,21 @@ r = subprocess.run(['uv', 'run', 'python', 'data/init/create_catalog_schema.py']
 if r.returncode != 0: print('[x] create_catalog_schema failed'); sys.exit(1)
 print('[+] Catalog and schema ready')
 
-# Find table SQL files based on USE_DEFAULT_DATA / USE_GEN_DATA flags (env set by backend)
+# Find table SQL files based on FORGE_STASH_DIR or USE_DEMO_DATA / USE_GEN_DATA flags
 import os
 sql_files = []
-use_default = os.environ.get('USE_DEFAULT_DATA', 'true').strip().lower()
+stash_dir = os.environ.get('FORGE_STASH_DIR', '').strip()
+use_demo = (os.environ.get('USE_DEMO_DATA') or os.environ.get('USE_DEFAULT_DATA', 'true')).strip().lower()
 use_gen = os.environ.get('USE_GEN_DATA', 'false').strip().lower()
-print(f'[~] Data sources: default={use_default}, gen={use_gen}')
+if stash_dir:
+    print(f'[~] Data source: stash={stash_dir}')
+    d = ROOT / stash_dir / 'data' / 'init'
+    if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
+else:
+    print(f'[~] Data sources: demo={use_demo}, gen={use_gen}')
 sys.stdout.flush()
-if use_default in ('true', '1', 'yes'):
-    d = ROOT / 'data' / 'default' / 'init'
+if not stash_dir and use_demo in ('true', '1', 'yes'):
+    d = ROOT / 'data' / 'demo' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
 if os.environ.get('USE_GEN_DATA', 'false').strip().lower() in ('true', '1', 'yes'):
     d = ROOT / 'data' / 'gen' / 'init'
@@ -630,7 +1187,7 @@ print(f'[+] All {len(sql_files)} table(s) provisioned')
 
     case 'exec-functions': {
       // Only create functions + procedures
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 import subprocess, sys
 
 print('[~] Creating UC functions...')
@@ -648,17 +1205,42 @@ print('[+] All functions and procedures created')
       break
     }
 
+    case 'save-lakebase': {
+      const lbName = params.name
+      if (!lbName) { done(false); break }
+      runCommand(PY.cmd, [...PY.pre, '-c', `
+from pathlib import Path; import re
+f = Path('.env.local')
+key = 'LAKEBASE_INSTANCE_NAME'
+val = '${lbName.replace(/'/g, "\\'")}'
+lines = f.read_text().splitlines() if f.exists() else []
+new = []; found = False
+for line in lines:
+    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=', line)
+    if m and m.group(1) == key: new.append(key + '=' + val); found = True
+    else: new.append(line)
+if not found: new.append(key + '=' + val)
+f.write_text('\\n'.join(new) + '\\n')
+print('[+] LAKEBASE_INSTANCE_NAME = ' + val)
+`.trim()])
+      break
+    }
+
+    case 'exec-lakebase':
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_lakebase.py'])
+      break
+
     case 'exec-mlflow':
-      runCommand('uv', ['run', 'python', 'data/init/create_mlflow_experiment.py'])
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_mlflow_experiment.py'])
       break
 
     case 'exec-grants':
-      runCommand('bash', ['deploy/run_all_grants.sh'])
+      runCommand(PY.cmd, [...PY.pre, 'deploy/grant/run_all_grants.py'])
       break
 
     case 'exec-genie': {
-      const genieName = params.name || 'Checkin Metrics'
-      runCommand('uv', ['run', 'python', 'data/init/create_genie_space.py'], { GENIE_ROOM_NAME: genieName })
+      const genieName = params.name || 'Project Data'
+      runCommand(PY.cmd, [...PY.pre, 'data/init/create_genie_space.py'], { GENIE_ROOM_NAME: genieName })
       break
     }
 
@@ -666,7 +1248,7 @@ print('[+] All functions and procedures created')
       // Save host from a selected CLI profile
       const profileName = params.profile
       if (!profileName) { write('line', { text: '[x] no profile selected\n', stream: 'err' }); done(false); break }
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
 import subprocess, json, re
@@ -693,7 +1275,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = ${profileName}')
       const profName = params.profile || ''
       if (!newHost) { write('line', { text: '[x] no host provided\n', stream: 'err' }); done(false); break }
       const hostUrl = (newHost.startsWith('http') ? newHost : 'https://' + newHost).replace(/\/+$/, '')
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
 from pathlib import Path
@@ -751,7 +1333,7 @@ print('[+] done')
       // Pick existing profile for FM workspace, generate PAT, save endpoint+token
       const profileName = params.profile
       if (!profileName) { write('line', { text: '[x] no profile selected\n', stream: 'err' }); done(false); break }
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from scripts.py.setup_dbx_env import _profile_for_host, _isolated_client, _redact, write_env_entry, ENV_FILE
 import subprocess, re
@@ -767,16 +1349,16 @@ if not host.startswith('http'): host = 'https://' + host
 endpoint = host.rstrip('/') + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
 w = _isolated_client('${profileName}')
 t = w.tokens.create(comment='agent-forge-fm', lifetime_seconds=604800)
-write_env_entry(ENV_FILE, 'AGENT_MODEL_ENDPOINT', endpoint)
+write_env_entry(ENV_FILE, 'AGENT_MODEL', endpoint)
 write_env_entry(ENV_FILE, 'AGENT_MODEL_TOKEN', t.token_value)
-print('[+] AGENT_MODEL_ENDPOINT = ' + endpoint)
+print('[+] AGENT_MODEL = ' + endpoint)
 print('[+] AGENT_MODEL_TOKEN = ' + _redact(t.token_value))
 `.trim().replace(/\$\{profileName\}/g, profileName)])
       break
     }
 
     case 'exec-ka': {
-      runCommand('uv', ['run', 'python', '-c', `
+      runCommand(PY.cmd, [...PY.pre, '-c', `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import subprocess, sys
 print('[~] creating Knowledge Assistant from YAML...')
@@ -789,10 +1371,10 @@ print('[+] Knowledge Assistant provisioned')
 
     case 'exec-same': {
       try {
-        commentOutKeys(['AGENT_MODEL_ENDPOINT', 'AGENT_MODEL_TOKEN'])
+        config.disableMany(['AGENT_MODEL', 'AGENT_MODEL_TOKEN'])
         synthetic([
           '[+] same-workspace mode selected',
-          '[+] AGENT_MODEL_ENDPOINT commented out (will use DATABRICKS_HOST at runtime)',
+          '[+] AGENT_MODEL commented out (will use DATABRICKS_HOST at runtime)',
           '[+] AGENT_MODEL_TOKEN commented out',
           '[+] ready',
         ])
@@ -806,21 +1388,59 @@ print('[+] Knowledge Assistant provisioned')
     case 'save-warehouse': {
       const warehouseId = params.id
       if (!warehouseId) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', SAVE_WAREHOUSE_SCRIPT(warehouseId)])
+      runCommand(PY.cmd, [...PY.pre, '-c', SAVE_WAREHOUSE_SCRIPT(warehouseId)])
       break
     }
 
     case 'save-schema': {
       const { catalog, schema } = params
       if (!catalog || !schema) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', SAVE_SCHEMA_SCRIPT(catalog, schema)])
+      runCommand(PY.cmd, [...PY.pre, '-c', SAVE_SCHEMA_SCRIPT(catalog, schema)])
       break
     }
 
     case 'save-genie': {
       const { id: genieId, name: genieName } = params
       if (!genieId) { done(false); break }
-      runCommand('uv', ['run', 'python', '-c', SAVE_GENIE_SCRIPT(genieId, genieName || '')])
+      runCommand(PY.cmd, [...PY.pre, '-c', SAVE_GENIE_SCRIPT(genieId, genieName || '')])
+      break
+    }
+
+    case 'save-workspace': {
+      let { host: wsHost, token: wsToken } = params
+      if (!wsHost || !wsToken) { write('line', { text: '[x] host and token required\n', stream: 'err' }); done(false); break }
+      if (!wsHost.startsWith('http')) wsHost = 'https://' + wsHost
+      wsHost = wsHost.replace(/\/+$/, '')
+      config.setMany({ DATABRICKS_HOST: wsHost, DATABRICKS_TOKEN: wsToken })
+      process.env.DATABRICKS_HOST = wsHost
+      process.env.DATABRICKS_TOKEN = wsToken
+      // Clean conflicting auth
+      for (const k of ['DATABRICKS_CONFIG_PROFILE', 'DATABRICKS_CLIENT_ID', 'DATABRICKS_CLIENT_SECRET', 'DATABRICKS_REFRESH_TOKEN', 'DATABRICKS_TOKEN_ENDPOINT']) {
+        config.disable(k)
+        delete process.env[k]
+      }
+      synthetic([`[+] DATABRICKS_HOST = ${wsHost}`, `[+] DATABRICKS_TOKEN = ${wsToken.substring(0, 8)}...`])
+      break
+    }
+
+    case 'save-manual': {
+      let { key, value } = params
+      if (!key || !value) { write('line', { text: '[x] key and value required\n', stream: 'err' }); done(false); break }
+      // Auto-prepend https:// for host URLs
+      if (key === 'DATABRICKS_HOST' && !value.startsWith('http')) value = 'https://' + value
+      // Strip trailing slash
+      if (key === 'DATABRICKS_HOST') value = value.replace(/\/+$/, '')
+      // Schema: create catalog + schema on workspace (not just save string)
+      if (key === 'PROJECT_UNITY_CATALOG_SCHEMA' && value.includes('.')) {
+        const [catalog, schema] = value.split('.', 2)
+        config.setMany({ [key]: value })
+        process.env[key] = value
+        runCommand(PY.cmd, [...PY.pre, '-c', SAVE_SCHEMA_SCRIPT(catalog, schema)])
+        break
+      }
+      config.setMany({ [key]: value })
+      process.env[key] = value
+      synthetic([`[+] ${key} = ${key.includes('TOKEN') ? value.substring(0, 8) + '...' : value}`])
       break
     }
 
@@ -833,7 +1453,34 @@ from scripts.py.setup_dbx_env import write_env_entry, ENV_FILE
 write_env_entry(ENV_FILE, 'DBX_APP_NAME', '${appName.replace(/'/g, "\\'")}')
 print('[+] DBX_APP_NAME = ${appName.replace(/'/g, "\\'")}')
 `.trim()
-      runCommand('uv', ['run', 'python', '-c', script])
+      runCommand(PY.cmd, [...PY.pre, '-c', script])
+      break
+    }
+
+    case 'save-api': {
+      const { slug, type, conn, url, method, path: apiPath, desc, apiParams, header } = params
+      if (!slug) { write('line', { text: '[x] no API name provided\n', stream: 'err' }); done(false); break }
+      const prefix = `PROJECT_API_${slug}`
+      const lines = []
+      if (type === 'uc' && conn) lines.push(`${prefix}_CONN=${conn}`)
+      if (type === 'direct' && url) lines.push(`${prefix}_URL=${url}`)
+      if (method && method !== 'GET') lines.push(`${prefix}_METHOD=${method}`)
+      if (apiPath && apiPath !== '/') lines.push(`${prefix}_PATH=${apiPath}`)
+      if (desc) lines.push(`${prefix}_DESC=${desc}`)
+      if (apiParams) lines.push(`${prefix}_PARAMS=${apiParams}`)
+      if (header && type === 'direct') lines.push(`${prefix}_HEADER=${header}`)
+      if (lines.length === 0) { write('line', { text: '[x] no connection or URL provided\n', stream: 'err' }); done(false); break }
+      // Append all lines to .env.local
+      const script = `
+from pathlib import Path
+f = Path('.env.local')
+text = f.read_text() if f.exists() else ''
+additions = ${JSON.stringify(lines)}
+text = text.rstrip('\\n') + '\\n' + '\\n'.join(additions) + '\\n'
+f.write_text(text)
+for line in additions: print('[+] ' + line)
+`.trim()
+      runCommand(PY.cmd, [...PY.pre, '-c', script])
       break
     }
 
@@ -846,6 +1493,44 @@ print('[+] DBX_APP_NAME = ${appName.replace(/'/g, "\\'")}')
       runCommand('bash', ['deploy/deploy.sh', '--dry-run'])
       break
     }
+
+    case 'exec-deploy-agent': {
+      // SaaS mode: deploy Agent App via SDK (no DAB CLI needed)
+      const configDict = config.toEnvDict()
+      const tmpConfig = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
+      fs.writeFileSync(tmpConfig, JSON.stringify(configDict, null, 2))
+      runCommand(PY.cmd, [...PY.pre, 'deploy/deploy_agent_app.py', '--config', tmpConfig])
+      break
+    }
+
+    case 'exec-git-push': {
+      // Push Agent App project to GitHub via Databricks Git Folders
+      const repoUrl = params.repo_url
+      if (!repoUrl) { write('line', { text: '[x] repo_url required\n', stream: 'err' }); done(false); break }
+      const configDict2 = config.toEnvDict()
+      const tmpConfig2 = path.join(PROJECT_ROOT, '.tmp-deploy-config.json')
+      fs.writeFileSync(tmpConfig2, JSON.stringify(configDict2, null, 2))
+      runCommand(PY.cmd, [...PY.pre, 'deploy/git_push.py', '--repo-url', repoUrl, '--config', tmpConfig2])
+      break
+    }
+
+    case 'save-multi-instance': {
+      const { prefix, slug, url, header } = params
+      if (!prefix || !slug || !url) { write('line', { text: '[x] prefix, slug, and url required\n', stream: 'err' }); done(false); break }
+      const key = `${prefix}${slug}`
+      const updates = { [key]: url }
+      if (header) updates[`${key}_HEADER`] = header
+      config.setMany(updates)
+      const lines = [`[+] ${key} = ${url}`]
+      if (header) lines.push(`[+] ${key}_HEADER = ${header.split(':')[0]}:***`)
+      synthetic(lines)
+      break
+    }
+
+    case 'forge-bridge':
+      // Self-contained in frontend -- if it reaches here, just mark done
+      done(true)
+      break
 
     default:
       write('line', { text: '[x] unknown action: ' + action + '\n', stream: 'err' })
@@ -862,34 +1547,30 @@ host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
 token = os.environ.get('DATABRICKS_TOKEN','').strip()
 if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
 ctx = ssl.create_default_context()
-req = urllib.request.Request(host + '/api/2.0/preview/scim/v2/Me')
-if token: req.add_header('Authorization', 'Bearer ' + token)
+# Step 1: check host reachability (no auth)
 try:
+    req = urllib.request.Request(host + '/oidc/.well-known/oauth-authorization-server')
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-        d = json.loads(r.read())
-        print('[+] reachable — ' + d.get('userName', '?'))
+        json.loads(r.read())
 except urllib.error.HTTPError as e:
-    if e.code in (401, 403): print('[+] host reachable — proceed to auth')
-    else: print('[x] HTTP ' + str(e.code)); exit(1)
+    if e.code >= 500: print('[x] host unreachable: HTTP ' + str(e.code)); exit(1)
 except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
-`.trim(),
-
-  auth: `
-from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-import os, urllib.request, json, ssl
-host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
-token = os.environ.get('DATABRICKS_TOKEN','').strip()
-if not host: print('[x] DATABRICKS_HOST not set'); exit(1)
-if not token: print('[x] DATABRICKS_TOKEN not set'); exit(1)
-ctx = ssl.create_default_context()
+    print('[x] host unreachable: ' + str(e)[:100]); exit(1)
+# Step 2: if token set, verify auth
+if not token:
+    print('[+] reachable — ' + host.replace('https://','') + ' (no token set)')
+    exit(0)
 try:
     req = urllib.request.Request(host + '/api/2.0/preview/scim/v2/Me', headers={'Authorization': 'Bearer ' + token})
     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
         d = json.loads(r.read())
-        print('[+] authenticated — ' + d.get('userName', '?'))
+        print('[+] reachable — ' + d.get('userName', '?'))
+except urllib.error.HTTPError as e:
+    if e.code == 401: print('[x] token invalid (401 Unauthorized)'); exit(1)
+    elif e.code == 403: print('[+] reachable — token valid (SCIM restricted)')
+    else: print('[x] host reachable but auth failed: HTTP ' + str(e.code)); exit(1)
 except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
+    print('[x] host reachable but auth failed: ' + str(e)[:100]); exit(1)
 `.trim(),
 
   warehouse: `
@@ -955,7 +1636,7 @@ if not spec: print('[x] schema not set'); exit(1)
 root = Path('.')
 func_count = 0
 proc_count = 0
-for base in ['data/default', 'data/gen']:
+for base in ['data/demo', 'data/gen']:
     fd = root / base / 'func'
     pd = root / base / 'proc'
     if fd.exists(): func_count += len([f for f in fd.glob('*.sql') if re.search(r'CREATE', f.read_text(), re.I)])
@@ -968,7 +1649,7 @@ print(f'[+] {func_count} function(s) + {proc_count} procedure(s) ready in {spec}
   model: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 import os, urllib.request, json, ssl, time
-endpoint = os.environ.get('AGENT_MODEL_ENDPOINT','').strip()
+endpoint = os.environ.get('AGENT_MODEL','').strip()
 host = os.environ.get('DATABRICKS_HOST','').strip().rstrip('/')
 if not endpoint: endpoint = host + '/serving-endpoints/databricks-claude-sonnet-4-6/invocations'
 token = (os.environ.get('AGENT_MODEL_TOKEN','') or os.environ.get('DATABRICKS_TOKEN','')).strip()
@@ -999,6 +1680,7 @@ except Exception as e:
 
   genie: null, // dynamic — uses per-instance test below
   ka: null,    // dynamic — uses per-instance test below
+  api: null,   // dynamic — uses per-instance test below
 
   mlflow: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
@@ -1013,35 +1695,47 @@ except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim(),
 
+  lakebase: `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os
+from databricks.sdk import WorkspaceClient
+name = os.environ.get('LAKEBASE_INSTANCE_NAME','').strip()
+if not name: print('[x] LAKEBASE_INSTANCE_NAME not set'); exit(1)
+try:
+    w = WorkspaceClient()
+    inst = w.database.get_database_instance(name=name)
+    state = str(getattr(inst, 'state', 'UNKNOWN')).upper()
+    if 'AVAILABLE' in state or 'ACTIVE' in state: print('[+] available — ' + name)
+    else: print('[x] ' + name + ' — ' + state); exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim(),
+
   deploy: `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
-import os, subprocess, json
+import os
+from databricks.sdk import WorkspaceClient
 app_name = os.environ.get('DBX_APP_NAME', '').strip()
 if not app_name: print('[x] DBX_APP_NAME not set'); exit(1)
 try:
-    out = subprocess.check_output(
-        ['databricks', 'apps', 'get', app_name, '--output', 'json'],
-        text=True, timeout=15, stderr=subprocess.PIPE
-    )
-    d = json.loads(out)
-    status = d.get('status', {}).get('state', d.get('compute_status', {}).get('state', 'UNKNOWN'))
-    url = d.get('url', '')
-    if status in ('RUNNING', 'ACTIVE', 'IDLE'):
+    w = WorkspaceClient()
+    app = w.apps.get(app_name)
+    status = str(getattr(getattr(app, 'app_status', None), 'state', 'UNKNOWN'))
+    url = getattr(app, 'url', '') or ''
+    if 'RUNNING' in status:
         print('[+] running — ' + (url or app_name))
-    elif status in ('STARTING', 'DEPLOYING', 'PENDING'):
+    elif 'STARTING' in status or 'PENDING' in status:
         print('[+] deploying — ' + status.lower())
     else:
         print('[x] ' + app_name + ' — ' + status)
         exit(1)
-except subprocess.CalledProcessError as e:
-    err = (e.stderr or '').strip()[:100]
+except Exception as e:
+    err = str(e)[:100]
     if 'not found' in err.lower() or '404' in err:
         print('[x] app not found — deploy first')
     else:
         print('[x] ' + err)
     exit(1)
-except Exception as e:
-    print('[x] ' + str(e)[:100]); exit(1)
 `.trim(),
 }
 
@@ -1049,10 +1743,18 @@ app.get('/api/setup/test', (req, res) => {
   const step = req.query.step
   const envKey = req.query.key // optional: per-instance key for genie/ka
 
+  // Check token expiry (host test handles partial -- reachability works without token)
+  if (step !== 'host') {
+    const expiryErr = checkTokenExpiry()
+    if (expiryErr) return res.json({ ok: false, message: expiryErr })
+  }
+
   // Dynamic test scripts for genie/ka per-instance testing
   let script = TEST_SCRIPTS[step]
   if (step === 'genie') {
-    const key = envKey || 'PROJECT_GENIE_CHECKIN'
+    const instances = config.listByPrefix('PROJECT_GENIE_')
+    const firstActive = instances.find(i => i.enabled)
+    const key = envKey || (firstActive ? firstActive.key : 'PROJECT_GENIE_DEFAULT')
     script = `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from databricks.sdk import WorkspaceClient; import os
@@ -1066,7 +1768,9 @@ except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim()
   } else if (step === 'ka') {
-    const key = envKey || 'PROJECT_KA_PASSENGERS'
+    const kaInstances = config.listByPrefix('PROJECT_KA_')
+    const firstActiveKa = kaInstances.find(i => i.enabled)
+    const key = envKey || (firstActiveKa ? firstActiveKa.key : 'PROJECT_KA_DEFAULT')
     script = `
 from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
 from databricks.sdk import WorkspaceClient; import os
@@ -1096,18 +1800,223 @@ try:
 except Exception as e:
     print('[x] ' + str(e)[:100]); exit(1)
 `.trim()
+  } else if (step === 'mcp') {
+    const key = envKey || ''
+    if (!key) return res.json({ ok: false, message: 'no MCP key specified' })
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error, json
+url = os.environ.get('${key}','').strip()
+if not url: print('[x] ${key} not set'); exit(1)
+# Send MCP initialize request (POST with JSON-RPC)
+body = json.dumps({"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"brickforge-test","version":"0.1"}}}).encode()
+try:
+    req = urllib.request.Request(url, data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Accept', 'application/json, text/event-stream')
+    header_key = '${key}_HEADER'
+    header_val = os.environ.get(header_key, '').strip()
+    if header_val and ':' in header_val:
+        hname, hval = header_val.split(':', 1)
+        req.add_header(hname.strip(), hval.strip())
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] connected — ' + url)
+except urllib.error.HTTPError as e:
+    if e.code in (406, 415):
+        print('[+] reachable — ' + url + ' (server responded ' + str(e.code) + ')')
+    else:
+        print('[x] HTTP ' + str(e.code) + ' — ' + url)
+        exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  } else if (step === 'a2a') {
+    const key = envKey || ''
+    if (!key) return res.json({ ok: false, message: 'no A2A key specified' })
+    script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error
+url = os.environ.get('${key}','').strip()
+if not url: print('[x] ${key} not set'); exit(1)
+try:
+    req = urllib.request.Request(url, method='GET')
+    header_key = '${key}_HEADER'
+    header_val = os.environ.get(header_key, '').strip()
+    if header_val and ':' in header_val:
+        hname, hval = header_val.split(':', 1)
+        req.add_header(hname.strip(), hval.strip())
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] reachable — ' + url + ' (' + str(resp.status) + ')')
+except urllib.error.HTTPError as e:
+    if e.code in (405, 404, 400):
+        print('[+] reachable — ' + url + ' (' + str(e.code) + ')')
+    else:
+        print('[x] HTTP ' + str(e.code) + ' — ' + url)
+        exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+  } else if (step === 'api') {
+    const key = envKey || ''
+    if (!key) return res.json({ ok: false, message: 'no API key specified' })
+    // Determine if UC connection or direct URL
+    const isUc = key.endsWith('_CONN')
+    if (isUc) {
+      script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os
+conn = os.environ.get('${key}','').strip()
+if not conn: print('[x] ${key} not set'); exit(1)
+os.environ.pop('DATABRICKS_CONFIG_PROFILE', None)
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import ExternalFunctionRequestHttpMethod
+w = WorkspaceClient()
+slug = '${key}'.replace('PROJECT_API_','').replace('_CONN','')
+path = os.environ.get(f'PROJECT_API_{slug}_PATH', '/').strip()
+method = os.environ.get(f'PROJECT_API_{slug}_METHOD', 'GET').strip()
+try:
+    resp = w.serving_endpoints.http_request(conn=conn, method=ExternalFunctionRequestHttpMethod(method), path=path)
+    print('[+] ' + str(resp.status_code) + ' — ' + conn + ' ' + method + ' ' + path)
+except Exception as e:
+    print('[x] ' + str(e)[:120]); exit(1)
+`.trim()
+    } else {
+      script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error
+url = os.environ.get('${key}','').strip()
+if not url: print('[x] ${key} not set'); exit(1)
+slug = '${key}'.replace('PROJECT_API_','').replace('_URL','')
+path = os.environ.get(f'PROJECT_API_{slug}_PATH', '/').strip()
+method = os.environ.get(f'PROJECT_API_{slug}_METHOD', 'GET').strip()
+full = url.rstrip('/') + '/' + path.lstrip('/')
+try:
+    req = urllib.request.Request(full, method=method)
+    header_val = os.environ.get(f'PROJECT_API_{slug}_HEADER', '').strip()
+    if header_val and ':' in header_val:
+        hname, hval = header_val.split(':', 1)
+        req.add_header(hname.strip(), hval.strip())
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] ' + str(resp.status) + ' — ' + method + ' ' + full)
+except urllib.error.HTTPError as e:
+    if e.code in (405, 404, 400):
+        print('[+] reachable — ' + full + ' (' + str(e.code) + ')')
+    else:
+        print('[x] HTTP ' + str(e.code) + ' — ' + full)
+        exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+    }
+  } else if (step === 'features') {
+    if (envKey === 'PROJECT_TOOL_VOICE') {
+      script = `
+import os, urllib.request, urllib.error
+key = os.environ.get('OPENAI_API_KEY','').strip()
+if not key: print('[x] OPENAI_API_KEY not set'); exit(1)
+try:
+    req = urllib.request.Request('https://api.openai.com/v1/models', headers={'Authorization': f'Bearer {key}'})
+    resp = urllib.request.urlopen(req, timeout=10)
+    print('[+] OpenAI API key valid (' + str(resp.status) + ')')
+except urllib.error.HTTPError as e:
+    if e.code == 401: print('[x] invalid API key')
+    else: print('[x] OpenAI API error: ' + str(e.code))
+    exit(1)
+except Exception as e:
+    print('[x] ' + str(e)[:100]); exit(1)
+`.trim()
+    } else if (envKey === 'PROJECT_TOOL_CHART') {
+      script = `print('[+] chart tool enabled')`
+    } else {
+      const val = envKey ? process.env[envKey] : ''
+      script = val && val.trim().toLowerCase() !== 'false'
+        ? `print('[+] ${envKey} enabled')`
+        : `print('[x] ${envKey} not enabled'); exit(1)`
+    }
   }
 
   if (!script) return res.json({ ok: false, message: 'no test for step: ' + step })
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 25000,
+    env: buildSubEnv(),
   }, (err, stdout, stderr) => {
     const raw = (stdout || '').trim() || (stderr || '').trim()
     const ok = !err && raw.startsWith('[+]')
     const message = raw.replace(/^\[.\] /, '')
     res.json({ ok, message: message || (err ? String(err) : 'no output') })
+  })
+})
+
+// GET /api/setup/mcp-tools?key=<envKey> — list tools exposed by an MCP server
+app.get('/api/setup/mcp-tools', (req, res) => {
+  const key = req.query.key
+  if (!key) return res.status(400).json({ error: 'key query param required' })
+
+  const script = `
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os, urllib.request, urllib.error, json, sys
+
+url = os.environ.get('${key}','').strip()
+if not url: print(json.dumps({"error":"${key} not set"})); exit(0)
+
+headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}
+header_key = '${key}_HEADER'
+header_val = os.environ.get(header_key, '').strip()
+if header_val and ':' in header_val:
+    hname, hval = header_val.split(':', 1)
+    headers[hname.strip()] = hval.strip()
+
+def rpc(method, mid, params=None):
+    body = {"jsonrpc":"2.0","method":method,"id":mid}
+    if params: body["params"] = params
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method='POST')
+    for k, v in headers.items(): req.add_header(k, v)
+    resp = urllib.request.urlopen(req, timeout=15)
+    raw = resp.read().decode()
+    # Handle SSE or plain JSON
+    for line in raw.split('\\n'):
+        line = line.strip()
+        if line.startswith('data:'):
+            line = line[5:].strip()
+        if not line: continue
+        try:
+            d = json.loads(line)
+            if d.get('id') == mid: return d
+        except: pass
+    return json.loads(raw)
+
+try:
+    # Initialize
+    init = rpc('initialize', 1, {"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"brickforge","version":"0.1"}})
+    # Send initialized notification (no id)
+    body = json.dumps({"jsonrpc":"2.0","method":"notifications/initialized"}).encode()
+    req2 = urllib.request.Request(url, data=body, method='POST')
+    for k, v in headers.items(): req2.add_header(k, v)
+    try: urllib.request.urlopen(req2, timeout=5)
+    except: pass
+    # List tools
+    tools_resp = rpc('tools/list', 2)
+    tools = tools_resp.get('result', {}).get('tools', [])
+    out = [{"name": t.get("name",""), "description": t.get("description","")} for t in tools]
+    print(json.dumps({"tools": out}))
+except Exception as e:
+    print(json.dumps({"error": str(e)[:200]}))
+`.trim()
+
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
+    cwd: PROJECT_ROOT,
+    timeout: 30000,
+    env: buildSubEnv(),
+  }, (err, stdout) => {
+    try {
+      const data = JSON.parse((stdout || '').trim())
+      res.json(data)
+    } catch {
+      res.json({ error: err ? String(err) : 'no response' })
+    }
   })
 })
 
@@ -1149,11 +2058,11 @@ app.post('/api/gen/prompt-generate', (req, res) => {
   const { domain, tableSchemas } = req.body || {}
   if (!domain) return res.status(400).json({ error: 'domain is required' })
 
-  const args = ['run', 'python', 'data/gen/generate_prompts.py', '--mode=generate', `--domain=${domain}`]
+  const args = [...PY.pre, 'data/gen/generate_prompts.py', '--mode=generate', `--domain=${domain}`]
   if (tableSchemas && tableSchemas.length > 0) {
     args.push(`--tables-json=${JSON.stringify(tableSchemas)}`)
   }
-  sseGenRunner(res, 'uv', args)
+  sseGenRunner(res, PY.cmd, args)
 })
 
 // POST /api/gen/prompt-save — save generated prompts to conf/prompt/
@@ -1162,8 +2071,7 @@ app.post('/api/gen/prompt-save', (req, res) => {
   if (!main_prompt) return res.status(400).json({ error: 'main_prompt is required' })
 
   const stdinData = JSON.stringify({ main_prompt, knowledge_base, user_prompt })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_prompts.py', '--mode=save'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_prompts.py', '--mode=save'
   ], stdinData)
 })
 
@@ -1172,12 +2080,12 @@ app.post('/api/gen/prompt-save', (req, res) => {
 // GET /api/gen/status — check model config + list previously generated tables
 app.get('/api/gen/status', (_req, res) => {
   try {
-    const entries = parseEnvFile()
+    const entries = config.list()
     const env = {}
     for (const { key, value } of entries) env[key] = value
 
     const modelReady = !!(
-      (env.AGENT_MODEL_ENDPOINT && env.AGENT_MODEL_ENDPOINT.trim()) ||
+      (env.AGENT_MODEL && env.AGENT_MODEL.trim()) ||
       (env.DATABRICKS_HOST && env.DATABRICKS_HOST.trim())
     )
 
@@ -1185,7 +2093,7 @@ app.get('/api/gen/status', (_req, res) => {
     const manifestPath = path.join(PROJECT_ROOT, 'data', 'gen', 'manifest.json')
     try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) } catch {}
 
-    const useDefault = ['true', '1', 'yes'].includes((env.USE_DEFAULT_DATA || 'true').trim().toLowerCase())
+    const useDefault = ['true', '1', 'yes'].includes((env.USE_DEMO_DATA || env.USE_DEFAULT_DATA || 'true').trim().toLowerCase())
     const useGen = ['true', '1', 'yes'].includes((env.USE_GEN_DATA || 'false').trim().toLowerCase())
 
     res.json({ modelReady, manifest, useDefault, useGen })
@@ -1194,18 +2102,18 @@ app.get('/api/gen/status', (_req, res) => {
   }
 })
 
-// GET /api/gen/tables — dynamic table discovery based on USE_DEFAULT_DATA / USE_GEN_DATA flags
+// GET /api/gen/tables — dynamic table discovery based on USE_DEMO_DATA / USE_GEN_DATA flags
 app.get('/api/gen/tables', (_req, res) => {
   try {
     const env = {}
-    for (const { key, value } of parseEnvFile()) env[key] = value
+    for (const { key, value } of config.list()) env[key] = value
 
-    const useDefault = (env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
+    const useDemo = (env.USE_DEMO_DATA || env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
     const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
 
     const sources = []
-    if (['true', '1', 'yes'].includes(useDefault)) {
-      sources.push({ csvDir: path.join(PROJECT_ROOT, 'data', 'default', 'csv'), initDir: path.join(PROJECT_ROOT, 'data', 'default', 'init'), source: 'default' })
+    if (['true', '1', 'yes'].includes(useDemo)) {
+      sources.push({ csvDir: path.join(PROJECT_ROOT, 'data', 'demo', 'csv'), initDir: path.join(PROJECT_ROOT, 'data', 'demo', 'init'), source: 'demo' })
     }
     if (['true', '1', 'yes'].includes(useGen)) {
       sources.push({ csvDir: path.join(PROJECT_ROOT, 'data', 'gen', 'csv'), initDir: path.join(PROJECT_ROOT, 'data', 'gen', 'init'), source: 'generated' })
@@ -1242,6 +2150,42 @@ app.get('/api/gen/tables', (_req, res) => {
     }
 
     res.json({ tables })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/gen/routines — dynamic routine discovery (functions + procedures) from demo + gen
+app.get('/api/gen/routines', (_req, res) => {
+  try {
+    const env = {}
+    for (const { key, value } of config.list()) env[key] = value
+
+    const useDemo = (env.USE_DEMO_DATA || env.USE_DEFAULT_DATA || 'true').trim().toLowerCase()
+    const useGen = (env.USE_GEN_DATA || 'false').trim().toLowerCase()
+
+    const sources = []
+    if (['true', '1', 'yes'].includes(useDemo)) {
+      sources.push({ base: path.join(PROJECT_ROOT, 'data', 'demo'), source: 'demo' })
+    }
+    if (['true', '1', 'yes'].includes(useGen)) {
+      sources.push({ base: path.join(PROJECT_ROOT, 'data', 'gen'), source: 'generated' })
+    }
+
+    const routines = []
+    for (const { base, source } of sources) {
+      for (const [kind, subdir] of [['function', 'func'], ['procedure', 'proc']]) {
+        const dir = path.join(base, subdir)
+        let files = []
+        try { files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort() } catch {}
+        for (const f of files) {
+          const name = f.replace('.sql', '')
+          routines.push({ name, kind, source })
+        }
+      }
+    }
+
+    res.json({ routines })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -1286,9 +2230,7 @@ function sseGenRunner(res, cmd, args, stdinData = null) {
     if (!res.writableEnded) res.end()
   }
 
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   let finished = false
   const proc = spawn(cmd, args, { cwd: PROJECT_ROOT, env: subEnv })
@@ -1335,8 +2277,7 @@ app.post('/api/gen/schema', (req, res) => {
   const { domain } = req.body || {}
   if (!domain) return res.status(400).json({ error: 'domain is required' })
 
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_tables.py',
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py',
     '--mode=schema', `--domain=${domain}`
   ])
 })
@@ -1347,8 +2288,7 @@ app.post('/api/gen/data', (req, res) => {
   if (!table) return res.status(400).json({ error: 'table is required' })
 
   const stdinData = JSON.stringify({ table, contextTables })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_tables.py', '--mode=data'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py', '--mode=data'
   ], stdinData)
 })
 
@@ -1358,14 +2298,13 @@ app.post('/api/gen/save', (req, res) => {
   if (!table || !rows) return res.status(400).json({ error: 'table and rows are required' })
 
   const stdinData = JSON.stringify({ table, rows, allTables })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_tables.py', '--mode=save'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py', '--mode=save'
   ], stdinData)
 })
 
 // POST /api/gen/provision — SSE stream, runs only generated table SQL
 app.post('/api/gen/provision', (req, res) => {
-  sseGenRunner(res, 'uv', ['run', 'python', 'data/gen/generate_tables.py', '--mode=provision-gen'])
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_tables.py', '--mode=provision-gen'])
 })
 
 // GET /api/gen/wizard-state — return saved wizard state or null
@@ -1404,12 +2343,12 @@ app.delete('/api/gen/wizard-state', (_req, res) => {
 // GET /api/gen/routine-status — manifest + model status + table schemas for context
 app.get('/api/gen/routine-status', (_req, res) => {
   try {
-    const entries = parseEnvFile()
+    const entries = config.list()
     const env = {}
     for (const { key, value } of entries) env[key] = value
 
     const modelReady = !!(
-      (env.AGENT_MODEL_ENDPOINT && env.AGENT_MODEL_ENDPOINT.trim()) ||
+      (env.AGENT_MODEL && env.AGENT_MODEL.trim()) ||
       (env.DATABRICKS_HOST && env.DATABRICKS_HOST.trim())
     )
 
@@ -1436,11 +2375,11 @@ app.post('/api/gen/routine-schema', (req, res) => {
   const { domain, tableSchemas } = req.body || {}
   if (!domain) return res.status(400).json({ error: 'domain is required' })
 
-  const args = ['run', 'python', 'data/gen/generate_routines.py', '--mode=schema', `--domain=${domain}`]
+  const args = [...PY.pre, 'data/gen/generate_routines.py', '--mode=schema', `--domain=${domain}`]
   if (tableSchemas && tableSchemas.length > 0) {
     args.push(`--tables-json=${JSON.stringify(tableSchemas)}`)
   }
-  sseGenRunner(res, 'uv', args)
+  sseGenRunner(res, PY.cmd, args)
 })
 
 // POST /api/gen/routine-sql — SSE stream, generates SQL for one routine
@@ -1449,8 +2388,7 @@ app.post('/api/gen/routine-sql', (req, res) => {
   if (!routine) return res.status(400).json({ error: 'routine is required' })
 
   const stdinData = JSON.stringify({ routine, tableSchemas })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_routines.py', '--mode=sql'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_routines.py', '--mode=sql'
   ], stdinData)
 })
 
@@ -1460,14 +2398,13 @@ app.post('/api/gen/routine-save', (req, res) => {
   if (!routine || !sql) return res.status(400).json({ error: 'routine and sql are required' })
 
   const stdinData = JSON.stringify({ routine, sql, allRoutines })
-  sseGenRunner(res, 'uv', [
-    'run', 'python', 'data/gen/generate_routines.py', '--mode=save'
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_routines.py', '--mode=save'
   ], stdinData)
 })
 
 // POST /api/gen/routine-provision — SSE stream, provisions generated procedures
 app.post('/api/gen/routine-provision', (req, res) => {
-  sseGenRunner(res, 'uv', ['run', 'python', 'data/gen/generate_routines.py', '--mode=provision-gen'])
+  sseGenRunner(res, PY.cmd, [...PY.pre, 'data/gen/generate_routines.py', '--mode=provision-gen'])
 })
 
 // GET /api/gen/routine-wizard-state
@@ -1530,11 +2467,9 @@ const upload = multer({ dest: path.join(PROJECT_ROOT, 'data', '.tmp-uploads') })
 
 // GET /api/ka/documents — list files in the KA volume
 app.get('/api/ka/documents', (_req, res) => {
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
-  execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=list'], {
+  execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=list'], {
     cwd: PROJECT_ROOT,
     env: subEnv,
     timeout: 20000,
@@ -1550,9 +2485,7 @@ app.post('/api/ka/upload', upload.array('files'), (req, res) => {
   const files = req.files || []
   if (files.length === 0) return res.status(400).json({ ok: false, error: 'no files provided' })
 
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   const results = []
   let pending = files.length
@@ -1562,7 +2495,7 @@ app.post('/api/ka/upload', upload.array('files'), (req, res) => {
     const destPath = path.join(path.dirname(file.path), file.originalname)
     fs.renameSync(file.path, destPath)
 
-    execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=upload', `--file=${destPath}`], {
+    execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=upload', `--file=${destPath}`], {
       cwd: PROJECT_ROOT,
       env: subEnv,
       timeout: 60000,
@@ -1590,13 +2523,11 @@ app.post('/api/ka/upload-url', (req, res) => {
   const { url } = req.body || {}
   if (!url) return res.status(400).json({ ok: false, error: 'url is required' })
 
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   const cleanEnv = { ...subEnv, UPLOAD_URL: url }
   console.log('[upload-url] starting for:', url.slice(0, 80))
-  const child = execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=upload-url'], {
+  const child = execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=upload-url'], {
     cwd: PROJECT_ROOT,
     env: cleanEnv,
     timeout: 60000,
@@ -1616,11 +2547,9 @@ app.delete('/api/ka/documents/:name', (req, res) => {
   const name = req.params.name
   if (!name) return res.status(400).json({ ok: false, error: 'name is required' })
 
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
-  execFile('uv', ['run', 'python', 'scripts/py/ka/volume_ops.py', '--mode=delete', `--name=${name}`], {
+  execFile(PY.cmd, [...PY.pre, 'scripts/py/ka/volume_ops.py', '--mode=delete', `--name=${name}`], {
     cwd: PROJECT_ROOT,
     env: subEnv,
     timeout: 20000,
@@ -1708,19 +2637,19 @@ exp_id = os.environ.get('MLFLOW_EXPERIMENT_ID', '').strip()
 if exp_id and exists_experiment(exp_id):
     resources.append({'id': 'mlflow', 'category': 'MLflow Experiment', 'name': exp_id})
 
-genie_id = os.environ.get('PROJECT_GENIE_CHECKIN', '').strip()
-if genie_id and exists_genie(genie_id):
-    resources.append({'id': 'genie', 'category': 'Genie Space', 'name': genie_id})
+for gk, gv in sorted(os.environ.items()):
+    if gk.startswith('PROJECT_GENIE_') and gv.strip() and exists_genie(gv.strip()):
+        resources.append({'id': f'genie:{gk}', 'category': 'Genie Space', 'name': f'{gk}={gv.strip()}'})
 
 if catalog and schema:
     vol_full = f'{catalog}.{schema}.doc'
     if exists_volume(vol_full):
         resources.append({'id': 'volume', 'category': 'UC Volume', 'name': vol_full})
-    for tn in parse_tables('data/default/init') + parse_tables('data/gen/init'):
+    for tn in parse_tables('data/demo/init') + parse_tables('data/gen/init'):
         full = f'{catalog}.{schema}.{tn}'
         if exists_table(full):
             resources.append({'id': f'table:{tn}', 'category': 'UC Table', 'name': full})
-    for pn in parse_names('data/default/proc', 'PROCEDURE'):
+    for pn in parse_names('data/demo/proc', 'PROCEDURE'):
         full = f'{catalog}.{schema}.{pn}'
         if exists_routine(full, 'FUNCTION'):
             resources.append({'id': f'proc:{pn}', 'category': 'UC Procedure', 'name': full})
@@ -1729,16 +2658,18 @@ bundle = ROOT / '.databricks' / 'bundle'
 if bundle.exists():
     resources.append({'id': 'bundle', 'category': 'DAB Bundle State', 'name': '.databricks/bundle/'})
 
-for key in ('PROJECT_GENIE_CHECKIN', 'MLFLOW_EXPERIMENT_ID'):
+cleanup_keys = [k for k in sorted(os.environ) if k.startswith('PROJECT_GENIE_') and os.environ[k].strip()] + ['MLFLOW_EXPERIMENT_ID']
+for key in cleanup_keys:
     if os.environ.get(key, '').strip():
         resources.append({'id': f'env:{key}', 'category': '.env.local cleanup', 'name': f'comment out {key}'})
 
 print(json.dumps(resources))
 `.trim()
 
-  execFile('uv', ['run', 'python', '-c', script], {
+  execFile(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     timeout: 60000,
+    env: buildSubEnv(),
   }, (err, stdout, stderr) => {
     if (err) return res.json({ items: [], error: stderr || String(err) })
     try { res.json({ items: JSON.parse(stdout.trim()) }) }
@@ -1803,11 +2734,13 @@ for rid in ids:
             mlflow.set_tracking_uri('databricks')
             mlflow.delete_experiment(eid)
             out(f'[+] deleted experiment: {eid}')
-        elif rid == 'genie':
-            gid = os.environ.get('PROJECT_GENIE_CHECKIN', '').strip()
-            out(f'[~] deleting Genie space {gid}...')
-            w.genie.trash_space(space_id=gid)
-            out(f'[+] deleted Genie space: {gid}')
+        elif rid.startswith('genie:'):
+            gk = rid.split(':', 1)[1]
+            gid = os.environ.get(gk, '').strip()
+            if gid:
+                out(f'[~] deleting Genie space {gk}={gid}...')
+                w.genie.trash_space(space_id=gid)
+                out(f'[+] deleted Genie space: {gid}')
         elif rid == 'volume':
             vol = f'{catalog}.{schema}.doc'
             out(f'[~] deleting volume {vol}...')
@@ -1848,12 +2781,10 @@ if errors: out(f'[~] completed with {errors} error(s)')
 else: out('[+] cleanup complete')
 `.trim()
 
-  const envEntries = parseEnvFile()
-  const subEnv = { ...process.env }
-  for (const { key, value } of envEntries) subEnv[key] = value
+  const subEnv = buildSubEnv()
 
   let finished = false
-  const proc = spawn('uv', ['run', 'python', '-c', script], {
+  const proc = spawn(PY.cmd, [...PY.pre, '-c', script], {
     cwd: PROJECT_ROOT,
     env: subEnv,
   })
@@ -1868,6 +2799,68 @@ else: out('[+] cleanup complete')
 })
 
 // SPA fallback — serve index.html for non-API routes
+// ── Project Management ──────────────────────────────────────────────────────
+const { ProjectManager } = require('./lib/project-manager')
+const projectManager = new ProjectManager(
+  process.env.DATABRICKS_HOST || '',
+  process.env.DATABRICKS_TOKEN || ''
+)
+
+// GET /api/projects -- list all .forge projects on UC Volume
+app.get('/api/projects', async (req, res) => {
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.json({ projects: [], error: 'no schema configured' })
+  try {
+    const projects = await projectManager.listProjects(schema)
+    res.json({ projects, current: projectManager.currentProject })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/projects -- create a new empty project
+app.post('/api/projects', async (req, res) => {
+  const { name } = req.body || {}
+  if (!name) return res.status(400).json({ error: 'name required' })
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.status(400).json({ error: 'no schema configured' })
+  try {
+    const AdmZip = require('adm-zip')
+    const zip = new AdmZip()
+    zip.addFile('config.env', Buffer.from(`# BrickForge project: ${name}\n`))
+    const ok = await projectManager.saveProject(schema, name, zip.toBuffer())
+    res.json({ ok, name })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/projects/:name -- load a project
+app.get('/api/projects/:name', async (req, res) => {
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.status(400).json({ error: 'no schema configured' })
+  try {
+    const buf = await projectManager.loadProject(schema, req.params.name)
+    if (!buf) return res.status(404).json({ error: 'project not found' })
+    res.json({ ok: true, name: req.params.name, size: buf.length })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/projects/:name -- delete a project
+app.delete('/api/projects/:name', async (req, res) => {
+  const schema = config.get('PROJECT_UNITY_CATALOG_SCHEMA') || ''
+  if (!schema) return res.status(400).json({ error: 'no schema configured' })
+  try {
+    const ok = await projectManager.deleteProject(schema, req.params.name)
+    res.json({ ok })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// SPA fallback
 const indexHtml = path.join(DIST_DIR, 'index.html')
 if (fs.existsSync(indexHtml)) {
   app.get('*', (req, res) => res.sendFile(indexHtml))

@@ -17,11 +17,14 @@ export function SetupView() {
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null)
   const [execLines, setExecLines]           = useState<ExecLine[]>([])
   const [testCache, setTestCache]           = useState<Partial<Record<StepId, TestResult>>>({})
+  const [selectedInstanceKey, setSelectedInstanceKey] = useState<string | null>(null)
+  const [forgeMode, setForgeMode] = useState(false)
 
   const refreshStatus = useCallback(() => {
     fetch('/api/setup/status')
-      .then(r => r.json() as Promise<{ steps: Record<string, { status: string; values: Record<string, string>; instances?: { key: string; value: string; enabled: boolean; label: string }[] }> }>)
-      .then(({ steps }) => {
+      .then(r => r.json() as Promise<{ steps: Record<string, { status: string; values: Record<string, string>; instances?: { key: string; value: string; enabled: boolean; label: string }[] }>; forgeMode?: boolean }>)
+      .then(({ steps, forgeMode: fm }) => {
+        if (fm != null) setForgeMode(fm)
         const next = makeDefaultStates()
         for (const [id, s] of Object.entries(steps)) {
           if (id in next) {
@@ -50,6 +53,31 @@ export function SetupView() {
 
   const handleActivate = useCallback((id: StepId) => {
     setActiveStep(id)
+    setExecLines([])
+    setSelectedInstanceKey(null)
+    // If block is already done (configured), go straight to done phase
+    const currentStatus = stepStates[id]?.status
+    if (currentStatus === 'done') {
+      setSelectedChoice(null)
+      setPhase('done')
+      refreshStatus()
+      return
+    }
+    // Single-choice blocks: skip choose phase, go straight to configure
+    const step = SETUP_STEPS.find(s => s.id === id)
+    if (step && step.choices.length === 1) {
+      setSelectedChoice(0)
+      setPhase('configure')
+    } else {
+      setSelectedChoice(null)
+      setPhase('choose')
+    }
+    refreshStatus()
+  }, [refreshStatus, stepStates])
+
+  const handleClickInstance = useCallback((stepId: StepId, key: string) => {
+    setActiveStep(stepId)
+    setSelectedInstanceKey(key)
     setPhase('choose')
     setSelectedChoice(null)
     setExecLines([])
@@ -58,23 +86,50 @@ export function SetupView() {
   const handleContinue = useCallback(() => {
     const step = SETUP_STEPS.find(s => s.id === activeStep)!
     if (selectedChoice === null) return
-    const action = step.choices[selectedChoice].action
+    // Filter choices same as SetupDrawer does in forge mode
+    const CLI_ACTIONS = new Set(['cfg-profile', 'cfg-new'])
+    const DEPLOY_CLI_ACTIONS = new Set<string>()
+    const choices = forgeMode
+      ? step.choices.filter(c => !CLI_ACTIONS.has(c.action) && !DEPLOY_CLI_ACTIONS.has(c.action))
+      : step.choices
+    const action = choices[selectedChoice].action
 
     if (action === 'done') { setPhase('done'); return }
 
-    // Already in configure — always advance to execute
-    if (phase === 'configure') {
+    // gen-data: switch to the Data tab's generate wizard
+    if (action === 'gen-data') {
+      window.dispatchEvent(new CustomEvent('switch-view', { detail: 'data' }))
+      window.dispatchEvent(new CustomEvent('data-mode', { detail: 'generate' }))
+      return
+    }
+
+    // gen-routines: switch to the Data tab's routines wizard
+    if (action === 'gen-routines') {
+      window.dispatchEvent(new CustomEvent('switch-view', { detail: 'data' }))
+      window.dispatchEvent(new CustomEvent('data-mode', { detail: 'routines' }))
+      return
+    }
+
+    // Already in configure — advance to execute (unless action handles its own lifecycle)
+    const SELF_CONTAINED = new Set(['forge-bridge', 'cfg-prompt', 'cfg-prompt-gen'])
+    if (phase === 'configure' && !SELF_CONTAINED.has(action)) {
       setExecLines([])
       setPhase('execute')
       return
     }
 
-    const NEEDS_CONFIGURE = ['cfg-profile', 'cfg-warehouse', 'cfg-catalog', 'cfg-genie',
-      'cfg-grants', 'cfg-new', 'cfg-ka', 'cfg-deploy-name', 'cfg-prompt', 'cfg-prompt-gen', 'manual', 'exec-genie']
-    if (NEEDS_CONFIGURE.includes(action)) { setPhase('configure'); return }
+    // Actions that go straight to execute (no configure phase)
+    const DIRECT_EXEC = new Set(['exec-assets', 'exec-tables',
+      'exec-mlflow', 'exec-grants',
+      'exec-deploy-agent', 'exec-same', 'exec-git-push'])
+    if (DIRECT_EXEC.has(action)) {
+      setExecLines([])
+      setPhase('execute')
+      return
+    }
 
-    setExecLines([])
-    setPhase('execute')
+    // Everything else goes to configure
+    setPhase('configure')
   }, [activeStep, selectedChoice, phase])
 
   const handleBack = useCallback(() => {
@@ -99,9 +154,19 @@ export function SetupView() {
     setPhase('choose')
     setSelectedChoice(null)
     setExecLines([])
-    // Invalidate cache for this step so it re-tests after reconfigure
-    setTestCache(prev => { const next = { ...prev }; delete next[activeStep]; return next })
+    // Invalidate cache for this step + dependents
+    setTestCache(prev => {
+      const next = { ...prev }
+      delete next[activeStep]
+      if (activeStep === 'schema') {
+        for (const dep of SCHEMA_DEPENDENTS) delete next[dep]
+      }
+      return next
+    })
   }, [activeStep])
+
+  // Steps whose test results depend on schema being set
+  const SCHEMA_DEPENDENTS: StepId[] = ['tables', 'functions', 'genie']
 
   const handleExecDone = useCallback((ok: boolean) => {
     setStepStates(prev => ({
@@ -109,7 +174,15 @@ export function SetupView() {
       [activeStep]: { ...prev[activeStep], status: ok ? 'done' : 'error' },
     }))
     // Invalidate test cache — value changed, needs re-verification next visit
-    setTestCache(prev => { const next = { ...prev }; delete next[activeStep]; return next })
+    setTestCache(prev => {
+      const next = { ...prev }
+      delete next[activeStep]
+      // When schema changes, invalidate all dependent blocks
+      if (activeStep === 'schema') {
+        for (const dep of SCHEMA_DEPENDENTS) delete next[dep]
+      }
+      return next
+    })
     setTimeout(() => {
       setPhase('done')
       if (ok) refreshStatus()
@@ -154,6 +227,18 @@ export function SetupView() {
     refreshStatus()
   }, [stepStates, refreshStatus])
 
+  const handleDeleteInstance = useCallback(async (key: string) => {
+    try {
+      await fetch('/api/setup/instance', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      })
+      setSelectedInstanceKey(null)
+      refreshStatus()
+    } catch {}
+  }, [refreshStatus])
+
   return (
     <div className="flex h-full bg-dbx-gray-50 dark:bg-dbx-gray-950">
       {/* Left: DAG fills remaining space */}
@@ -164,6 +249,8 @@ export function SetupView() {
           onActivate={handleActivate}
           onToggleInstance={handleToggleInstance}
           onToggleAllInstances={handleToggleAllInstances}
+          onClickInstance={handleClickInstance}
+          onDeleteInstance={handleDeleteInstance}
           readyCount={readyCount}
           totalCount={ALL_STEP_IDS.length}
         />
@@ -176,7 +263,8 @@ export function SetupView() {
           phase={phase}
           selectedChoice={selectedChoice}
           execLines={execLines}
-          currentValues={{ ...stepStates.schema.values, ...stepStates[activeStep].values }}
+          currentValues={{ ...stepStates.host.values, ...stepStates.schema.values, ...stepStates[activeStep].values }}
+          stepStatus={stepStates[activeStep]?.status || 'missing'}
           testCache={testCache}
           onTestResult={handleTestResult}
           onSelectChoice={setSelectedChoice}
@@ -186,6 +274,9 @@ export function SetupView() {
           onNext={ALL_STEP_IDS.indexOf(activeStep) < ALL_STEP_IDS.length - 1 ? handleNext : undefined}
           onExecDone={handleExecDone}
           onRefresh={refreshStatus}
+          selectedInstanceKey={selectedInstanceKey}
+          instances={stepStates[activeStep]?.instances}
+          forgeMode={forgeMode}
         />
       </div>
     </div>
