@@ -173,3 +173,26 @@ async def delete_project(name: str):
         return {"ok": True, "source": "volume"}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Rename project ───────────────────────────────────────────────────────────
+
+@router.patch("/api/projects/{name}")
+async def rename_project(name: str, request: Request):
+    body = await request.json()
+    new_name = body.get("name", "").strip().replace(" ", "-").replace("/", "-").replace("\\", "-")
+    if not new_name:
+        return JSONResponse({"error": "new name required"}, status_code=400)
+    if new_name == name:
+        return {"ok": True, "name": name}
+
+    old_file = PROJECTS_DIR / f"{name}.json"
+    new_file = PROJECTS_DIR / f"{new_name}.json"
+
+    if not old_file.exists():
+        return JSONResponse({"error": f"project '{name}' not found"}, status_code=404)
+    if new_file.exists():
+        return JSONResponse({"error": f"project '{new_name}' already exists"}, status_code=409)
+
+    old_file.rename(new_file)
+    return {"ok": True, "name": new_name}

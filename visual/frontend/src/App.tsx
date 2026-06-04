@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { ReactFlowProvider, type Node, type NodeMouseHandler } from '@xyflow/react'
-import { Settings2, Moon, Sun, RefreshCw, FolderOpen, Plus, Trash2 } from 'lucide-react'
+import { Settings2, Moon, Sun, RefreshCw, FolderOpen, Plus, Trash2, Pencil } from 'lucide-react'
 import { ArchCanvas } from './components/ArchCanvas'
 import { Legend } from './components/Legend'
 import { NodeDetailPanel } from './components/NodeDetailPanel'
@@ -261,21 +261,59 @@ export default function App() {
               <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-lg shadow-lg z-50 py-1">
                 {/* Project list */}
                 {projects.length > 0 ? (
-                  projects.map(p => (
-                    <div key={p.name} className="flex items-center justify-between px-3 py-1.5 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800 group">
-                      <button
-                        onClick={() => loadProject(p.name)}
-                        className={`text-xs font-mono truncate flex-1 text-left ${
-                          currentProject === p.name
-                            ? 'text-dbx-blue dark:text-dbx-green font-semibold'
-                            : 'text-dbx-gray-700 dark:text-dbx-gray-300'
-                        }`}
-                      >
-                        {currentProject === p.name ? '> ' : '  '}{p.name}
-                      </button>
+                  projects.map(p => {
+                    const [editing, setEditing] = React.useState(false)
+                    const [editName, setEditName] = React.useState(p.name)
+                    const doRename = () => {
+                      const trimmed = editName.trim()
+                      if (!trimmed || trimmed === p.name) { setEditing(false); return }
+                      fetch(`/api/projects/${p.name}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: trimmed }),
+                      })
+                        .then(async r => {
+                          const d = await r.json()
+                          if (!r.ok) { alert(d.error || 'Rename failed'); return }
+                          if (currentProject === p.name) setCurrentProject(d.name)
+                          refreshProjects()
+                          setEditing(false)
+                        })
+                        .catch(e => alert(e.message))
+                    }
+                    return (
+                    <div key={p.name} className="flex items-center justify-between px-3 py-1.5 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800 group" onClick={e => e.stopPropagation()}>
+                      {editing ? (
+                        <input
+                          value={editName} onChange={e => setEditName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') setEditing(false) }}
+                          autoFocus
+                          className="text-xs font-mono flex-1 bg-transparent border-b border-dbx-blue dark:border-dbx-green text-dbx-gray-800 dark:text-dbx-gray-100 outline-none mr-2"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => loadProject(p.name)}
+                          className={`text-xs font-mono truncate flex-1 text-left ${
+                            currentProject === p.name
+                              ? 'text-dbx-blue dark:text-dbx-green font-semibold'
+                              : 'text-dbx-gray-700 dark:text-dbx-gray-300'
+                          }`}
+                        >
+                          {currentProject === p.name ? '> ' : '  '}{p.name}
+                        </button>
+                      )}
                       <span className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-600 mr-2">
-                        {(p.size / 1024).toFixed(0)}KB
+                        {p.source === 'volume' ? '☁' : ''} {(p.size / 1024).toFixed(0)}KB
                       </span>
+                      {!editing && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditName(p.name); setEditing(true) }}
+                          className="opacity-0 group-hover:opacity-100 text-dbx-gray-400 hover:text-dbx-blue transition-all mr-1"
+                          title="Rename project"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteProject(p.name) }}
                         className="opacity-0 group-hover:opacity-100 text-dbx-gray-400 hover:text-dbx-red transition-all"
@@ -284,7 +322,8 @@ export default function App() {
                         <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
-                  ))
+                    )
+                  })
                 ) : (
                   <div className="px-3 py-2 text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500">
                     No projects on UC Volume
