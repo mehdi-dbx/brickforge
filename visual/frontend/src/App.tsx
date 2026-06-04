@@ -65,13 +65,14 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newProjectName.trim() }),
     })
-      .then(r => r.json())
-      .then(() => {
+      .then(async r => {
+        const data = await r.json()
+        if (!r.ok) { alert(data.error || 'Failed to create project'); return }
         setNewProjectName('')
         setShowNewProject(false)
         refreshProjects()
       })
-      .catch(() => {})
+      .catch(e => alert(`Error: ${e.message}`))
   }, [newProjectName, refreshProjects])
 
   const deleteProject = useCallback((name: string) => {
@@ -295,7 +296,7 @@ export default function App() {
 
                 {/* New project */}
                 {showNewProject ? (
-                  <div className="px-3 py-1.5 flex items-center gap-2">
+                  <div className="px-3 py-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
                     <input
                       type="text"
                       value={newProjectName}
@@ -314,7 +315,7 @@ export default function App() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setShowNewProject(true)}
+                    onClick={e => { e.stopPropagation(); setShowNewProject(true) }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-dbx-gray-500 dark:text-dbx-gray-400 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800 hover:text-dbx-blue"
                   >
                     <Plus className="h-3 w-3" />
