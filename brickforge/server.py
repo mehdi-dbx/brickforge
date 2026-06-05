@@ -117,7 +117,7 @@ async def stash_health():
         return {"stashes": []}
     stashes = []
     for d in sorted(stash_dir.iterdir()):
-        if not d.is_dir():
+        if not d.is_dir() or d.name.startswith("_"):
             continue
         forge_file = next((f.name for f in d.iterdir() if f.suffix == ".forge"), None)
         if not forge_file:
@@ -152,7 +152,7 @@ async def stash_health():
             else:
                 checks.append({"item": ref, "status": "missing"})
                 miss_count += 1
-        for dd in ["tools", "data", "conf"]:
+        for dd in ["data", "conf"]:
             if (d / dd).exists():
                 checks.append({"item": dd + "/", "status": "ok"})
                 ok_count += 1

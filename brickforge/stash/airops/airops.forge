@@ -35,62 +35,60 @@ data:
     - update_flight_risk.sql
 
 tools:
+  # Tools are auto-generated at runtime by tool_factory.py from UC functions/procedures.
+  # No individual .py files needed. Entries here define names + patterns for UI mapping.
   - name: query_flights_at_risk
-    file: tools/query_flights_at_risk.py
+    function: flights_at_risk
     pattern: sql_read
   - name: update_flight_risk
-    file: tools/update_flight_risk.py
+    procedure: update_flight_risk
     pattern: action
   - name: query_checkin_metrics
-    file: tools/query_checkin_metrics.py
+    function: checkin_metrics
     pattern: sql_read
   - name: query_checkin_performance_metrics
-    file: tools/query_checkin_performance_metrics.py
+    function: checkin_performance_metrics
     pattern: sql_read
   - name: query_checkin_agent_staffing
-    file: tools/query_checkin_agent_staffing.py
+    function: checkin_agent_staffing
     pattern: sql_read
   - name: query_checkin_agents_by_counter_status
-    file: tools/query_checkin_agents_by_counter_status.py
+    function: checkin_agents_by_counter_status
     pattern: sql_read
   - name: query_available_agents_for_redeployment
-    file: tools/query_available_agents_for_redeployment.py
+    function: available_agents_for_redeployment
     pattern: sql_read
   - name: query_border_officer_staffing
-    file: tools/query_border_officer_staffing.py
+    function: border_officer_staffing
     pattern: sql_read
   - name: query_border_officers_by_post
-    file: tools/query_border_officers_by_post.py
+    function: border_officers_by_post
     pattern: sql_read
   - name: query_border_terminal_details
-    file: tools/query_border_terminal_details.py
+    function: border_terminal_details
     pattern: sql_read
   - name: query_egate_availability
-    file: tools/query_egate_availability.py
+    function: egate_availability
     pattern: sql_read
   - name: query_staffing_duties
-    file: tools/query_staffing_duties.py
+    function: staffing_duties
     pattern: sql_read
   - name: update_checkin_agent
-    file: tools/update_checkin_agent.py
+    procedure: update_checkin_agents_procedure
     pattern: action
   - name: update_border_officer
-    file: tools/update_border_officer.py
+    procedure: update_border_officer_procedure
     pattern: action
   - name: confirm_arrival
-    file: tools/confirm_arrival.py
+    procedure: confirm_arrival_procedure
     pattern: action
   - name: back_to_normal
-    file: tools/back_to_normal.py
-    pattern: action
+    pattern: domain
   - name: create_checkin_incident
-    file: tools/create_checkin_incident.py
-    pattern: action
+    pattern: domain
   - name: create_border_incident
-    file: tools/create_border_incident.py
-    pattern: action
+    pattern: domain
   - name: query_passengers_ka
-    file: tools/query_passengers_ka.py
     pattern: ka
 
 prompt:
