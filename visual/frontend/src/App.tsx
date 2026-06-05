@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { ReactFlowProvider, type Node, type NodeMouseHandler } from '@xyflow/react'
-import { Settings2, Moon, Sun, RefreshCw, FolderOpen, Plus, Trash2, Pencil } from 'lucide-react'
+import { Settings2, Moon, Sun, RefreshCw, FolderOpen, Plus, Trash2, Pencil, Package, Upload } from 'lucide-react'
 import { ArchCanvas } from './components/ArchCanvas'
 import { Legend } from './components/Legend'
 import { NodeDetailPanel } from './components/NodeDetailPanel'
@@ -36,6 +36,8 @@ function ProjectMenuItem({
 }) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(project.name)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
 
   const doRename = () => {
     const trimmed = editName.trim()
@@ -69,21 +71,65 @@ function ProjectMenuItem({
         {project.source === 'volume' ? '☁' : ''} {(project.size / 1024).toFixed(0)}KB
       </span>
       {!editing && (
-        <button
-          onClick={(e) => { e.stopPropagation(); setEditName(project.name); setEditing(true) }}
-          className="opacity-0 group-hover:opacity-100 text-dbx-gray-400 hover:text-dbx-blue transition-all mr-1"
-          title="Rename project"
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
+        <>
+          <a
+            href={`/api/projects/${encodeURIComponent(project.name)}/export`}
+            download={`${project.name}.forge.zip`}
+            onClick={e => e.stopPropagation()}
+            className="opacity-0 group-hover:opacity-100 text-dbx-gray-400 hover:text-dbx-blue transition-all mr-1"
+            title="Export project bundle"
+          >
+            <Package className="h-3 w-3" />
+          </a>
+          <button
+            onClick={(e) => { e.stopPropagation(); setEditName(project.name); setEditing(true) }}
+            className="opacity-0 group-hover:opacity-100 text-dbx-gray-400 hover:text-dbx-blue transition-all mr-1"
+            title="Rename project"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        </>
       )}
       <button
-        onClick={(e) => { e.stopPropagation(); onDelete() }}
+        onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
         className="opacity-0 group-hover:opacity-100 text-dbx-gray-400 hover:text-dbx-red transition-all"
         title="Delete project"
       >
         <Trash2 className="h-3 w-3" />
       </button>
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => { setConfirmDelete(false); setDeleteInput('') }}>
+          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px]" />
+          <div onClick={e => e.stopPropagation()} className="relative w-[340px] bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-xl shadow-2xl p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-dbx-error/10 dark:bg-dbx-error/20 flex items-center justify-center">
+                <Trash2 className="w-3.5 h-3.5 text-dbx-error" />
+              </div>
+              <h3 className="text-[14px] font-semibold text-dbx-gray-900 dark:text-dbx-gray-100 font-mono">Delete {project.name}?</h3>
+            </div>
+            <p className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 ml-9 mb-3">This cannot be undone. The project config will be permanently deleted.</p>
+            <div className="ml-9 mb-4">
+              <p className="text-[11px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">Type <span className="text-dbx-error font-semibold">{project.name}</span> to confirm:</p>
+              <input
+                value={deleteInput}
+                onChange={e => setDeleteInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && deleteInput === project.name) { setConfirmDelete(false); setDeleteInput(''); onDelete() } }}
+                autoFocus
+                className="w-full px-2.5 py-1.5 text-[12px] font-mono rounded-md border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-800 text-dbx-gray-800 dark:text-dbx-gray-100 outline-none focus:border-dbx-error"
+                placeholder={project.name}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setConfirmDelete(false); setDeleteInput('') }} className="px-3.5 py-1.5 text-[12px] font-mono rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-600 dark:text-dbx-gray-400 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800">cancel</button>
+              <button
+                disabled={deleteInput !== project.name}
+                onClick={() => { setConfirmDelete(false); setDeleteInput(''); onDelete() }}
+                className="px-3.5 py-1.5 text-[12px] font-mono rounded-lg text-white bg-dbx-error hover:bg-dbx-error/90 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+              >delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -168,7 +214,6 @@ export default function App() {
   }, [newProjectName, refreshProjects])
 
   const deleteProject = useCallback((name: string) => {
-    if (!confirm(`Delete project "${name}"? This cannot be undone.`)) return
     fetch(`/api/projects/${name}`, { method: 'DELETE' })
       .then(() => refreshProjects())
       .catch(() => {})
@@ -413,6 +458,27 @@ export default function App() {
                     New project
                   </button>
                 )}
+
+                {/* Import bundle */}
+                <label
+                  onClick={e => e.stopPropagation()}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-dbx-gray-500 dark:text-dbx-gray-400 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800 hover:text-dbx-blue cursor-pointer"
+                >
+                  <Upload className="h-3 w-3" />
+                  Import .forge.zip
+                  <input type="file" accept=".zip" className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const form = new FormData();
+                      form.append('file', f);
+                      fetch('/api/projects/import', { method: 'POST', body: form })
+                        .then(r => r.json())
+                        .then(r => { if (r.ok) window.location.reload(); else alert(r.error || 'Import failed'); })
+                        .catch(() => alert('Import failed'));
+                    }}
+                  />
+                </label>
 
               </div>
             )}

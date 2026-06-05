@@ -354,7 +354,7 @@ fi
 
 # 6d. Genie space access
 info "Genie space access..."
-if uv run python deploy/grant/authorize_genie_for_app.py 2>/dev/null; then
+if uv run python deploy/grant/authorize_genie_for_app.py "$DBX_APP_NAME" 2>/dev/null; then
   ok "Genie space grant applied"
 else
   warn "authorize_genie_for_app skipped or failed (non-blocking)"

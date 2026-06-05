@@ -6,10 +6,10 @@ import zipfile
 import io
 from pathlib import Path
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, UploadFile, File
+from fastapi.responses import JSONResponse, Response
 
-from brickforge import PROJECT_ROOT, USER_DIR
+from brickforge import PACKAGE_ROOT, PROJECT_ROOT, USER_DIR
 
 router = APIRouter()
 
@@ -185,6 +185,132 @@ async def load_project(name: str):
         return JSONResponse({"error": "invalid project zip"}, status_code=400)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=404)
+
+
+# ── Download project config ──────────────────────────────────────────────────
+
+@router.get("/api/projects/{name}/download")
+async def download_project(name: str):
+    """Return project config JSON as a downloadable file."""
+    project_file = PROJECTS_DIR / f"{name}.json"
+    if not project_file.exists():
+        return JSONResponse({"error": f"project '{name}' not found"}, status_code=404)
+    from fastapi.responses import Response
+    content = project_file.read_text()
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}.forge.json"'},
+    )
+
+
+# ── Export project bundle ────────────────────────────────────────────────────
+
+@router.get("/api/projects/{name}/export")
+async def export_project(name: str):
+    """Export project as .forge.zip (config + prompts + generated artifacts)."""
+    project_file = PROJECTS_DIR / f"{name}.json"
+    if not project_file.exists():
+        return JSONResponse({"error": f"project '{name}' not found"}, status_code=404)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Config
+        zf.write(str(project_file), "config.json")
+
+        # Prompts
+        prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
+        if prompt_dir.exists():
+            for f in sorted(prompt_dir.iterdir()):
+                if f.is_file() and f.suffix in (".prompt", ".base"):
+                    zf.write(str(f), f"prompt/{f.name}")
+
+        # Generated artifacts
+        gen_dir = PACKAGE_ROOT / "data" / "gen"
+        for subdir in ["csv", "init", "func", "proc"]:
+            d = gen_dir / subdir
+            if d.exists():
+                for f in sorted(d.iterdir()):
+                    if f.is_file() and not f.name.startswith("."):
+                        zf.write(str(f), f"gen/{subdir}/{f.name}")
+
+        # Manifests
+        for mf in ["manifest.json", "routine_manifest.json"]:
+            p = gen_dir / mf
+            if p.exists():
+                zf.write(str(p), f"gen/{mf}")
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}.forge.zip"'},
+    )
+
+
+# ── Import project bundle ───────────────────────────────────────────────────
+
+@router.post("/api/projects/import")
+async def import_project(file: UploadFile = File(...)):
+    """Import a .forge.zip bundle as a new project."""
+    if not file.filename or not file.filename.endswith(".zip"):
+        return JSONResponse({"error": "expected a .zip file"}, status_code=400)
+
+    data = await file.read()
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        return JSONResponse({"error": "invalid zip file"}, status_code=400)
+
+    # Derive project name from filename
+    base = file.filename.replace(".forge.zip", "").replace(".zip", "")
+    safe_name = base.replace(" ", "-").replace("/", "-").replace("\\", "-")
+
+    # Avoid collision
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    candidate = safe_name
+    counter = 2
+    while (PROJECTS_DIR / f"{candidate}.json").exists():
+        candidate = f"{safe_name}-{counter}"
+        counter += 1
+    safe_name = candidate
+
+    # Extract config
+    if "config.json" not in zf.namelist():
+        return JSONResponse({"error": "zip missing config.json"}, status_code=400)
+
+    config_data = json.loads(zf.read("config.json").decode())
+    project_file = PROJECTS_DIR / f"{safe_name}.json"
+    project_file.write_text(json.dumps(config_data, indent=2) + "\n")
+
+    # Extract prompts -> conf/prompt/
+    prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
+    prompt_dir.mkdir(parents=True, exist_ok=True)
+    for entry in zf.namelist():
+        if entry.startswith("prompt/") and not entry.endswith("/"):
+            fname = entry.split("/", 1)[1]
+            (prompt_dir / fname).write_bytes(zf.read(entry))
+
+    # Extract gen artifacts -> data/gen/
+    gen_dir = PACKAGE_ROOT / "data" / "gen"
+    for entry in zf.namelist():
+        if entry.startswith("gen/") and not entry.endswith("/"):
+            rel = entry.split("/", 1)[1]  # e.g. "func/my_func.sql"
+            target = gen_dir / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(zf.read(entry))
+
+    zf.close()
+
+    # Load the imported project as active
+    _write_current(safe_name)
+    _set_project_mirror(safe_name)
+    config = _get_config()
+    from brickforge.lib.config_provider import _merge_defaults, DEFAULT_CONFIG
+    config._data = _merge_defaults(config_data, DEFAULT_CONFIG)
+    config._save()
+    config._sync_env()
+
+    return {"ok": True, "name": safe_name}
 
 
 # ── Delete project ───────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # BrickForge -- Context for Claude Code
 
-> Last updated: 2026-06-03 (config.json migration complete)
+> Last updated: 2026-06-05 (removed .env.local refs, added project system, fixed deploy/grants)
 
 ## What this project is
 
@@ -112,7 +112,7 @@ brickforge/
     generate_chart.py  # Chart generation tool
     get_current_time.py
   data/
-    default/           # Shipped seed data (csv/, init/ DDL, func/ SQL functions, proc/ procedures)
+    demo/              # Shipped seed data (csv/, init/ DDL, func/ SQL functions, proc/ procedures)
     gen/               # Synthetic data generation (LLM-based wizard)
     init/              # Python orchestrators: create_all_assets.py, create_catalog_schema.py, etc.
     py/                # Shared utilities: sql_utils.py, run_sql.py, csv_to_delta.py
@@ -148,9 +148,9 @@ USER_DIR     = Path.home() / ".brickforge"                  # logs, config, stas
 LOG_FILE     = USER_DIR / "brickforge_YYYYMMDD_HHMMSS.log"
 ```
 
-- **Editable install** (`pip install -e .`): PROJECT_ROOT = repo root
-- **Pip install**: PROJECT_ROOT = PACKAGE_ROOT = site-packages/brickforge/
-- Config at `~/.brickforge/.env.local` (pip) or `PROJECT_ROOT/.env.local` (editable)
+- **Editable install** (`pip install -e .`): PROJECT_ROOT = repo root, config at `PROJECT_ROOT/config.json`
+- **Pip install**: PROJECT_ROOT = PACKAGE_ROOT = site-packages/brickforge/, config at `~/.brickforge/config.json`
+- **There is no `.env.local` file** -- all config is in `config.json`
 
 ## Setup panel flow
 
@@ -280,9 +280,41 @@ Scripts that create resources and update config (run as subprocesses):
 - `create_lakebase.py`: sets `lakebase.instance_name`
 - `create_mlflow_experiment.py`: sets `app.mlflow_experiment_id`
 
-### Migration from .env.local
+## Project system
 
-`env_local_to_config_json(env_file)` in `config_provider.py` -- one-time migration function. Parses flat .env.local, groups by prefix, builds structured JSON. Handles commented lines -> `enabled: false`.
+Users can have multiple projects. Each project is a separate config file under `projects/`.
+
+### Structure
+
+```
+projects/
+  .current           # text file containing active project name
+  my-project.json    # project config (same format as config.json)
+  fevm.json
+  aws.json
+```
+
+### How it works
+
+- `routes/projects.py` provides CRUD endpoints: create, load, delete, rename, list
+- `create_project` -- creates fresh config from `DEFAULT_CONFIG` (not a snapshot of current state)
+- `load_project` -- **full replace** (not merge). Switches mirror before save to avoid overwriting old project
+- `_sync_env()` -- clears ALL known config keys from `os.environ` before setting new ones (prevents leaking between projects)
+- `_set_project_mirror(name)` -- every `config._save()` also writes to `projects/{name}.json`
+- On first launch with empty project list, auto-creates `my-project`
+- Frontend does `window.location.reload()` on project switch (clean slate)
+
+### Critical: project switch order
+
+```python
+# 1. Switch mirror FIRST (so _save doesn't overwrite old project with defaults)
+_write_current(safe_name)
+_set_project_mirror(safe_name)
+# 2. Then replace config data
+config._data = fresh
+config._save()
+config._sync_env()
+```
 
 ## Bridge auth flow
 
@@ -317,7 +349,36 @@ Triggered by `exec-deploy-agent` action in setup panel:
 
 4. `start_server.py` at boot: reads `config.json`, calls `flatten()` -> `os.environ.update()`, then starts MLflow AgentServer
 
-`sync_databricks_yml_from_env.py` (560 lines) is deprecated -- no longer needed since config travels as a file.
+**Important**: `databricks.yml` is generated and included in the bundle but is **never consumed** by the SDK deploy. Deploy uses `w.apps.create()` / `w.apps.deploy()` (Databricks SDK), NOT `databricks bundle deploy` (DAB CLI). The YAML file exists only for documentation/reference purposes.
+
+### Post-deploy grants
+
+After deployment, `run_all_grants.py` automatically grants permissions to the app's service principal via SDK API calls:
+
+```python
+# Pattern used by all grant scripts:
+app = w.apps.get(app_name)
+sp_id = app.service_principal_client_id
+w.permissions.update(
+    request_object_type="<type>",
+    request_object_id=resource_id,
+    access_control_list=[iam.AccessControlRequest(
+        service_principal_name=sp_id,
+        permission_level=iam.PermissionLevel.<LEVEL>,
+    )],
+)
+```
+
+| Grant | Object type | Permission | Script |
+|-------|------------|------------|--------|
+| SQL Warehouse | `warehouses` | CAN_USE | `authorize_warehouse_for_app.py` |
+| Genie space | `genie` | CAN_RUN | `authorize_genie_for_app.py` |
+| Serving endpoint | `serving-endpoints` | CAN_QUERY | `authorize_endpoint_for_app.py` |
+| UC tables | SQL GRANT SELECT | -- | `grant_app_tables.py` |
+| UC functions | SQL GRANT EXECUTE | -- | `grant_app_functions.py` |
+| Lakebase | SDK-specific | -- | `grant_lakebase_for_app.py` |
+
+**Critical**: Genie spaces use object type `"genie"` (not `"genie/space"` or `"genie-spaces"`).
 
 5. On DBX Apps compute (start.sh):
    ```bash
@@ -333,7 +394,7 @@ Triggered by `exec-deploy-agent` action in setup panel:
 
 ```
 data/
-  default/           # Shipped seed data (git-tracked)
+  demo/              # Shipped seed data (git-tracked, read-only)
     csv/             # Seed CSVs (flights.csv, etc.)
     init/            # DDL SQL (create_flights.sql, etc.)
     func/            # SQL function templates
@@ -366,9 +427,9 @@ data/
     sql_utils.py, run_sql.py, csv_to_delta.py
 ```
 
-Data source flags in `.env.local`:
-- `USE_DEMO_DATA=true|false` -- include demo tables (backward compat: USE_DEFAULT_DATA also accepted)
-- `USE_GEN_DATA=true|false` -- include generated tables
+Data source flags in `config.json`:
+- `data.use_demo_data` (true|false) -- include demo tables
+- `data.use_gen_data` (true|false) -- include generated tables
 
 ## Robust SQL generation (5-layer defense)
 
