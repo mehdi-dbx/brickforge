@@ -43,10 +43,15 @@ async def lifespan(app: FastAPI):
     else:
         config = LocalConfigProvider(CONFIG_FILE)
         # Restore project auto-save mirror if a current project exists
-        from brickforge.routes.projects import _read_current, _set_project_mirror
+        from brickforge.routes.projects import _read_current, _set_project_mirror, PROJECTS_DIR
+        from brickforge.lib.project_paths import init_artifact_dirs
         current = _read_current()
         if current:
             _set_project_mirror(current)
+            config._save()  # sync config.json -> project mirror
+            artifact_dir = PROJECTS_DIR / current
+            init_artifact_dirs(artifact_dir)
+            os.environ["PROJECT_DIR"] = str(artifact_dir)
             print(f"[project] active: {current}")
 
     mode = "FORGE (SaaS)" if FORGE_MODE else f"LOCAL ({CONFIG_FILE})"
@@ -109,59 +114,55 @@ async def save_layout(request: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.get("/api/stash/health")
-async def stash_health():
-    import re as _re
-    stash_dir = PACKAGE_ROOT / "stash"
-    if not stash_dir.exists():
-        return {"stashes": []}
-    stashes = []
-    for d in sorted(stash_dir.iterdir()):
-        if not d.is_dir() or d.name.startswith("_"):
-            continue
-        forge_file = next((f.name for f in d.iterdir() if f.suffix == ".forge"), None)
-        if not forge_file:
-            stashes.append({"name": d.name, "status": "error", "message": "no .forge manifest", "checks": []})
-            continue
-        raw = (d / forge_file).read_text()
-        checks = []
-        ok_count = miss_count = 0
-        lines = raw.split("\n")
-        file_refs = []
-        for line in lines:
-            m = _re.match(r"\s+(?:file|ddl|seed|system|knowledge_base|starters|config|dataset|runner):\s*(.+)", line)
-            if m:
-                ref = m.group(1).strip()
-                if ref and not ref.startswith("{") and not ref.startswith("["):
-                    file_refs.append(ref)
-            lm = _re.match(r"\s+-\s+([\w/._-]+\.(?:sql|py|yml|yaml|csv|jsonl|prompt|base|txt))$", line)
-            if lm:
-                idx = lines.index(line)
-                ctx = ""
-                for j in range(idx - 1, -1, -1):
-                    if _re.match(r"\s+functions:", lines[j]):
-                        ctx = "data/func/"; break
-                    if _re.match(r"\s+procedures:", lines[j]):
-                        ctx = "data/proc/"; break
-                if ctx:
-                    file_refs.append(ctx + lm.group(1))
-        for ref in file_refs:
-            if (d / ref).exists():
-                checks.append({"item": ref, "status": "ok"})
-                ok_count += 1
-            else:
-                checks.append({"item": ref, "status": "missing"})
-                miss_count += 1
-        for dd in ["data", "conf"]:
-            if (d / dd).exists():
-                checks.append({"item": dd + "/", "status": "ok"})
-                ok_count += 1
-            else:
-                checks.append({"item": dd + "/", "status": "missing"})
-                miss_count += 1
-        status = "ok" if miss_count == 0 else "warning"
-        stashes.append({"name": d.name, "forgeFile": forge_file, "status": status, "ok": ok_count, "missing": miss_count, "checks": checks})
-    return {"stashes": stashes}
+@app.get("/api/assets")
+async def project_assets():
+    """Return current project's on-disk assets (prompts, SQL, CSVs, manifests)."""
+    from brickforge.lib.project_paths import prompt_dir as _prompt_dir, gen_dir as _gen_dir
+    assets: dict[str, list[dict]] = {}
+
+    prompt_dir = _prompt_dir()
+    gen_dir = _gen_dir()
+
+    # Prompts
+    prompts = []
+    if prompt_dir.exists():
+        for f in sorted(prompt_dir.iterdir()):
+            if f.is_file() and f.suffix in (".prompt", ".base"):
+                prompts.append({"name": f.name, "size": f.stat().st_size})
+    assets["prompts"] = prompts
+
+    # Generated data
+    for category, subdir in [("tables", "init"), ("csv", "csv"), ("functions", "func"), ("procedures", "proc")]:
+        items = []
+        d = gen_dir / subdir
+        if d.exists():
+            for f in sorted(d.iterdir()):
+                if f.is_file() and not f.name.startswith("."):
+                    items.append({"name": f.name, "size": f.stat().st_size})
+        assets[category] = items
+
+    # Demo data
+    demo_dir = PACKAGE_ROOT / "data" / "demo"
+    demo = []
+    if demo_dir.exists():
+        for subdir in ["init", "csv", "func", "proc"]:
+            d = demo_dir / subdir
+            if d.exists():
+                for f in sorted(d.iterdir()):
+                    if f.is_file() and not f.name.startswith("."):
+                        demo.append({"name": f"{subdir}/{f.name}", "size": f.stat().st_size})
+    assets["demo"] = demo
+
+    # Manifests
+    manifests = []
+    for mf in ["manifest.json", "routine_manifest.json"]:
+        p = gen_dir / mf
+        if p.exists():
+            manifests.append({"name": mf, "size": p.stat().st_size})
+    assets["manifests"] = manifests
+
+    total = sum(len(v) for v in assets.values())
+    return {"assets": assets, "total": total}
 
 
 @app.get("/api/env")

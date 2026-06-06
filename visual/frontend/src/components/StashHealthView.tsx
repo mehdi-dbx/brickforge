@@ -1,90 +1,138 @@
-import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useState, useRef } from 'react'
+import { RefreshCw, Hammer, FileText, Database, Code2, Cog } from 'lucide-react'
 
-interface HealthCheck {
-  item: string
-  status: 'ok' | 'missing' | 'warning'
-  note?: string
-}
-
-interface StashHealth {
+interface AssetFile {
   name: string
-  forgeFile?: string
-  status: 'ok' | 'warning' | 'error'
-  ok?: number
-  missing?: number
-  message?: string
-  checks: HealthCheck[]
+  size: number
 }
 
-interface HealthResponse {
-  stashes: StashHealth[]
-  error?: string
-}
-
-function statusOrb(status: string) {
-  if (status === 'ok') return <span className="inline-block w-2 h-2 rounded-full bg-dbx-green mr-2 flex-shrink-0" />
-  if (status === 'missing') return <span className="inline-block w-2 h-2 rounded-full bg-dbx-red mr-2 flex-shrink-0" />
-  if (status === 'warning') return <span className="inline-block w-2 h-2 rounded-full bg-dbx-amber mr-2 flex-shrink-0" />
-  if (status === 'error') return <span className="inline-block w-2 h-2 rounded-full bg-dbx-red mr-2 flex-shrink-0" />
-  return <span className="inline-block w-2 h-2 rounded-full bg-dbx-gray-400 mr-2 flex-shrink-0" />
-}
-
-function statusLabel(status: string) {
-  if (status === 'ok') return '[+]'
-  if (status === 'missing') return '[x]'
-  if (status === 'warning') return '[!]'
-  if (status === 'error') return '[x]'
-  return '[?]'
-}
-
-function groupChecks(checks: HealthCheck[]): [string, HealthCheck[]][] {
-  const groups: [string, HealthCheck[]][] = []
-  const dirs = new Map<string, HealthCheck[]>()
-
-  for (const c of checks) {
-    let group = 'OTHER'
-    if (c.item.startsWith('data/csv/') || c.item.startsWith('data/init/')) group = 'DATA'
-    else if (c.item.startsWith('data/func/')) group = 'FUNCTIONS'
-    else if (c.item.startsWith('data/proc/')) group = 'PROCEDURES'
-    else if (c.item.startsWith('tools/')) group = 'TOOLS'
-    else if (c.item.startsWith('conf/prompt/')) group = 'PROMPTS'
-    else if (c.item.startsWith('conf/ka/') || c.item.startsWith('conf/vector-search/')) group = 'INTEGRATIONS'
-    else if (c.item.startsWith('eval/')) group = 'EVAL'
-    else if (c.item.endsWith('/')) group = 'DIRECTORIES'
-    else if (c.item === 'app.yaml' || c.item === 'databricks.yml') group = 'BUNDLE'
-    else group = 'OTHER'
-
-    if (!dirs.has(group)) dirs.set(group, [])
-    dirs.get(group)!.push(c)
+interface AssetsResponse {
+  assets: {
+    prompts: AssetFile[]
+    tables: AssetFile[]
+    csv: AssetFile[]
+    functions: AssetFile[]
+    procedures: AssetFile[]
+    demo: AssetFile[]
+    manifests: AssetFile[]
   }
-
-  const order = ['DIRECTORIES', 'DATA', 'FUNCTIONS', 'PROCEDURES', 'TOOLS', 'PROMPTS', 'INTEGRATIONS', 'EVAL', 'BUNDLE', 'OTHER']
-  for (const key of order) {
-    const items = dirs.get(key)
-    if (items && items.length > 0) groups.push([key, items])
-  }
-  return groups
+  total: number
 }
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  return `${(bytes / 1024).toFixed(1)}KB`
+}
+
+// ── Build stepper ──────────────────────────────────────────────────────────
+
+const BUILD_STAGES = [
+  { match: 'schema', label: 'Schema' },
+  { match: 'tables', label: 'Tables' },
+  { match: 'functions', label: 'Functions' },
+  { match: 'procedures', label: 'Procedures' },
+  { match: 'genie', label: 'Genie' },
+  { match: 'mlflow', label: 'MLflow' },
+]
+
+function ProgressStepper({ stages, currentStage }: { stages: string[]; currentStage: number }) {
+  return (
+    <div className="flex flex-col gap-0 px-1 py-2 font-mono text-[10px]">
+      {stages.map((label, i) => (
+        <div key={label} className="flex items-center gap-2">
+          <div className="flex flex-col items-center w-3">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              i < currentStage ? 'bg-dbx-blue dark:bg-dbx-green' :
+              i === currentStage ? 'bg-dbx-amber animate-pulse' :
+              'bg-dbx-gray-300 dark:bg-dbx-gray-700'
+            }`} />
+            {i < stages.length - 1 && (
+              <div className={`w-px h-3 ${i < currentStage ? 'bg-dbx-blue dark:bg-dbx-green' : 'bg-dbx-gray-300 dark:bg-dbx-gray-700'}`} />
+            )}
+          </div>
+          <span className={
+            i < currentStage ? 'text-dbx-green' :
+            i === currentStage ? 'text-dbx-amber' :
+            'text-dbx-gray-400 dark:text-dbx-gray-600'
+          }>{label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function colorize(text: string): string {
+  return text
+    .replace(/\x1b\[[0-9;]*m/g, '')  // strip ANSI escape codes
+    .replace(/\[x\]/g, '<span class="text-red-400">[x]</span>')
+    .replace(/\[\+\]/g, '<span class="text-emerald-400">[+]</span>')
+    .replace(/\[~\]/g, '<span class="text-amber-400">[~]</span>')
+}
+
+// ── Asset group component ──────────────────────────────────────────────────
+
+function AssetGroup({ label, icon: Icon, files }: { label: string; icon: typeof FileText; files: AssetFile[] }) {
+  if (files.length === 0) return null
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-3.5 w-3.5 text-dbx-gray-400 dark:text-dbx-gray-500" />
+        <span className="text-[10px] font-semibold text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-wider">
+          {label} ({files.length})
+        </span>
+      </div>
+      <div className="rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 bg-white dark:bg-dbx-gray-900 overflow-hidden">
+        {files.map((f, i) => (
+          <div key={f.name} className={`flex items-center justify-between px-3 py-1.5 font-mono text-xs ${
+            i < files.length - 1 ? 'border-b border-dbx-gray-50 dark:border-dbx-gray-800/50' : ''
+          }`}>
+            <span className="text-dbx-gray-700 dark:text-dbx-gray-200 truncate">{f.name}</span>
+            <span className="text-dbx-gray-400 dark:text-dbx-gray-600 text-[10px] ml-2 flex-shrink-0">{formatSize(f.size)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
 
 export function StashHealthView() {
-  const [stashes, setStashes] = useState<StashHealth[]>([])
+  const [assets, setAssets] = useState<AssetsResponse['assets'] | null>(null)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [error, setError] = useState('')
+  const [connected, setConnected] = useState(false)
+
+  // Build state
+  const [building, setBuilding] = useState(false)
+  const [buildLines, setBuildLines] = useState<string[]>([])
+  const [buildStage, setBuildStage] = useState(0)
+  const [buildDone, setBuildDone] = useState<boolean | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Check workspace connection
+  useEffect(() => {
+    fetch('/api/setup/status')
+      .then(r => r.json())
+      .then(data => {
+        const steps = data.steps || {}
+        const hostOk = steps.host?.status === 'configured'
+        const whOk = steps.warehouse?.status === 'configured'
+        const schemaOk = steps.schema?.status === 'configured'
+        setConnected(hostOk && whOk && schemaOk)
+      })
+      .catch(() => {})
+  }, [])
 
   const load = useCallback(() => {
     setLoading(true)
     setError('')
-    fetch('/api/stash/health')
-      .then(r => r.json() as Promise<HealthResponse>)
+    fetch('/api/assets')
+      .then(r => r.json() as Promise<AssetsResponse>)
       .then(body => {
-        if (body.error) setError(body.error)
-        else {
-          setStashes(body.stashes)
-          // Auto-expand all
-          setExpanded(new Set(body.stashes.map(s => s.name)))
-        }
+        setAssets(body.assets)
+        setTotal(body.total)
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
@@ -92,13 +140,64 @@ export function StashHealthView() {
 
   useEffect(() => { load() }, [load])
 
-  const toggleExpand = useCallback((name: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
+  // Scroll terminal to bottom
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [buildLines])
+
+  const startBuild = useCallback(async () => {
+    setBuilding(true)
+    setBuildLines([])
+    setBuildStage(0)
+    setBuildDone(null)
+
+    try {
+      const resp = await fetch('/api/setup/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'exec-build', params: {} }),
+      })
+      const reader = resp.body?.getReader()
+      if (!reader) return
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const chunks = buf.split('\n\n')
+        buf = chunks.pop() ?? ''
+
+        for (const chunk of chunks) {
+          let evtType = 'message', evtData = ''
+          for (const line of chunk.split('\n')) {
+            if (line.startsWith('event:')) evtType = line.slice(6).trim()
+            if (line.startsWith('data:'))  evtData = line.slice(5).trim()
+          }
+          if (!evtData) continue
+          try {
+            const parsed = JSON.parse(evtData)
+            if (evtType === 'line') {
+              const text = parsed.text ?? ''
+              if (text.trim()) setBuildLines(prev => [...prev, text])
+              const lower = text.toLowerCase()
+              setBuildStage(prev => {
+                for (let i = prev; i < BUILD_STAGES.length; i++) {
+                  if (lower.includes(BUILD_STAGES[i].match)) return i + 1
+                }
+                return prev
+              })
+            } else if (evtType === 'done') {
+              setBuildDone(parsed.ok)
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch {
+      setBuildDone(false)
+      setBuildLines(prev => [...prev, '[x] Build failed -- connection error'])
+    }
   }, [])
 
   return (
@@ -106,21 +205,33 @@ export function StashHealthView() {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-dbx-gray-200 dark:border-dbx-gray-800">
         <div>
-          <h2 className="text-sm font-semibold text-dbx-gray-900 dark:text-dbx-gray-100">Stash Health</h2>
+          <h2 className="text-sm font-semibold text-dbx-gray-900 dark:text-dbx-gray-100">Assets</h2>
           <p className="text-[11px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">
-            Verify .forge manifest integrity and file completeness
+            {total > 0 ? `${total} files in current project` : 'No assets in current project'}
           </p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
-            bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-600 dark:text-dbx-gray-300
-            hover:bg-dbx-gray-200 dark:hover:bg-dbx-gray-700 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          Reload
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={startBuild}
+            disabled={!connected || building || total === 0}
+            title={!connected ? 'Connect workspace and set schema in Setup first' : total === 0 ? 'No assets to build' : 'Build all assets on workspace'}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono rounded-md
+              bg-dbx-red text-white hover:bg-dbx-red/90 transition-colors
+              disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <Hammer className="h-3 w-3" />
+            Build
+          </button>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+              bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-600 dark:text-dbx-gray-300
+              hover:bg-dbx-gray-200 dark:hover:bg-dbx-gray-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -131,84 +242,84 @@ export function StashHealthView() {
           </div>
         )}
 
-        {loading && stashes.length === 0 && (
-          <div className="text-sm text-dbx-gray-400 animate-pulse">Scanning stash directory...</div>
+        {loading && !assets && (
+          <div className="text-sm text-dbx-gray-400 animate-pulse">Loading assets...</div>
         )}
 
-        {!loading && stashes.length === 0 && !error && (
-          <div className="text-sm text-dbx-gray-400">No stashes found in stash/ directory.</div>
-        )}
-
-        {stashes.map(stash => (
-          <div key={stash.name} className="mb-4 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 overflow-hidden">
-            {/* Stash header */}
-            <button
-              onClick={() => toggleExpand(stash.name)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-dbx-gray-50 dark:bg-dbx-gray-900/50
-                hover:bg-dbx-gray-100 dark:hover:bg-dbx-gray-800/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                {statusOrb(stash.status)}
-                <span className="text-sm font-semibold text-dbx-gray-900 dark:text-dbx-gray-100">
-                  {stash.name}
-                </span>
-                {stash.forgeFile && (
-                  <span className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono">
-                    {stash.forgeFile}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {stash.ok !== undefined && (
-                  <span className="text-[11px] text-dbx-green font-mono">{stash.ok} ok</span>
-                )}
-                {stash.missing !== undefined && stash.missing > 0 && (
-                  <span className="text-[11px] text-dbx-red font-mono">{stash.missing} missing</span>
-                )}
-                {stash.message && (
-                  <span className="text-[11px] text-dbx-red">{stash.message}</span>
-                )}
-                <span className="text-dbx-gray-400 text-xs">{expanded.has(stash.name) ? '\u25BC' : '\u25B6'}</span>
-              </div>
-            </button>
-
-            {/* Expanded checks */}
-            {expanded.has(stash.name) && stash.checks.length > 0 && (
-              <div className="px-4 py-3 bg-white dark:bg-dbx-gray-950">
-                {groupChecks(stash.checks).map(([group, items]) => (
-                  <div key={group} className="mb-3 last:mb-0">
-                    <div className="text-[10px] font-semibold text-dbx-gray-400 dark:text-dbx-gray-500 uppercase tracking-wider mb-1.5">
-                      {group}
-                    </div>
-                    {items.map((check, i) => (
-                      <div key={i} className="flex items-center gap-2 py-0.5 font-mono text-xs">
-                        {statusOrb(check.status)}
-                        <span className={
-                          check.status === 'ok'
-                            ? 'text-dbx-gray-600 dark:text-dbx-gray-300'
-                            : check.status === 'missing'
-                              ? 'text-dbx-red dark:text-[#FF6B5A]'
-                              : 'text-dbx-amber'
-                        }>
-                          {statusLabel(check.status)}
-                        </span>
-                        <span className="text-dbx-gray-700 dark:text-dbx-gray-200 truncate">
-                          {check.item}
-                        </span>
-                        {check.note && (
-                          <span className="text-dbx-gray-400 dark:text-dbx-gray-500 text-[11px] truncate ml-auto">
-                            {check.note}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
+        {!loading && total === 0 && !error && (
+          <div className="text-center py-16">
+            <div className="text-dbx-gray-300 dark:text-dbx-gray-600 mb-3">
+              <Database className="w-8 h-8 mx-auto" />
+            </div>
+            <div className="text-[13px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 mb-1">No assets yet</div>
+            <p className="text-[12px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500">
+              Import a .forge.zip bundle or generate data in the Data tab
+            </p>
           </div>
-        ))}
+        )}
+
+        {assets && (
+          <>
+            <AssetGroup label="Prompts" icon={FileText} files={assets.prompts} />
+            <AssetGroup label="Table SQL" icon={Database} files={assets.tables} />
+            <AssetGroup label="CSV Data" icon={Database} files={assets.csv} />
+            <AssetGroup label="Functions" icon={Code2} files={assets.functions} />
+            <AssetGroup label="Procedures" icon={Code2} files={assets.procedures} />
+            <AssetGroup label="Demo Data" icon={Database} files={assets.demo} />
+            <AssetGroup label="Manifests" icon={Cog} files={assets.manifests} />
+          </>
+        )}
       </div>
+
+      {/* Build modal */}
+      {building && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px]" />
+          <div className="relative w-[520px] max-h-[80vh] bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-xl shadow-2xl flex flex-col">
+            <div className="px-5 py-4 border-b border-dbx-gray-100 dark:border-dbx-gray-800">
+              <h3 className="text-[14px] font-semibold text-dbx-gray-900 dark:text-dbx-gray-100 font-mono">
+                Building project assets
+              </h3>
+            </div>
+
+            <div className="flex px-5 py-3 gap-4">
+              {/* Stepper */}
+              <div className="flex-shrink-0">
+                <ProgressStepper
+                  stages={BUILD_STAGES.map(s => s.label)}
+                  currentStage={buildStage}
+                />
+              </div>
+
+              {/* Terminal */}
+              <div
+                ref={scrollRef}
+                className="flex-1 bg-dbx-gray-950 rounded-lg p-3 font-mono text-[11px] text-dbx-gray-300 overflow-y-auto max-h-[50vh] min-h-[200px]"
+              >
+                {buildLines.map((line, i) => (
+                  <div key={i} dangerouslySetInnerHTML={{ __html: colorize(line) }} />
+                ))}
+                {buildDone === null && buildLines.length > 0 && (
+                  <div className="text-dbx-amber animate-pulse mt-1">...</div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex justify-end">
+              {buildDone !== null ? (
+                <button
+                  onClick={() => { setBuilding(false); setBuildDone(null); setBuildLines([]); setBuildStage(0) }}
+                  className="px-4 py-1.5 text-[12px] font-mono rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-gray-600 dark:text-dbx-gray-400 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800"
+                >
+                  Close
+                </button>
+              ) : (
+                <span className="text-[11px] font-mono text-dbx-gray-400 animate-pulse">Building...</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

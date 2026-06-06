@@ -71,6 +71,11 @@ FEATURE_REGISTRY = {
         "desc": "Role selector in chat UI (Agent/Manager or custom roles)",
         "default": "false",
     },
+    "DASHBOARD": {
+        "label": "Dashboard",
+        "desc": "Live data tables on the chat app home page -- auto-refreshes when the agent modifies data",
+        "default": "false",
+    },
 }
 
 # ── Bricks registry (Agent Bricks) ───────────────────────────────────────────
@@ -195,7 +200,7 @@ async def setup_status():
                         pass
                 instances = [
                     {"key": f"PROJECT_GENIE_SPACES[{i}]", "value": sid, "enabled": True, "label": genie_names.get(sid, sid[:16])}
-                    for i, sid in enumerate(space_ids, 1)
+                    for i, sid in enumerate(space_ids)
                 ]
                 count = len(space_ids)
                 label = f"{count} configured" if count else "not configured"
@@ -1368,6 +1373,10 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             cmd = [PYTHON,"data/init/create_genie_space.py"]
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
+            # Reload config (subprocess wrote genie space ID to config.json)
+            config._data = config._load()
+            config._save()  # syncs to project mirror
+            config._sync_env()
             logger.finish(True)
             return
 
@@ -1483,6 +1492,89 @@ print('[~] App deployed but not yet serving -- check logs: databricks apps logs 
             logger.finish(True)
             return
 
+        if action == "exec-build":
+            # Prerequisites
+            host = config.get("workspace.host") or ""
+            token = config.get("workspace.token") or ""
+            wh = config.get("workspace.warehouse_id") or ""
+            schema_spec = config.get("workspace.unity_catalog_schema") or ""
+            if not host or not token:
+                yield sse_line("[x] Connect a workspace first\n", "err")
+                yield sse_done(False, 1); logger.finish(False, 1); return
+            if not wh:
+                yield sse_line("[x] Select a SQL warehouse first\n", "err")
+                yield sse_done(False, 1); logger.finish(False, 1); return
+            if not schema_spec or "." not in schema_spec:
+                yield sse_line("[x] Set a Unity Catalog schema first\n", "err")
+                yield sse_done(False, 1); logger.finish(False, 1); return
+
+            # Stash dir as parameter (not saved to config)
+            stash_dir = params.get("stash_dir", "")
+            if stash_dir:
+                sub_env["FORGE_STASH_DIR"] = stash_dir
+
+            # Step 1: Schema
+            yield sse_line("\n[~] Schema - creating catalog and schema...\n")
+            cmd = [PYTHON, "data/init/create_catalog_schema.py"]
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                yield event
+
+            # Step 2: Tables
+            yield sse_line("\n[~] Tables - provisioning tables...\n")
+            cmd = [PYTHON, "-c", _tables_script()]
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                yield event
+
+            # Step 2b: CSV data
+            yield sse_line("\n[~] Tables - loading CSV data...\n")
+            cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "py" / "csv_to_delta.py")]
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                yield event
+
+            # Step 3: Functions
+            yield sse_line("\n[~] Functions - creating UC functions...\n")
+            cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_all_functions.py")]
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                yield event
+
+            # Step 4: Procedures
+            yield sse_line("\n[~] Procedures - creating UC procedures...\n")
+            cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_all_procedures.py")]
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                yield event
+
+            # Step 5: Genie
+            genie_ids = (config.get("PROJECT_GENIE_SPACES") or "").strip()
+            if not genie_ids:
+                genie_name = config.get("GENIE_ROOM_NAME") or config.get("workspace.unity_catalog_schema") or "Project Data"
+                sub_env["GENIE_ROOM_NAME"] = genie_name
+                yield sse_line("\n[~] Genie - creating space...\n")
+                cmd = [PYTHON, "data/init/create_genie_space.py"]
+                async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                    yield event
+            else:
+                yield sse_line("\n[+] Genie - already configured, skipping\n")
+
+            # Step 6: MLflow
+            mlflow_id = (config.get("app.mlflow_experiment_id") or "").strip()
+            if not mlflow_id:
+                yield sse_line("\n[~] MLflow - creating experiment...\n")
+                cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_mlflow_experiment.py")]
+                async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                    yield event
+            else:
+                yield sse_line("\n[+] MLflow - already configured, skipping\n")
+
+            # Reload config (subprocesses may have written genie ID, mlflow ID)
+            config._data = config._load()
+            config._save()
+            config._sync_env()
+
+            yield sse_line("\n[+] Build complete. Switch to Setup to configure model and deploy.\n")
+            logger.finish(True)
+            yield sse_done(True)
+            return
+
         # Mapped commands
         cmd_map = {
             "exec-tables": [PYTHON,"-c", _tables_script()],
@@ -1498,6 +1590,11 @@ print('[~] App deployed but not yet serving -- check logs: databricks apps logs 
             cmd = cmd_map[action]
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
                 yield event
+            # Reload config if subprocess may have written back (genie ID, mlflow ID, lakebase)
+            if action in ("exec-mlflow", "exec-lakebase"):
+                config._data = config._load()
+                config._save()
+                config._sync_env()
             logger.finish(True)
             return
 
@@ -1536,7 +1633,8 @@ async def save_prompt(request: Request):
     content = body.get("content", "")
     if not name or "/" in name or ".." in name:
         return JSONResponse({"error": "invalid filename"}, status_code=400)
-    prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
+    from brickforge.lib.project_paths import prompt_dir as _prompt_dir
+    prompt_dir = _prompt_dir()
     prompt_dir.mkdir(parents=True, exist_ok=True)
     (prompt_dir / name).write_text(content)
     return {"ok": True}
@@ -1637,18 +1735,21 @@ if stash_dir:
 if not stash_dir and use_demo in ('true', '1', 'yes'):
     d = ROOT / 'data' / 'demo' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
-if os.environ.get('USE_GEN_DATA', 'false').strip().lower() in ('true', '1', 'yes'):
+project_dir = os.environ.get('PROJECT_DIR', '').strip()
+if project_dir:
+    d = Path(project_dir) / 'gen' / 'init'
+    if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
+elif os.environ.get('USE_GEN_DATA', 'false').strip().lower() in ('true', '1', 'yes'):
     d = ROOT / 'data' / 'gen' / 'init'
     if d.exists(): sql_files.extend(sorted(d.glob('create_*.sql')))
 if not sql_files: print('[~] No table SQL files found'); sys.exit(0)
 print(f'[~] Provisioning {len(sql_files)} table(s)...')
 for i, sf in enumerate(sql_files, 1):
-    rel = str(sf.relative_to(ROOT))
     name = sf.stem.replace('create_', '')
     print(f'[~] ({i}/{len(sql_files)}) {name}...')
     sys.stdout.flush()
-    r = subprocess.run([sys.executable, 'data/py/run_sql.py', rel], cwd=ROOT)
-    if r.returncode != 0: print(f'[x] Failed: {rel}'); sys.exit(1)
+    r = subprocess.run([sys.executable, 'data/py/run_sql.py', str(sf)], cwd=ROOT)
+    if r.returncode != 0: print(f'[x] Failed: {name}'); sys.exit(1)
     print(f'[+] {name}')
 print(f'[+] All {len(sql_files)} table(s) provisioned')
 """.strip()

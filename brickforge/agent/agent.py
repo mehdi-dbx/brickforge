@@ -295,7 +295,8 @@ async def non_streaming(request: ResponsesAgentRequest) -> ResponsesAgentRespons
 
 
 def _load_system_prompt() -> str:
-    base = Path(__file__).resolve().parents[1] / "conf" / "prompt"
+    from lib.project_paths import prompt_dir
+    base = prompt_dir()
     main_path = base / "main.prompt"
     kb_path = base / "knowledge.base"
     content = main_path.read_text(encoding="utf-8").strip() if main_path.exists() else ""

@@ -613,6 +613,20 @@ class ConfigProvider:
                         self._sync_env()
                         self._save()
                 return
+        # Array fields: PROJECT_GENIE_SPACES[N], PROJECT_FUNCTIONS[N]
+        import re as _re
+        arr_match = _re.match(r"(PROJECT_GENIE_SPACES|PROJECT_FUNCTIONS)\[(\d+)\]", key)
+        if arr_match:
+            arr_key, idx_str = arr_match.group(1), int(arr_match.group(2))
+            arr_field = "genie_spaces" if arr_key == "PROJECT_GENIE_SPACES" else "functions"
+            arr = self._data.get("tools", {}).get(arr_field, [])
+            if 0 <= idx_str < len(arr):
+                with _config_lock:
+                    arr.pop(idx_str)
+                    self._sync_env()
+                    self._save()
+            return
+
         # Scalar: set to null
         reverse_scalar = {env_key: path for path, env_key in _SCALAR_MAP}
         if key in reverse_scalar:
@@ -631,6 +645,13 @@ class LocalConfigProvider(ConfigProvider):
         self._config_file = Path(config_file)
         self._project_file: Path | None = None  # auto-save mirror for active project
         self._data = self._load()
+
+    @property
+    def project_dir(self) -> Path | None:
+        """Artifact directory for the active project (projects/{name}/)."""
+        if self._project_file:
+            return self._project_file.parent / self._project_file.stem
+        return None
 
     def _load(self) -> dict[str, Any]:
         """Load config.json, falling back to default schema if missing."""

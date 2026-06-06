@@ -7,8 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-GEN_DIR = ROOT / "data" / "gen"
+from lib.project_paths import gen_dir as _resolve_gen_dir
+
+GEN_DIR = _resolve_gen_dir()
 CSV_DIR = GEN_DIR / "csv"
 INIT_DIR = GEN_DIR / "init"
 MANIFEST_PATH = GEN_DIR / "manifest.json"
@@ -42,7 +43,7 @@ def write_csv(table_name: str, columns: list[dict], rows: list[dict]) -> Path:
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"[+] Wrote {csv_path.relative_to(ROOT)}")
+    print(f"[+] Wrote {csv_path.name}")
     return csv_path
 
 
@@ -79,7 +80,7 @@ def write_create_sql(table_name: str, columns: list[dict], rows: list[dict]) -> 
     with open(sql_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
-    print(f"[+] Wrote {sql_path.relative_to(ROOT)}")
+    print(f"[+] Wrote {sql_path.name}")
     return sql_path
 
 
@@ -101,7 +102,7 @@ def write_manifest(tables: list[dict]) -> Path:
     with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"[+] Wrote {MANIFEST_PATH.relative_to(ROOT)}")
+    print(f"[+] Wrote {MANIFEST_PATH.name}")
     return MANIFEST_PATH
 
 

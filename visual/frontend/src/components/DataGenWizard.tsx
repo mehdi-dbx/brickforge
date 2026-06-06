@@ -85,6 +85,10 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
           const names = new Set(saved.savedTableNames)
           setSavedTables(saved.tables.filter((t: TableDef) => names.has(t.name)))
         }
+        // Auto-fire data generation if resuming data step
+        if (saved.step === 'data' && saved.tables?.length) {
+          setTimeout(() => fire('data'), 100)
+        }
       })
       .catch(() => {})
   }, [])
@@ -298,7 +302,7 @@ export function DataGenWizard({ onSwitchToTables }: Props) {
               onClick={handleStartFresh}
               className="text-[10px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-red-400 transition-colors"
             >
-              start fresh
+              new generation
             </button>
           )}
         </div>

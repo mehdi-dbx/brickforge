@@ -166,9 +166,8 @@ def _learn_constraint(error_msg: str) -> None:
 def _run_sql_file(sql_file: Path, kind: str) -> tuple[bool, str]:
     """Run a SQL file via run_sql.py. Returns (success, error_msg)."""
     import subprocess
-    rel = str(sql_file.relative_to(ROOT))
     r = subprocess.run(
-        [sys.executable, "data/py/run_sql.py", rel],
+        [sys.executable, "data/py/run_sql.py", str(sql_file)],
         cwd=ROOT, capture_output=True, text=True,
     )
     if r.returncode == 0:
@@ -183,8 +182,10 @@ def mode_provision_gen() -> None:
     for correction, sanitizes, writes back, retries (max 2 attempts per file).
     Learned constraints are appended to the reference doc.
     """
-    gen_func = ROOT / "data" / "gen" / "func"
-    gen_proc = ROOT / "data" / "gen" / "proc"
+    from lib.project_paths import gen_dir
+    _gd = gen_dir()
+    gen_func = _gd / "func"
+    gen_proc = _gd / "proc"
 
     func_files = sorted(gen_func.glob("*.sql")) if gen_func.exists() else []
     proc_files = sorted(gen_proc.glob("*.sql")) if gen_proc.exists() else []

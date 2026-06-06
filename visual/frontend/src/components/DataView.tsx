@@ -32,6 +32,18 @@ type DataMode = 'tables' | 'generate' | 'generate-routines'
 
 export function DataView() {
   const [mode, setMode] = useState<DataMode>('tables')
+
+  // Listen for data-mode events from SetupView (gen-data, gen-routines)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail === 'generate') setMode('generate')
+      else if (detail === 'routines') setMode('generate-routines')
+    }
+    window.addEventListener('data-mode', handler)
+    return () => window.removeEventListener('data-mode', handler)
+  }, [])
+
   const [tables, setTables] = useState<DynTable[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingExisting, setLoadingExisting] = useState(true)

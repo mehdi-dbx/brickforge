@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import zipfile
 import io
 from pathlib import Path
@@ -10,6 +12,7 @@ from fastapi import APIRouter, Request, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 
 from brickforge import PACKAGE_ROOT, PROJECT_ROOT, USER_DIR
+from brickforge.lib.project_paths import init_artifact_dirs, prompt_dir as _prompt_dir, gen_dir as _gen_dir
 
 router = APIRouter()
 
@@ -122,6 +125,10 @@ async def create_project(request: Request):
     fresh = copy.deepcopy(DEFAULT_CONFIG)
     project_file.write_text(json.dumps(fresh, indent=2) + "\n")
 
+    # Create artifact directory
+    artifact_dir = PROJECTS_DIR / safe_name
+    init_artifact_dirs(artifact_dir)
+
     # Switch mirror FIRST (so _save doesn't overwrite old project with defaults)
     _write_current(safe_name)
     _set_project_mirror(safe_name)
@@ -131,6 +138,8 @@ async def create_project(request: Request):
     config._data = fresh
     config._save()
     config._sync_env()
+    # Set PROJECT_DIR for subprocess scripts
+    os.environ["PROJECT_DIR"] = str(artifact_dir)
 
     return {"ok": True, "name": safe_name, "source": "local"}
 
@@ -151,6 +160,10 @@ async def load_project(name: str):
         config._data = _merge_defaults(project_config, DEFAULT_CONFIG)
         config._save()
         config._sync_env()
+        # Set PROJECT_DIR for subprocess scripts
+        artifact_dir = PROJECTS_DIR / name
+        init_artifact_dirs(artifact_dir)
+        os.environ["PROJECT_DIR"] = str(artifact_dir)
         return {"ok": True, "name": name, "source": "local"}
 
     # Try UC Volume
@@ -218,15 +231,17 @@ async def export_project(name: str):
         # Config
         zf.write(str(project_file), "config.json")
 
+        # Use project artifact dir if exists, fall back to package-level
+        prompt_dir = _prompt_dir()
+        gen_dir = _gen_dir()
+
         # Prompts
-        prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
         if prompt_dir.exists():
             for f in sorted(prompt_dir.iterdir()):
                 if f.is_file() and f.suffix in (".prompt", ".base"):
                     zf.write(str(f), f"prompt/{f.name}")
 
         # Generated artifacts
-        gen_dir = PACKAGE_ROOT / "data" / "gen"
         for subdir in ["csv", "init", "func", "proc"]:
             d = gen_dir / subdir
             if d.exists():
@@ -249,9 +264,30 @@ async def export_project(name: str):
 
 # ── Import project bundle ───────────────────────────────────────────────────
 
+CLEAR_ON_NEW_IMPORT = {
+    "workspace.host": None,
+    "workspace.token": None,
+    "workspace.config_profile": None,
+    "workspace.refresh_token": None,
+    "workspace.token_endpoint": None,
+    "workspace.client_id": None,
+    "workspace.client_secret": None,
+    "workspace.warehouse_id": None,
+    "tools.genie_spaces": [],
+    "app.mlflow_experiment_id": None,
+    "model.token": None,
+    "lakebase.instance_name": None,
+    "lakebase.agent_memory_schema": None,
+}
+
+
 @router.post("/api/projects/import")
-async def import_project(file: UploadFile = File(...)):
-    """Import a .forge.zip bundle as a new project."""
+async def import_project(request: Request, file: UploadFile = File(...)):
+    """Import a .forge.zip bundle. mode=load (as-is) or mode=new (sanitized)."""
+    mode = request.query_params.get("mode", "load")
+    if mode not in ("load", "new"):
+        return JSONResponse({"error": "mode must be 'load' or 'new'"}, status_code=400)
+
     if not file.filename or not file.filename.endswith(".zip"):
         return JSONResponse({"error": "expected a .zip file"}, status_code=400)
 
@@ -261,40 +297,67 @@ async def import_project(file: UploadFile = File(...)):
     except zipfile.BadZipFile:
         return JSONResponse({"error": "invalid zip file"}, status_code=400)
 
-    # Derive project name from filename
-    base = file.filename.replace(".forge.zip", "").replace(".zip", "")
-    safe_name = base.replace(" ", "-").replace("/", "-").replace("\\", "-")
-
-    # Avoid collision
-    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
-    candidate = safe_name
-    counter = 2
-    while (PROJECTS_DIR / f"{candidate}.json").exists():
-        candidate = f"{safe_name}-{counter}"
-        counter += 1
-    safe_name = candidate
-
     # Extract config
     if "config.json" not in zf.namelist():
         return JSONResponse({"error": "zip missing config.json"}, status_code=400)
 
     config_data = json.loads(zf.read("config.json").decode())
+
+    # Sanitize for new project: clear workspace-specific values
+    if mode == "new":
+        for dot_path, default in CLEAR_ON_NEW_IMPORT.items():
+            keys = dot_path.split(".")
+            obj = config_data
+            for k in keys[:-1]:
+                obj = obj.setdefault(k, {})
+            obj[keys[-1]] = default
+
+        # Enable gen data if bundle has table data (csv or init SQL)
+        has_table_data = any(
+            (e.startswith("gen/csv/") or e.startswith("gen/init/")) and not e.endswith("/")
+            for e in zf.namelist()
+        )
+        if has_table_data:
+            config_data.setdefault("data", {})["use_gen_data"] = True
+
+    # Derive project name from filename
+    base = file.filename.replace(".forge.zip", "").replace(".zip", "")
+    safe_name = base.replace(" ", "-").replace("/", "-").replace("\\", "-")
+
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if mode == "load":
+        # Load overwrites existing project with same name
+        pass
+    else:
+        # New avoids collision
+        candidate = safe_name
+        counter = 2
+        while (PROJECTS_DIR / f"{candidate}.json").exists():
+            candidate = f"{safe_name}-{counter}"
+            counter += 1
+        safe_name = candidate
+
     project_file = PROJECTS_DIR / f"{safe_name}.json"
     project_file.write_text(json.dumps(config_data, indent=2) + "\n")
 
-    # Extract prompts -> conf/prompt/
-    prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
+    # Create artifact directory for this project
+    artifact_dir = PROJECTS_DIR / safe_name
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract prompts -> project artifact dir
+    prompt_dir = artifact_dir / "prompt"
     prompt_dir.mkdir(parents=True, exist_ok=True)
     for entry in zf.namelist():
         if entry.startswith("prompt/") and not entry.endswith("/"):
             fname = entry.split("/", 1)[1]
             (prompt_dir / fname).write_bytes(zf.read(entry))
 
-    # Extract gen artifacts -> data/gen/
-    gen_dir = PACKAGE_ROOT / "data" / "gen"
+    # Extract gen artifacts -> project artifact dir
+    gen_dir = artifact_dir / "gen"
     for entry in zf.namelist():
         if entry.startswith("gen/") and not entry.endswith("/"):
-            rel = entry.split("/", 1)[1]  # e.g. "func/my_func.sql"
+            rel = entry.split("/", 1)[1]
             target = gen_dir / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(zf.read(entry))
@@ -309,23 +372,29 @@ async def import_project(file: UploadFile = File(...)):
     config._data = _merge_defaults(config_data, DEFAULT_CONFIG)
     config._save()
     config._sync_env()
+    os.environ["PROJECT_DIR"] = str(artifact_dir)
 
-    return {"ok": True, "name": safe_name}
+    return {"ok": True, "name": safe_name, "mode": mode}
 
 
 # ── Delete project ───────────────────────────────────────────────────────────
 
 @router.delete("/api/projects/{name}")
 async def delete_project(name: str):
-    # If deleting the current project, clear current
+    # If deleting the current project, clear current + PROJECT_DIR
     if _read_current() == name:
         _write_current(None)
         _set_project_mirror(None)
+        os.environ.pop("PROJECT_DIR", None)
 
     # Try local first
     project_file = PROJECTS_DIR / f"{name}.json"
     if project_file.exists():
         project_file.unlink()
+        # Remove artifact directory
+        artifact_dir = PROJECTS_DIR / name
+        if artifact_dir.exists():
+            shutil.rmtree(artifact_dir)
         return {"ok": True, "source": "local"}
 
     # Try UC Volume
@@ -371,9 +440,16 @@ async def rename_project(name: str, request: Request):
 
     old_file.rename(new_file)
 
+    # Rename artifact directory
+    old_dir = PROJECTS_DIR / name
+    new_dir = PROJECTS_DIR / new_name
+    if old_dir.exists():
+        old_dir.rename(new_dir)
+
     # Update current if renamed the active project
     if _read_current() == name:
         _write_current(new_name)
         _set_project_mirror(new_name)
+        os.environ["PROJECT_DIR"] = str(new_dir)
 
     return {"ok": True, "name": new_name}

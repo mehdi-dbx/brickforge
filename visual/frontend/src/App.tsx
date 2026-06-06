@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { ReactFlowProvider, type Node, type NodeMouseHandler } from '@xyflow/react'
-import { Settings2, Moon, Sun, RefreshCw, FolderOpen, Plus, Trash2, Pencil, Package, Upload } from 'lucide-react'
+import { Settings2, Moon, Sun, RefreshCw, FolderOpen, Plus, Trash2, Pencil, Package, Upload, Info } from 'lucide-react'
 import { ArchCanvas } from './components/ArchCanvas'
 import { Legend } from './components/Legend'
 import { NodeDetailPanel } from './components/NodeDetailPanel'
@@ -150,6 +150,10 @@ export default function App() {
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [showNewProject, setShowNewProject] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState('')
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   const refreshProjects = useCallback(() => {
     fetch('/api/projects')
@@ -218,6 +222,21 @@ export default function App() {
       .then(() => refreshProjects())
       .catch(() => {})
   }, [refreshProjects])
+
+  const doImport = useCallback((mode: 'load' | 'new') => {
+    if (!importFile) return
+    setImportLoading(true)
+    setImportError('')
+    const form = new FormData()
+    form.append('file', importFile)
+    fetch(`/api/projects/import?mode=${mode}`, { method: 'POST', body: form })
+      .then(async r => {
+        const data = await r.json()
+        if (!r.ok) { setImportError(data.error || 'Import failed'); setImportLoading(false); return }
+        window.location.reload()
+      })
+      .catch(() => { setImportError('Import failed'); setImportLoading(false) })
+  }, [importFile])
 
   // Apply dark class on <html> so all dark: utilities work everywhere
   useEffect(() => {
@@ -466,16 +485,13 @@ export default function App() {
                 >
                   <Upload className="h-3 w-3" />
                   Import .forge.zip
-                  <input type="file" accept=".zip" className="hidden"
+                  <input type="file" accept=".zip" className="hidden" ref={importInputRef}
                     onChange={e => {
                       const f = e.target.files?.[0];
                       if (!f) return;
-                      const form = new FormData();
-                      form.append('file', f);
-                      fetch('/api/projects/import', { method: 'POST', body: form })
-                        .then(r => r.json())
-                        .then(r => { if (r.ok) window.location.reload(); else alert(r.error || 'Import failed'); })
-                        .catch(() => alert('Import failed'));
+                      setImportFile(f);
+                      setImportError('');
+                      setProjectMenuOpen(false);
                     }}
                   />
                 </label>
@@ -493,7 +509,7 @@ export default function App() {
               ['data', 'Data'],
               ['ka', 'Docs'],
               ['arch', 'Architecture'],
-              ['stash', 'Stash'],
+              ['stash', 'Assets'],
               ['cleanup', 'Cleanup'],
             ] as [View, string][]).map(([v, label]) => (
               <button
@@ -585,6 +601,56 @@ export default function App() {
 
       {view === 'arch' && <NodeDetailPanel node={selected} onClose={closePanel} />}
       <EnvEditor open={envOpen} onClose={closeEnv} />
+
+      {/* Import modal -- at root level to avoid stacking context issues */}
+      {importFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => { setImportFile(null); setImportError(''); if (importInputRef.current) importInputRef.current.value = '' }}>
+          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px]" />
+          <div onClick={e => e.stopPropagation()} className="relative w-[380px] bg-white dark:bg-dbx-gray-900 border border-dbx-gray-200 dark:border-dbx-gray-700 rounded-xl shadow-2xl p-6">
+            <h3 className="text-[14px] font-semibold text-dbx-gray-900 dark:text-dbx-gray-100 font-mono mb-1">Import project</h3>
+            <p className="text-[12px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400 mb-4">{importFile.name}</p>
+
+            <button
+              onClick={() => doImport('load')}
+              disabled={importLoading}
+              className="w-full text-left mb-2 p-3 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700 hover:border-dbx-blue dark:hover:border-dbx-blue transition-colors disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-mono font-medium text-dbx-gray-800 dark:text-dbx-gray-200">Load project</span>
+                <Info className="h-3.5 w-3.5 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-help flex-shrink-0" title="Imports the bundle config as-is. Use this when the catalog, tables, functions and other assets referenced in this bundle already exist on your workspace." />
+              </div>
+              <span className="text-[11px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500">Import from bundle</span>
+            </button>
+
+            <button
+              onClick={() => doImport('new')}
+              disabled={importLoading}
+              className="w-full text-left mb-3 p-3 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700 hover:border-dbx-blue dark:hover:border-dbx-blue transition-colors disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-mono font-medium text-dbx-gray-800 dark:text-dbx-gray-200">New project</span>
+                <Info className="h-3.5 w-3.5 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-help flex-shrink-0" title="Imports data, prompts and SQL from the bundle but clears workspace connections. You'll walk through setup to connect or create assets on your workspace." />
+              </div>
+              <span className="text-[11px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500">Create from bundle</span>
+            </button>
+
+            {importError && (
+              <p className="text-[11px] font-mono text-red-500 mb-3">{importError}</p>
+            )}
+
+            {importLoading ? (
+              <p className="text-[11px] font-mono text-dbx-gray-400 animate-pulse text-center">Importing...</p>
+            ) : (
+              <button
+                onClick={() => { setImportFile(null); setImportError(''); if (importInputRef.current) importInputRef.current.value = '' }}
+                className="w-full text-center text-[12px] font-mono text-dbx-gray-400 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -60,15 +60,18 @@ def section(title: str, current: int = 0, total: int = 0) -> None:
 def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> bool:
     section(name, current, total)
     _log_plain(f"Running: {' '.join(cmd)}")
-    _step_stop.clear()
-    bar_thread = threading.Thread(target=_step_bar_loop, args=(name, current, total, 20), daemon=True)
-    bar_thread.start()
+    _interactive = sys.stdout.isatty()
+    if _interactive:
+        _step_stop.clear()
+        bar_thread = threading.Thread(target=_step_bar_loop, args=(name, current, total, 20), daemon=True)
+        bar_thread.start()
     try:
         r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     finally:
-        _step_stop.set()
-        bar_thread.join(timeout=0.5)
-    print("\r\033[K", end="")
+        if _interactive:
+            _step_stop.set()
+            bar_thread.join(timeout=0.5)
+            print("\r\033[K", end="")
     if r.stdout:
         _log_plain(r.stdout.strip())
     if r.stderr:
@@ -91,8 +94,28 @@ def _is_ddl(sql_path: Path) -> bool:
 
 def main() -> None:
     stash_dir = os.environ.get("FORGE_STASH_DIR", "").strip()
-    func_dir = (ROOT / stash_dir / "data" / "func") if stash_dir else (ROOT / "data" / "default" / "func")
-    all_sql = sorted(func_dir.glob("*.sql"))
+    func_dirs = []
+    if stash_dir:
+        stash_path = ROOT / stash_dir if not Path(stash_dir).is_absolute() else Path(stash_dir)
+        func_dirs.append(stash_path / "data" / "func")
+    else:
+        demo_dir = ROOT / "data" / "demo" / "func"
+        if demo_dir.exists() and (os.environ.get("USE_DEMO_DATA") or os.environ.get("USE_DEFAULT_DATA", "true")).strip().lower() in ("true", "1", "yes"):
+            func_dirs.append(demo_dir)
+    # Project-scoped gen dir (takes priority)
+    project_dir = os.environ.get("PROJECT_DIR", "").strip()
+    if project_dir:
+        proj_func = Path(project_dir) / "gen" / "func"
+        if proj_func.exists():
+            func_dirs.append(proj_func)
+    else:
+        gen_dir = ROOT / "data" / "gen" / "func"
+        if gen_dir.exists() and os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+            func_dirs.append(gen_dir)
+    all_sql = []
+    for d in func_dirs:
+        if d.exists():
+            all_sql.extend(sorted(d.glob("*.sql")))
     ddl_sql = [p for p in all_sql if _is_ddl(p)]
     skipped = len(all_sql) - len(ddl_sql)
 
@@ -105,15 +128,15 @@ def main() -> None:
         print(f"  {DIM}Skipping {skipped} query template(s) without CREATE statement{W}")
 
     if not ddl_sql:
-        print(f"  {WARN} No CREATE function SQL files found in {func_dir.relative_to(ROOT)}{W}")
+        dirs_str = ", ".join(str(d) for d in func_dirs) or "no directories configured"
+        print(f"  {WARN} No CREATE function SQL files found in {dirs_str}{W}")
         return
 
     total = len(ddl_sql)
     for i, sql_path in enumerate(ddl_sql, 1):
-        rel = str(sql_path.relative_to(ROOT))
-        if not run_step(rel, ["uv", "run", "python", "data/py/run_sql.py", rel], i, total):
-            print(f"\n  {FAIL} Aborting after {rel} failed{W}")
-            _log_plain(f"Aborting after {rel} failed")
+        if not run_step(sql_path.name, [sys.executable, "data/py/run_sql.py", str(sql_path)], i, total):
+            print(f"\n  {FAIL} Aborting after {sql_path.name} failed{W}")
+            _log_plain(f"Aborting after {sql_path.name} failed")
             sys.exit(1)
 
     print(f"\n  {OK} {G}All functions created ({total}){W}\n")

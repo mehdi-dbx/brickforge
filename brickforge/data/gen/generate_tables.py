@@ -80,14 +80,15 @@ def mode_provision_gen() -> None:
     """Run only the generated table SQL files via data/py/run_sql.py."""
     import subprocess
 
-    gen_init = ROOT / "data" / "gen" / "init"
+    from lib.project_paths import gen_dir
+    gen_init = gen_dir() / "init"
     if not gen_init.exists():
-        print("[x] No generated SQL files found in data/gen/init/")
+        print(f"[x] No generated SQL files found in {gen_init}")
         sys.exit(1)
 
     sql_files = sorted(gen_init.glob("create_*.sql"))
     if not sql_files:
-        print("[x] No create_*.sql files found in data/gen/init/")
+        print(f"[x] No create_*.sql files found in {gen_init}")
         sys.exit(1)
 
     # Ensure catalog/schema exists first
@@ -105,11 +106,10 @@ def mode_provision_gen() -> None:
     # Run each generated SQL file
     total = len(sql_files)
     for i, sql_file in enumerate(sql_files, 1):
-        rel = str(sql_file.relative_to(ROOT))
-        print(f"[~] ({i}/{total}) Running {rel}...")
+        print(f"[~] ({i}/{total}) Running {sql_file.name}...")
         sys.stdout.flush()
         r = subprocess.run(
-            [sys.executable, "data/py/run_sql.py", rel],
+            [sys.executable, "data/py/run_sql.py", str(sql_file)],
             cwd=ROOT, capture_output=True, text=True, env=dict(os.environ),
         )
         if r.returncode != 0:

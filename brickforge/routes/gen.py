@@ -26,6 +26,9 @@ def _sub_env():
     return build_sub_env(_get_config())
 
 
+from brickforge.lib.project_paths import gen_dir as _gen_dir, prompt_dir as _prompt_dir
+
+
 # ── Status & Discovery ───────────────────────────────────────────────────────
 
 @router.get("/api/gen/status")
@@ -34,7 +37,7 @@ async def gen_status():
     env = config.to_env_dict()
     model_ready = bool((env.get("AGENT_MODEL") or env.get("AGENT_MODEL_ENDPOINT")) and env.get("DATABRICKS_HOST"))
     manifest = None
-    manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
+    manifest_path = _gen_dir() / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -59,7 +62,7 @@ async def gen_tables():
     if use_demo in ("true", "1", "yes"):
         sources.append(("demo", PACKAGE_ROOT / "data" / "demo"))
     if use_gen in ("true", "1", "yes"):
-        sources.append(("generated", PACKAGE_ROOT / "data" / "gen"))
+        sources.append(("generated", _gen_dir()))
 
     for source, base in sources:
         csv_dir = base / "csv"
@@ -93,7 +96,7 @@ async def gen_routines():
     if use_demo in ("true", "1", "yes"):
         sources.append(("demo", PACKAGE_ROOT / "data" / "demo"))
     if use_gen in ("true", "1", "yes"):
-        sources.append(("generated", PACKAGE_ROOT / "data" / "gen"))
+        sources.append(("generated", _gen_dir()))
 
     for source, base in sources:
         for sub, kind in [("func", "function"), ("proc", "procedure")]:
@@ -154,7 +157,7 @@ async def delete_routine_wizard_state():
 
 @router.delete("/api/gen/clear")
 async def clear_gen():
-    gen_dir = PACKAGE_ROOT / "data" / "gen"
+    gen_dir = _gen_dir()
     deleted = 0
     for sub in ["csv", "init"]:
         d = gen_dir / sub
@@ -174,7 +177,7 @@ async def clear_gen():
 
 @router.delete("/api/gen/clear-routines")
 async def clear_routines():
-    gen_dir = PACKAGE_ROOT / "data" / "gen"
+    gen_dir = _gen_dir()
     deleted = 0
     for sub in ["func", "proc"]:
         d = gen_dir / sub
@@ -307,7 +310,7 @@ async def routine_status():
     model_ready = bool((env.get("AGENT_MODEL") or env.get("AGENT_MODEL_ENDPOINT")) and env.get("DATABRICKS_HOST"))
     # Load table schemas for context: try gen manifest first, then existing UC tables
     table_schemas = None
-    manifest_path = PACKAGE_ROOT / "data" / "gen" / "manifest.json"
+    manifest_path = _gen_dir() / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text())
         table_schemas = manifest.get("tables")

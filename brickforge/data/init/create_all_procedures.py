@@ -57,15 +57,18 @@ def section(title: str, current: int = 0, total: int = 0) -> None:
 def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> bool:
     section(name, current, total)
     _log_plain(f"Running: {' '.join(cmd)}")
-    _step_stop.clear()
-    bar_thread = threading.Thread(target=_step_bar_loop, args=(name, current, total, 20), daemon=True)
-    bar_thread.start()
+    _interactive = sys.stdout.isatty()
+    if _interactive:
+        _step_stop.clear()
+        bar_thread = threading.Thread(target=_step_bar_loop, args=(name, current, total, 20), daemon=True)
+        bar_thread.start()
     try:
         r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     finally:
-        _step_stop.set()
-        bar_thread.join(timeout=0.5)
-    print("\r\033[K", end="")
+        if _interactive:
+            _step_stop.set()
+            bar_thread.join(timeout=0.5)
+            print("\r\033[K", end="")
     if r.stdout:
         _log_plain(r.stdout.strip())
     if r.stderr:
@@ -82,8 +85,28 @@ def run_step(name: str, cmd: list[str], current: int = 0, total: int = 0) -> boo
 
 def main() -> None:
     stash_dir = os.environ.get("FORGE_STASH_DIR", "").strip()
-    proc_dir = (ROOT / stash_dir / "data" / "proc") if stash_dir else (ROOT / "data" / "default" / "proc")
-    proc_sql = sorted(proc_dir.glob("*.sql"))
+    proc_dirs = []
+    if stash_dir:
+        stash_path = ROOT / stash_dir if not Path(stash_dir).is_absolute() else Path(stash_dir)
+        proc_dirs.append(stash_path / "data" / "proc")
+    else:
+        demo_dir = ROOT / "data" / "demo" / "proc"
+        if demo_dir.exists() and (os.environ.get("USE_DEMO_DATA") or os.environ.get("USE_DEFAULT_DATA", "true")).strip().lower() in ("true", "1", "yes"):
+            proc_dirs.append(demo_dir)
+    # Project-scoped gen dir (takes priority)
+    project_dir = os.environ.get("PROJECT_DIR", "").strip()
+    if project_dir:
+        proj_proc = Path(project_dir) / "gen" / "proc"
+        if proj_proc.exists():
+            proc_dirs.append(proj_proc)
+    else:
+        gen_dir = ROOT / "data" / "gen" / "proc"
+        if gen_dir.exists() and os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+            proc_dirs.append(gen_dir)
+    proc_sql = []
+    for d in proc_dirs:
+        if d.exists():
+            proc_sql.extend(sorted(d.glob("*.sql")))
 
     print(f"\n{BOLD}{M}╔══════════════════════════════════════════╗{W}")
     print(f"{BOLD}{M}║  Create All Procedures                   ║{W}")
@@ -91,15 +114,15 @@ def main() -> None:
     _log_plain(f"=== create_all_procedures started {datetime.now().isoformat()} ===")
 
     if not proc_sql:
-        print(f"  {WARN} No SQL files found in {proc_dir.relative_to(ROOT)}{W}")
+        dirs_str = ", ".join(str(d) for d in proc_dirs) or "no directories configured"
+        print(f"  {WARN} No SQL files found in {dirs_str}{W}")
         return
 
     total = len(proc_sql)
     for i, sql_path in enumerate(proc_sql, 1):
-        rel = str(sql_path.relative_to(ROOT))
-        if not run_step(rel, ["uv", "run", "python", "data/py/run_sql.py", rel], i, total):
-            print(f"\n  {FAIL} Aborting after {rel} failed{W}")
-            _log_plain(f"Aborting after {rel} failed")
+        if not run_step(sql_path.name, [sys.executable, "data/py/run_sql.py", str(sql_path)], i, total):
+            print(f"\n  {FAIL} Aborting after {sql_path.name} failed{W}")
+            _log_plain(f"Aborting after {sql_path.name} failed")
             sys.exit(1)
 
     print(f"\n  {OK} {G}All procedures created ({total}){W}\n")

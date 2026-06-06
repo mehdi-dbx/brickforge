@@ -132,6 +132,9 @@ def build_sub_env(config: ConfigProvider, extra_env: dict[str, str] | None = Non
         env["CONFIG_FILE"] = str(PROJECT_ROOT / "config.json")  # editable: repo root
     else:
         env["CONFIG_FILE"] = str(USER_DIR / "config.json")  # pip: ~/.brickforge/
+    # PROJECT_DIR: artifact root for active project (prompts, SQL, CSVs scoped per project)
+    if hasattr(config, 'project_dir') and config.project_dir:
+        env["PROJECT_DIR"] = str(config.project_dir)
     # If PAT token is set, remove SP OAuth vars to avoid SDK auth conflict
     if env.get("DATABRICKS_TOKEN") and env.get("DATABRICKS_CLIENT_ID"):
         env.pop("DATABRICKS_CLIENT_ID", None)

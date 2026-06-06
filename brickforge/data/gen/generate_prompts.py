@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -20,7 +21,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 
-PROMPT_DIR = ROOT / "conf" / "prompt"
+from lib.project_paths import prompt_dir as _resolve_prompt_dir
+PROMPT_DIR = _resolve_prompt_dir()
 
 
 def _emit_result(data: dict | list) -> None:

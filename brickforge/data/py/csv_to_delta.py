@@ -20,7 +20,11 @@ def _active_csv_dirs() -> list[Path]:
     dirs = []
     if (os.environ.get("USE_DEMO_DATA") or os.environ.get("USE_DEFAULT_DATA", "true")).strip().lower() in ("true", "1", "yes"):
         dirs.append(DATA_ROOT / "demo" / "csv")
-    if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+    # Project-scoped gen dir (takes priority)
+    project_dir = os.environ.get("PROJECT_DIR", "").strip()
+    if project_dir:
+        dirs.append(Path(project_dir) / "gen" / "csv")
+    elif os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
         dirs.append(DATA_ROOT / "gen" / "csv")
     return dirs
 

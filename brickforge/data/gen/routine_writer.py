@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-GEN_DIR = ROOT / "data" / "gen"
+from lib.project_paths import gen_dir as _resolve_gen_dir
+
+GEN_DIR = _resolve_gen_dir()
 FUNC_DIR = GEN_DIR / "func"
 PROC_DIR = GEN_DIR / "proc"
 
@@ -15,7 +16,7 @@ def write_function_sql(name: str, sql: str) -> Path:
     path = FUNC_DIR / f"{name}.sql"
     with open(path, "w", encoding="utf-8") as f:
         f.write(sql + "\n")
-    print(f"[+] Wrote {path.relative_to(ROOT)}")
+    print(f"[+] Wrote {path.name}")
     return path
 
 
@@ -25,7 +26,7 @@ def write_procedure_sql(name: str, sql: str) -> Path:
     path = PROC_DIR / f"{name}.sql"
     with open(path, "w", encoding="utf-8") as f:
         f.write(sql + "\n")
-    print(f"[+] Wrote {path.relative_to(ROOT)}")
+    print(f"[+] Wrote {path.name}")
     return path
 
 

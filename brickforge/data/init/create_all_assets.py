@@ -36,7 +36,12 @@ def _active_sources() -> list[tuple[Path, Path]]:
     else:
         if (os.environ.get("USE_DEMO_DATA") or os.environ.get("USE_DEFAULT_DATA", "true")).strip().lower() in ("true", "1", "yes"):
             sources.append((ROOT / "data" / "demo" / "csv", ROOT / "data" / "demo" / "init"))
-    if os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
+    # Project-scoped gen dir (takes priority)
+    project_dir = os.environ.get("PROJECT_DIR", "").strip()
+    if project_dir:
+        p = Path(project_dir) / "gen"
+        sources.append((p / "csv", p / "init"))
+    elif os.environ.get("USE_GEN_DATA", "false").strip().lower() in ("true", "1", "yes"):
         sources.append((ROOT / "data" / "gen" / "csv", ROOT / "data" / "gen" / "init"))
     return sources
 
@@ -51,7 +56,7 @@ def _get_init_sql() -> list[str]:
             table = csv_path.stem.replace("-", "_")
             sql_path = init_dir / f"create_{table}.sql"
             if sql_path.exists():
-                paths.append(str(sql_path.relative_to(ROOT)))
+                paths.append(str(sql_path))
     return paths
 
 

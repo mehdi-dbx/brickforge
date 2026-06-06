@@ -93,11 +93,12 @@ def main():
     if config_file:
         from lib.config_json import read_config, write_config
         config = read_config()
-        spaces = config.setdefault("tools", {}).setdefault("genie_spaces", [])
-        if space.space_id not in spaces:
-            spaces.append(space.space_id)
+        config.setdefault("tools", {})["genie_spaces"] = [space.space_id]
+        config.setdefault("genie_room", {})["name"] = title
+        config["genie_room"]["description"] = description
+        spaces = config["tools"]["genie_spaces"]
         write_config(config)
-        print(f"Updated {config_file} with genie_spaces={spaces}", file=sys.stderr)
+        print(f"Updated {config_file} with genie_spaces={spaces}, genie_room.name={title}", file=sys.stderr)
     else:
         # Fallback: write to .env.local (legacy)
         env_path = Path(os.environ.get("ENV_FILE", str(ROOT / ".env.local")))
