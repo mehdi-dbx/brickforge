@@ -40,7 +40,7 @@ function useFetchOnce<T>(url: string | null) {
       .then(r => r.json() as Promise<Record<string, unknown>>)
       .then(body => {
         if (body.error) setError(body.error as string)
-        else setData((body.items ?? body.profiles ?? null) as T)
+        else setData((body.items ?? body.profiles ?? body.workspaces ?? null) as T)
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
@@ -105,6 +105,28 @@ function WarehouseList({ selected, onSelect, onConfirm }: { selected: string; on
         )
       })}
       <NoMatches visible={!!filter && filtered.length === 0} />
+    </>
+  )
+}
+
+function SavedWorkspaceList({ selected, onSelect, onConfirm }: { selected: string; onSelect: (host: string) => void; onConfirm?: () => void }) {
+  const { data, loading, error } = useFetchOnce<{host: string; label: string; last_used: string}[]>('/api/workspaces')
+  const workspaces = (data as {host: string; label: string; last_used: string}[]) || []
+  if (loading) return <Spinner label="loading saved workspaces..." />
+  if (error)   return <ErrMsg msg={error} />
+  if (workspaces.length === 0) return <p className="text-[12px] font-mono text-dbx-gray-400 py-4">No saved workspaces yet. Connect a workspace first, then save it.</p>
+  return (
+    <>
+      <Label>saved workspaces</Label>
+      {workspaces.map(ws => (
+        <PickRow key={ws.host} active={selected === ws.host}
+          onClick={() => onSelect(ws.host)}
+          onDoubleClick={() => { onSelect(ws.host); onConfirm?.() }}>
+          <Dot color="blue" />
+          <span className="flex-1 font-mono text-[13px] text-dbx-gray-800 dark:text-dbx-gray-100">{ws.label}</span>
+          <span className="text-[10px] font-mono text-dbx-gray-400">{ws.last_used}</span>
+        </PickRow>
+      ))}
     </>
   )
 }
@@ -1910,6 +1932,8 @@ export function SetupDrawer({
   }, [activeStep])
 
   const [selProfile, setSelProfile]     = useState('')
+  const [selSavedWs, setSelSavedWs]     = useState('')
+  const [savedWorkspaces, setSavedWorkspaces] = useState<{host: string; label: string; last_used: string}[]>([])
   const [selWhId, setSelWhId]           = useState('')
   const [selWhName, setSelWhName]       = useState('')
   const [selEndpoint, setSelEndpoint]   = useState('')
@@ -2092,6 +2116,7 @@ export function SetupDrawer({
       })()
       return
     }
+    if (action === 'cfg-saved-workspace' && selSavedWs) { action = 'save-workspace'; Object.assign(params, { host: selSavedWs, from_keyring: true }) }
     if (action === 'cfg-model'     && selEndpoint) { action = 'save-model-endpoint'; Object.assign(params, { name: selEndpoint }) }
     if (action === 'cfg-warehouse' && selWhId)    { action = 'save-warehouse'; Object.assign(params, { id: selWhId, name: selWhName }) }
     if (action === 'cfg-catalog'   && selCatalog) { action = 'save-schema';    Object.assign(params, { catalog: selCatalog, schema: catSchema || 'main' }) }
@@ -2355,6 +2380,7 @@ export function SetupDrawer({
     function canRun() {
       if (action === 'cfg-features')  return true
       if (action === 'cfg-bricks')    return true
+      if (action === 'cfg-saved-workspace') return !!selSavedWs
       if (action === 'cfg-model')     return !!selEndpoint
       if (action === 'cfg-profile')   return !!selProfile
       if (action === 'cfg-warehouse') return !!selWhId
@@ -2395,6 +2421,8 @@ export function SetupDrawer({
         setBrickItems(prev => prev.map(b => b.key === key ? { ...b, enabled } : b))
         setBricksDirty(prev => ({ ...prev, [key]: enabled }))
       }} kaEndpoint={selKaEndpoint} onKaSelect={(ep, name) => { setSelKaEndpoint(ep); setSelKaName(name) }} />
+    else if (action === 'cfg-saved-workspace')
+      body = <SavedWorkspaceList selected={selSavedWs} onSelect={setSelSavedWs} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-model')
       body = <EndpointList selected={selEndpoint} onSelect={setSelEndpoint} onConfirm={() => setTimeout(onContinue, 0)} />
     else if (action === 'cfg-profile')

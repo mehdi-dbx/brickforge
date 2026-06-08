@@ -112,8 +112,17 @@ try:
     if sp_id:
         try:
             from databricks.sdk.service.workspace import AclPermission
-            w.secrets.put_acl(scope="agent-forge", principal=sp_id, permission=AclPermission.READ)
-            print(f"  [+] Secret scope agent-forge -> READ granted to {sp_id}")
+            # Ensure brickforge scope exists (for token storage)
+            try:
+                w.secrets.create_scope(scope="brickforge")
+            except Exception:
+                pass  # already exists
+            for scope_name, perm in [("agent-forge", AclPermission.READ), ("brickforge", AclPermission.WRITE)]:
+                try:
+                    w.secrets.put_acl(scope=scope_name, principal=sp_id, permission=perm)
+                    print(f"  [+] Secret scope {scope_name} -> {perm.value} granted to {sp_id}")
+                except Exception as e:
+                    print(f"  [!] Secret scope {scope_name} grant failed: {e}", file=sys.stderr)
         except Exception as e:
             print(f"  [!] Failed to grant secret scope ACL: {e}", file=sys.stderr)
     else:

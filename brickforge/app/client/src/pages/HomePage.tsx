@@ -2,9 +2,22 @@ import { useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useTableRefresh } from '@/contexts/TableRefreshContext';
 import { useTableData, getRowKey } from '@/hooks/useTableData';
+import { useAppConfig } from '@/contexts/AppConfigContext';
 import { domainDashboardConfig } from '@/domain';
 
 const TIMESTAMP_COLUMNS = ['recorded_at', 'last_checked', 'departure_time', 'scheduled_date', 'event_timestamp'];
+
+// Color palette for auto-assigning dashboard table header colors
+const PALETTE = [
+  'bg-rose-100 dark:bg-rose-900/30',
+  'bg-sky-100 dark:bg-sky-900/30',
+  'bg-emerald-100 dark:bg-emerald-900/30',
+  'bg-violet-100 dark:bg-violet-900/30',
+  'bg-indigo-100 dark:bg-indigo-900/30',
+  'bg-amber-100 dark:bg-amber-900/30',
+  'bg-cyan-100 dark:bg-cyan-900/30',
+  'bg-fuchsia-100 dark:bg-fuchsia-900/30',
+];
 
 const TABLE_PASTELS: Record<string, string> = domainDashboardConfig
   ? Object.fromEntries(domainDashboardConfig.tables.map(t => [t.name, t.color]))
@@ -171,12 +184,24 @@ function TableCard({ title, tableName, compact, id }: { title: string; tableName
 }
 
 export default function HomePage() {
-  const tables = domainDashboardConfig?.tables ?? [];
+  const { dashboardTables, featureEnabled } = useAppConfig();
+  const domainTables = domainDashboardConfig?.tables ?? [];
+  const tables = domainTables.length > 0
+    ? domainTables
+    : dashboardTables.map((name, i) => ({ name, color: PALETTE[i % PALETTE.length] }));
+
+  if (!featureEnabled('dashboard') && domainTables.length === 0) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-4 py-3">
+        <p className="text-muted-foreground text-sm">Welcome to your agent. Start a conversation in the chat.</p>
+      </div>
+    );
+  }
 
   if (tables.length === 0) {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-4 py-3">
-        <p className="text-muted-foreground text-sm">No domain loaded. Dashboard tables will appear here once a domain stash is loaded.</p>
+        <p className="text-muted-foreground text-sm">Dashboard enabled but no tables selected. Select tables in the setup panel.</p>
       </div>
     );
   }

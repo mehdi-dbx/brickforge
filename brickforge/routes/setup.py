@@ -346,6 +346,79 @@ async def delete_instance(request: Request):
     return {"ok": True}
 
 
+# ── Saved Workspaces ─────────────────────────────────────────────────────────
+
+from brickforge import USER_DIR
+_WORKSPACES_FILE = USER_DIR / ".workspaces"
+
+
+def _read_workspaces() -> list[dict]:
+    if _WORKSPACES_FILE.exists():
+        try:
+            return json.loads(_WORKSPACES_FILE.read_text())
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return []
+
+
+def _write_workspaces(workspaces: list[dict]) -> None:
+    _WORKSPACES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _WORKSPACES_FILE.write_text(json.dumps(workspaces, indent=2) + "\n")
+
+
+@router.get("/api/workspaces")
+async def list_workspaces():
+    return {"workspaces": _read_workspaces()}
+
+
+@router.post("/api/workspaces")
+async def save_workspace_entry(request: Request):
+    """Save current workspace to .workspaces + token store."""
+    config = _get_config()
+    host = config.get("workspace.host") or ""
+    token = os.environ.get("DATABRICKS_TOKEN", "")
+    if not host:
+        return JSONResponse({"error": "no workspace connected"}, status_code=400)
+
+    # Save token to token store
+    from brickforge.lib.token_store import get_token_store
+    store = get_token_store()
+    if token:
+        store.set(host, token)
+
+    # Derive label from host
+    label = host.replace("https://", "").replace("http://", "").split(".")[0]
+
+    # Update .workspaces file
+    workspaces = _read_workspaces()
+    # Replace if host already saved
+    workspaces = [w for w in workspaces if w.get("host") != host]
+    workspaces.append({"host": host, "label": label, "last_used": time.strftime("%Y-%m-%d")})
+    _write_workspaces(workspaces)
+
+    return {"ok": True, "label": label}
+
+
+@router.delete("/api/workspaces")
+async def delete_workspace_entry(request: Request):
+    body = await request.json()
+    host = body.get("host", "")
+    if not host:
+        return JSONResponse({"error": "host required"}, status_code=400)
+
+    # Remove from token store
+    from brickforge.lib.token_store import get_token_store
+    store = get_token_store()
+    store.delete(host)
+
+    # Remove from .workspaces file
+    workspaces = _read_workspaces()
+    workspaces = [w for w in workspaces if w.get("host") != host]
+    _write_workspaces(workspaces)
+
+    return {"ok": True}
+
+
 # ── Exec Log ──────────────────────────────────────────────────────────────────
 
 @router.get("/api/setup/exec-log")
@@ -1062,6 +1135,10 @@ async def setup_exec(request: Request):
         if action == "save-workspace":
             ws_host = params.get("host", "")
             ws_token = params.get("token", "")
+            # Restore token from keyring if switching to a saved workspace
+            if params.get("from_keyring") and ws_host and not ws_token:
+                from brickforge.lib.token_store import get_token_store
+                ws_token = get_token_store().get(ws_host) or ""
             if not ws_host or not ws_token:
                 yield sse_line("[x] host and token required\n", "err")
                 logger.finish(False, 1)
@@ -1074,6 +1151,17 @@ async def setup_exec(request: Request):
                        "DATABRICKS_REFRESH_TOKEN", "DATABRICKS_TOKEN_ENDPOINT"]:
                 config.disable(k)
             config.set_many({"DATABRICKS_HOST": ws_host, "DATABRICKS_TOKEN": ws_token})
+            # Persist token + auto-save workspace
+            try:
+                from brickforge.lib.token_store import get_token_store
+                get_token_store().set(ws_host, ws_token)
+                label = ws_host.replace("https://", "").replace("http://", "").split(".")[0]
+                workspaces = _read_workspaces()
+                workspaces = [w for w in workspaces if w.get("host") != ws_host]
+                workspaces.append({"host": ws_host, "label": label, "last_used": time.strftime("%Y-%m-%d")})
+                _write_workspaces(workspaces)
+            except Exception:
+                pass
             for line in [f"[+] DATABRICKS_HOST = {ws_host}", f"[+] DATABRICKS_TOKEN = {ws_token[:8]}..."]:
                 yield sse_line(line + "\n")
                 logger.log(line)

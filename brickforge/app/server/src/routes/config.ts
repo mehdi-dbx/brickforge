@@ -39,5 +39,11 @@ configRouter.get('/', (_req: Request, res: Response) => {
     ? appName.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
     : 'Agent Forge';
 
-  res.json({ features, logoUrl, appTitle });
+  // Dashboard tables from PROJECT_TABLES env var (comma-separated)
+  const dashboardTables = (process.env.PROJECT_TABLES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  res.json({ features, logoUrl, appTitle, dashboardTables });
 });

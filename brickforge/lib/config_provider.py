@@ -665,10 +665,18 @@ class LocalConfigProvider(ConfigProvider):
                 return copy.deepcopy(DEFAULT_CONFIG)
         return copy.deepcopy(DEFAULT_CONFIG)
 
+    # Keys to strip from disk (secrets that should never be persisted as plaintext)
+    _STRIP_ON_SAVE = [("workspace", "token"), ("model", "token")]
+
     def _save(self) -> None:
-        """Write config.json to disk + mirror to active project file."""
+        """Write config.json to disk + mirror to active project file.
+        Strips secrets (tokens) from the written data -- they stay in _data (memory) only."""
         self._config_file.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(self._data, indent=2) + "\n"
+        data_copy = copy.deepcopy(self._data)
+        for section, key in self._STRIP_ON_SAVE:
+            if section in data_copy and key in data_copy[section]:
+                data_copy[section][key] = None
+        payload = json.dumps(data_copy, indent=2) + "\n"
         self._config_file.write_text(payload)
         if self._project_file and self._project_file.exists():
             self._project_file.write_text(payload)

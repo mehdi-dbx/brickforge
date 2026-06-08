@@ -48,3 +48,8 @@ brickforge/app/client/dist/
 tmp/
 .claude/worktrees/
 .claude/mlflow/
+.playwright-mcp/
+.tmp-deploy-*.json
+config.json
+projects/
+dist/

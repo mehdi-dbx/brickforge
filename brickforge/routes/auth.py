@@ -154,6 +154,25 @@ async def bridge_receive(request: Request):
 
         config.set_many(updates)  # triggers _sync_env() -- updates os.environ
 
+        # Persist token + auto-save workspace
+        if host and final_token:
+            try:
+                from brickforge.lib.token_store import get_token_store
+                get_token_store().set(host, final_token)
+                # Auto-save to .workspaces
+                import json as _json
+                from brickforge import USER_DIR
+                _ws_file = USER_DIR / ".workspaces"
+                _ws_list = _json.loads(_ws_file.read_text()) if _ws_file.exists() else []
+                _ws_list = [w for w in _ws_list if w.get("host") != host]
+                _label = host.replace("https://", "").replace("http://", "").split(".")[0]
+                _ws_list.append({"host": host, "label": _label, "last_used": time.strftime("%Y-%m-%d")})
+                _ws_file.parent.mkdir(parents=True, exist_ok=True)
+                _ws_file.write_text(_json.dumps(_ws_list, indent=2) + "\n")
+                print(f"[bridge] token + workspace saved for {host}")
+            except Exception as e:
+                print(f"[bridge] token store save failed: {e}")
+
         _bridge_state = {"status": "connected", "host": host, "user": user, "time": int(time.time() * 1000), "warning": cross_cloud_warning}
         print(f"[bridge] state -> connected (host={host}, user={user})")
         return {"ok": True, "warning": cross_cloud_warning or None}

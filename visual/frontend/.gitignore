@@ -1,0 +1,5 @@
+
+# Secrets / temp files
+.playwright-mcp/
+.tmp-deploy-*.json
+config.json

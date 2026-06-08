@@ -67,3 +67,15 @@ The workspace host block should remember previously connected workspaces and off
 - Show saved workspaces as selectable choices in the host drawer, alongside bridge auth and manual entry
 - One click to reconnect to a previously used workspace (token still needs to be valid or re-authenticated)
 - Allow removing saved workspaces from the list
+
+## 4. Import Validation
+
+Validate `.forge.zip` structure before importing. Reject invalid files with a clear error modal.
+
+### What it should do
+
+- On file pick, check the zip is valid and contains `config.json` at root
+- Check expected structure: `config.json`, optional `prompt/`, optional `gen/`
+- If invalid (not a zip, missing config.json, corrupt): show error modal with reason, cancel the import
+- If valid but incomplete (e.g. no prompt files, no SQL): import anyway but show a warning about missing content
+- Never silently fail or show a generic "import failed" -- always tell the user what's wrong

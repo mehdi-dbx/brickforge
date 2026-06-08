@@ -7,6 +7,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Workspace Connection',
     help: 'Connect to the Databricks workspace where your agent will run. Bridge-forge authenticates via browser and creates a 7-day PAT automatically. Or enter the workspace URL and token manually. The token is used for all API calls: provisioning resources, deploying the app, and running queries.',
     choices: [
+      { title: 'Pick From Saved Workspaces', desc: 'Connect To A Previously Used Workspace', action: 'cfg-saved-workspace' },
       { title: 'Connect Via Bridge-Forge', desc: 'Authenticate And Set Up Host + Token In One Step (Recommended)', action: 'forge-bridge' },
       { title: 'Enter Manually',     desc: 'Paste Workspace URL And Token',                  action: 'manual' },
     ],

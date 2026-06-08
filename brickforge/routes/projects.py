@@ -160,6 +160,14 @@ async def load_project(name: str):
         config._data = _merge_defaults(project_config, DEFAULT_CONFIG)
         config._save()
         config._sync_env()
+        # Restore token from token store for this project's workspace
+        host = config.get("workspace.host") or ""
+        if host:
+            from brickforge.lib.token_store import get_token_store
+            token = get_token_store().get(host)
+            if token:
+                os.environ["DATABRICKS_TOKEN"] = token
+                config._data.setdefault("workspace", {})["token"] = token
         # Set PROJECT_DIR for subprocess scripts
         artifact_dir = PROJECTS_DIR / name
         init_artifact_dirs(artifact_dir)

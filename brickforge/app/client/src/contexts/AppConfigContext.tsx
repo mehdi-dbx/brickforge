@@ -9,6 +9,7 @@ interface ConfigResponse {
   };
   logoUrl?: string | null;
   appTitle?: string;
+  dashboardTables?: string[];
 }
 
 interface AppConfigContextType {
@@ -22,6 +23,8 @@ interface AppConfigContextType {
   logoUrl: string | null;
   /** Human-friendly app title derived from DBX_APP_NAME. */
   appTitle: string;
+  /** Table names for the dashboard (from PROJECT_TABLES). */
+  dashboardTables: string[];
 }
 
 const AppConfigContext = createContext<AppConfigContextType | undefined>(
@@ -54,6 +57,7 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
     featureEnabled,
     logoUrl: data?.logoUrl ?? null,
     appTitle: data?.appTitle ?? 'Agent Forge',
+    dashboardTables: data?.dashboardTables ?? [],
   };
 
   return (

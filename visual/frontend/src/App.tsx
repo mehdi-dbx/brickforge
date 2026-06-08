@@ -484,7 +484,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-dbx-gray-500 dark:text-dbx-gray-400 hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800 hover:text-dbx-blue cursor-pointer"
                 >
                   <Upload className="h-3 w-3" />
-                  Import .forge.zip
+                  Import project
                   <input type="file" accept=".zip" className="hidden" ref={importInputRef}
                     onChange={e => {
                       const f = e.target.files?.[0];

@@ -1,0 +1,304 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e11]: BrickForge
+      - generic [ref=e12]: "|"
+      - img "Databricks" [ref=e13]
+      - button "projects" [ref=e15] [cursor=pointer]:
+        - img [ref=e16]
+        - text: projects
+      - generic [ref=e18]: "|"
+      - generic [ref=e19]:
+        - button "Setup" [ref=e20] [cursor=pointer]
+        - button "Data" [ref=e21] [cursor=pointer]
+        - button "Docs" [ref=e22] [cursor=pointer]
+        - button "Architecture" [ref=e23] [cursor=pointer]
+        - button "Stash" [ref=e24] [cursor=pointer]
+        - button "Cleanup" [ref=e25] [cursor=pointer]
+    - generic [ref=e26]:
+      - button "Switch to light mode" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button ".env" [ref=e34] [cursor=pointer]:
+        - img [ref=e35]
+        - text: .env
+  - generic [ref=e39]:
+    - generic [ref=e41]:
+      - generic:
+        - generic [ref=e43]:
+          - generic [ref=e44]: "2"
+          - generic [ref=e45]: /
+          - generic [ref=e46]: "17"
+        - generic [ref=e47]:
+          - button "Zoom in" [ref=e48] [cursor=pointer]:
+            - img [ref=e49]
+          - generic [ref=e52]: 94%
+          - button "Zoom out" [ref=e53] [cursor=pointer]:
+            - img [ref=e54]
+          - button "Fit to view" [ref=e58] [cursor=pointer]:
+            - img [ref=e59]
+      - generic [ref=e65]:
+        - button "Workspace not configured" [ref=e68] [cursor=pointer]:
+          - img [ref=e70]
+          - generic [ref=e73]:
+            - generic [ref=e74]: Workspace
+            - generic [ref=e75]: not configured
+        - button "SQL Warehouse not configured" [ref=e80]:
+          - img [ref=e82]
+          - generic [ref=e86]:
+            - generic [ref=e87]: SQL Warehouse
+            - generic [ref=e88]: not configured
+        - button "Unity Catalog not configured" [ref=e93]:
+          - img [ref=e95]
+          - generic [ref=e100]:
+            - generic [ref=e101]: Unity Catalog
+            - generic [ref=e102]: not configured
+        - button "Data Tables not configured" [ref=e107]:
+          - img [ref=e109]
+          - generic [ref=e111]:
+            - generic [ref=e112]: Data Tables
+            - generic [ref=e113]: not configured
+        - button "Functions not configured" [ref=e118]:
+          - img [ref=e120]
+          - generic [ref=e123]:
+            - generic [ref=e124]: Functions
+            - generic [ref=e125]: not configured
+        - button "Model not configured" [ref=e130]:
+          - img [ref=e132]
+          - generic [ref=e135]:
+            - generic [ref=e136]: Model
+            - generic [ref=e137]: not configured
+        - button "Agent Prompt test.prompt, main.prompt, knowledge.base, user.prompt" [ref=e142]:
+          - img [ref=e144]
+          - generic [ref=e146]:
+            - generic [ref=e147]: Agent Prompt
+            - generic [ref=e148]: test.prompt, main.prompt, knowledge.base, user.prompt
+        - button "Genie Space not configured" [ref=e153]:
+          - img [ref=e155]
+          - generic [ref=e158]:
+            - generic [ref=e159]: Genie Space
+            - generic [ref=e160]: not configured
+          - button "No Genie Space configured" [disabled] [ref=e161]:
+            - img [ref=e162]
+          - button "Add Genie Space" [ref=e164] [cursor=pointer]:
+            - img [ref=e165]
+        - generic [ref=e169]:
+          - button "Agent Bricks 0/4 enabled" [ref=e170]:
+            - img [ref=e172]
+            - generic [ref=e175]:
+              - generic [ref=e176]: Agent Bricks
+              - generic [ref=e177]: 0/4 enabled
+            - button "Enable all Agent Bricks" [ref=e178] [cursor=pointer]:
+              - img [ref=e179]
+            - button "Add Agent Bricks" [ref=e181] [cursor=pointer]:
+              - img [ref=e182]
+          - button "collapse" [ref=e183] [cursor=pointer]:
+            - img [ref=e184]
+            - text: collapse
+          - generic [ref=e188]:
+            - generic [ref=e189] [cursor=pointer]:
+              - generic [ref=e191]:
+                - generic [ref=e192]: knowledge assistant
+                - generic [ref=e193]: "false"
+              - button "Enable" [ref=e194]:
+                - img [ref=e195]
+              - button "Remove" [ref=e197]:
+                - img [ref=e198]
+            - generic [ref=e201] [cursor=pointer]:
+              - generic [ref=e203]:
+                - generic [ref=e204]: information extraction
+                - generic [ref=e205]: "false"
+              - button "Enable" [ref=e206]:
+                - img [ref=e207]
+              - button "Remove" [ref=e209]:
+                - img [ref=e210]
+            - generic [ref=e213] [cursor=pointer]:
+              - generic [ref=e215]:
+                - generic [ref=e216]: document parsing
+                - generic [ref=e217]: "false"
+              - button "Enable" [ref=e218]:
+                - img [ref=e219]
+              - button "Remove" [ref=e221]:
+                - img [ref=e222]
+            - generic [ref=e225] [cursor=pointer]:
+              - generic [ref=e227]:
+                - generic [ref=e228]: text classification
+                - generic [ref=e229]: "false"
+              - button "Enable" [ref=e230]:
+                - img [ref=e231]
+              - button "Remove" [ref=e233]:
+                - img [ref=e234]
+        - button "Vector Search not configured" [ref=e241]:
+          - img [ref=e243]
+          - generic [ref=e246]:
+            - generic [ref=e247]: Vector Search
+            - generic [ref=e248]: not configured
+          - button "No Vector Search configured" [disabled] [ref=e249]:
+            - img [ref=e250]
+          - button "Add Vector Search" [ref=e252] [cursor=pointer]:
+            - img [ref=e253]
+        - button "MCP (External) not configured" [ref=e258]:
+          - img [ref=e260]
+          - generic [ref=e262]:
+            - generic [ref=e263]: MCP (External)
+            - generic [ref=e264]: not configured
+          - button "No MCP (External) configured" [disabled] [ref=e265]:
+            - img [ref=e266]
+          - button "Add MCP (External)" [ref=e268] [cursor=pointer]:
+            - img [ref=e269]
+        - button "API (External) not configured" [ref=e274]:
+          - img [ref=e276]
+          - generic [ref=e278]:
+            - generic [ref=e279]: API (External)
+            - generic [ref=e280]: not configured
+          - button "No API (External) configured" [disabled] [ref=e281]:
+            - img [ref=e282]
+          - button "Add API (External)" [ref=e284] [cursor=pointer]:
+            - img [ref=e285]
+        - button "A2A (Agents) not configured" [ref=e290]:
+          - img [ref=e292]
+          - generic [ref=e295]:
+            - generic [ref=e296]: A2A (Agents)
+            - generic [ref=e297]: not configured
+          - button "No A2A (Agents) configured" [disabled] [ref=e298]:
+            - img [ref=e299]
+          - button "Add A2A (Agents)" [ref=e301] [cursor=pointer]:
+            - img [ref=e302]
+        - generic [ref=e306]:
+          - button "Features 1/5 enabled" [ref=e307]:
+            - img [ref=e309]
+            - generic [ref=e312]:
+              - generic [ref=e313]: Features
+              - generic [ref=e314]: 1/5 enabled
+            - button "Disable all Features" [ref=e315] [cursor=pointer]:
+              - img [ref=e316]
+            - button "Add Features" [ref=e318] [cursor=pointer]:
+              - img [ref=e319]
+          - button "collapse" [ref=e320] [cursor=pointer]:
+            - img [ref=e321]
+            - text: collapse
+          - generic [ref=e325]:
+            - generic [ref=e326] [cursor=pointer]:
+              - generic [ref=e328]:
+                - generic [ref=e329]: memory
+                - generic [ref=e330]: "false"
+              - button "Enable" [ref=e331]:
+                - img [ref=e332]
+              - button "Remove" [ref=e334]:
+                - img [ref=e335]
+            - generic [ref=e338] [cursor=pointer]:
+              - generic [ref=e340]:
+                - generic [ref=e341]: chart
+                - generic [ref=e342]: "true"
+              - button "Disable" [ref=e343]:
+                - img [ref=e344]
+              - button "Remove" [ref=e346]:
+                - img [ref=e347]
+            - generic [ref=e350] [cursor=pointer]:
+              - generic [ref=e352]:
+                - generic [ref=e353]: voice
+                - generic [ref=e354]: "false"
+              - button "Enable" [ref=e355]:
+                - img [ref=e356]
+              - button "Remove" [ref=e358]:
+                - img [ref=e359]
+            - generic [ref=e362] [cursor=pointer]:
+              - generic [ref=e364]:
+                - generic [ref=e365]: vision
+                - generic [ref=e366]: "false"
+              - button "Enable" [ref=e367]:
+                - img [ref=e368]
+              - button "Remove" [ref=e370]:
+                - img [ref=e371]
+            - generic [ref=e374] [cursor=pointer]:
+              - generic [ref=e376]:
+                - generic [ref=e377]: personas
+                - generic [ref=e378]: "false"
+              - button "Enable" [ref=e379]:
+                - img [ref=e380]
+              - button "Remove" [ref=e382]:
+                - img [ref=e383]
+        - button "MLflow Experiment not configured" [ref=e390]:
+          - img [ref=e392]
+          - generic [ref=e394]:
+            - generic [ref=e395]: MLflow Experiment
+            - generic [ref=e396]: not configured
+        - button "Deploy App not configured" [ref=e401]:
+          - img [ref=e403]
+          - generic [ref=e408]:
+            - generic [ref=e409]: Deploy App
+            - generic [ref=e410]: not configured
+        - button "Source Control not configured" [ref=e415]:
+          - img [ref=e417]
+          - generic [ref=e421]:
+            - generic [ref=e422]: Source Control
+            - generic [ref=e423]: not configured
+      - generic [ref=e424]:
+        - button "Workspace" [ref=e425] [cursor=pointer]
+        - button "SQL Warehouse" [ref=e426] [cursor=pointer]
+        - button "Unity Catalog" [ref=e427] [cursor=pointer]
+        - button "Data Tables" [ref=e428] [cursor=pointer]
+        - button "Functions" [ref=e429] [cursor=pointer]
+        - button "Model" [ref=e430] [cursor=pointer]
+        - button "Agent Prompt" [ref=e431] [cursor=pointer]
+        - button "Genie Space" [ref=e432] [cursor=pointer]
+        - button "Agent Bricks" [ref=e433] [cursor=pointer]
+        - button "Vector Search" [ref=e434] [cursor=pointer]
+        - button "MCP (External)" [ref=e435] [cursor=pointer]
+        - button "API (External)" [ref=e436] [cursor=pointer]
+        - button "A2A (Agents)" [ref=e437] [cursor=pointer]
+        - button "Features" [ref=e438] [cursor=pointer]
+        - button "MLflow Experiment" [ref=e439] [cursor=pointer]
+        - button "Deploy App" [ref=e440] [cursor=pointer]
+        - button "Source Control" [ref=e441] [cursor=pointer]
+    - generic [ref=e443]:
+      - generic [ref=e444]:
+        - generic [ref=e446]:
+          - generic "Not connected" [ref=e447]
+          - generic [ref=e448]: Workspace
+        - generic [ref=e449]: Workspace Connection
+        - generic [ref=e450]:
+          - generic [ref=e451]:
+            - button "enter workspace url" [ref=e452] [cursor=pointer]
+            - button "edit" [ref=e453] [cursor=pointer]:
+              - img [ref=e454]
+          - button "test ↗" [ref=e457] [cursor=pointer]
+      - generic [ref=e458]:
+        - generic [ref=e459]:
+          - generic [ref=e460]: choose
+          - generic [ref=e461]: ›
+        - generic [ref=e462]:
+          - generic [ref=e463]: configure
+          - generic [ref=e464]: ›
+        - generic [ref=e465]:
+          - generic [ref=e466]: execute
+          - generic [ref=e467]: ›
+        - generic [ref=e469]: done
+      - generic [ref=e470]:
+        - button "1 Connect Via Bridge-Forge Authenticate And Set Up Host + Token In One Step (Recommended)" [ref=e471] [cursor=pointer]:
+          - generic [ref=e472]: "1"
+          - generic [ref=e473]:
+            - generic [ref=e474]: Connect Via Bridge-Forge
+            - generic [ref=e475]: Authenticate And Set Up Host + Token In One Step (Recommended)
+        - button "2 Enter Manually Paste Workspace URL And Token" [ref=e476] [cursor=pointer]:
+          - generic [ref=e477]: "2"
+          - generic [ref=e478]:
+            - generic [ref=e479]: Enter Manually
+            - generic [ref=e480]: Paste Workspace URL And Token
+        - generic [ref=e481]:
+          - generic [ref=e482]: about this step
+          - generic [ref=e483]: "Connect to the Databricks workspace where your agent will run. Bridge-forge authenticates via browser and creates a 7-day PAT automatically. Or enter the workspace URL and token manually. The token is used for all API calls: provisioning resources, deploying the app, and running queries."
+      - button "continue →" [disabled] [ref=e485]
+  - generic [ref=e486]:
+    - generic [ref=e487]:
+      - generic [ref=e488]:
+        - img [ref=e489]
+        - generic [ref=e492]: config.json
+      - button [ref=e493] [cursor=pointer]:
+        - img [ref=e494]
+    - generic [ref=e497]:
+      - table:
+        - rowgroup
+    - button "Save" [disabled] [ref=e500]:
+      - img [ref=e501]
+      - text: Save

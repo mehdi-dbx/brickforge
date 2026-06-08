@@ -201,7 +201,7 @@ export function StashHealthView() {
   }, [])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full max-w-2xl">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-dbx-gray-200 dark:border-dbx-gray-800">
         <div>
@@ -209,6 +209,17 @@ export function StashHealthView() {
           <p className="text-[11px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">
             {total > 0 ? `${total} files in current project` : 'No assets in current project'}
           </p>
+          {!connected && total > 0 && (
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('switch-view', { detail: 'setup' }))
+                window.dispatchEvent(new CustomEvent('activate-step', { detail: 'host' }))
+              }}
+              className="text-[11px] font-mono text-dbx-red dark:text-[#FF6B5A] hover:underline mt-0.5"
+            >
+              connect workspace and set catalog/schema to build
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

@@ -54,6 +54,20 @@ async def lifespan(app: FastAPI):
             os.environ["PROJECT_DIR"] = str(artifact_dir)
             print(f"[project] active: {current}")
 
+    # Restore token from token store (keyring or secrets scope)
+    if not FORGE_MODE:
+        from brickforge.lib.token_store import get_token_store
+        _token_store = get_token_store()
+        _host = config.get("workspace.host") or ""
+        if _host:
+            _token = _token_store.get(_host)
+            if _token:
+                os.environ["DATABRICKS_TOKEN"] = _token
+                config._data.setdefault("workspace", {})["token"] = _token
+                print(f"[token] restored from {_token_store.__class__.__name__} for {_host}")
+            else:
+                print(f"[token] not found in {_token_store.__class__.__name__} for {_host}")
+
     mode = "FORGE (SaaS)" if FORGE_MODE else f"LOCAL ({CONFIG_FILE})"
     print(f"[config] mode: {mode}")
     print(f"[visual] http://localhost:{PORT}")

@@ -30830,10 +30830,12 @@ configRouter.get("/", (_req, res$2) => {
 	const logoUrl = process.env.PROJECT_LOGO_URL?.trim() || null;
 	const appName = process.env.DBX_APP_NAME?.trim() || "";
 	const appTitle = appName ? appName.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Agent Forge";
+	const dashboardTables = (process.env.PROJECT_TABLES || "").split(",").map((s$1) => s$1.trim()).filter(Boolean);
 	res$2.json({
 		features,
 		logoUrl,
-		appTitle
+		appTitle,
+		dashboardTables
 	});
 });
 
