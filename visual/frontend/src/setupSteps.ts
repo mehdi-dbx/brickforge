@@ -160,19 +160,16 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'DBX App Name / Deploy',
     help: 'Deploy the agent app to Databricks. Bundles code + config.json, uploads, deploys, then automatically runs all UC grants (tables, functions, warehouse, endpoints, genie, lakebase) for the app service principal.',
     choices: [
-      { title: 'Set App Name',   desc: 'Configure DBX_APP_NAME Before Deploying',                                       action: 'cfg-deploy-name' },
-      { title: 'Deploy Now',     desc: 'Bundle Agent + Chat UI, Upload To Workspace, Deploy As Databricks App',         action: 'exec-deploy-agent' },
+      { title: 'Deploy',         desc: 'Bundle Agent + Chat UI, Upload To Workspace, Deploy As Databricks App',         action: 'exec-deploy-agent' },
     ],
   },
   {
     id: 'git',
     label: 'Source Control',
-    title: 'Push To Git',
-    help: 'Push your agent project to a GitHub or GitLab repository. Uses Databricks-stored git credentials -- no PAT entry needed. The Setup App creates a Databricks Git Folder linked to your repo, writes the project files, and commits+pushes automatically.',
+    title: 'Push To GitHub',
+    help: 'Push your agent project to a GitHub repository. Connect your GitHub account via OAuth, then create a private repo and push the agent bundle in one click. No PAT entry needed -- BrickForge handles auth via GitHub Device Flow.',
     choices: [
-      { title: 'Push To GitHub',  desc: 'Push Project To A GitHub Repo (Uses Databricks Git Credentials)',  action: 'cfg-git' },
-      { title: 'Push To GitLab',  desc: 'Push Project To A GitLab Repo',                                    action: 'cfg-git' },
-      { title: 'Skip',            desc: 'No Source Control For Now',                                         action: 'done' },
+      { title: 'Push To GitHub',  desc: 'Connect GitHub, Create Repo, Push Agent Code',  action: 'github-push' },
     ],
   },
 ]

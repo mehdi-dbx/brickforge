@@ -43,3 +43,4 @@ def init_artifact_dirs(artifact_dir: Path) -> None:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / "prompt").mkdir(exist_ok=True)
     (artifact_dir / "gen").mkdir(exist_ok=True)
+    (artifact_dir / "conf").mkdir(exist_ok=True)

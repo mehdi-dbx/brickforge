@@ -20,6 +20,7 @@ Rules:
 - main_prompt: 80-200 lines, highly structured with bold headers and clear sections
 - Include a response style section (concise, factual, bullet points, no emojis, use Unicode symbols)
 - Include tool usage rules referencing the table names if provided
+- If tables are provided, include a DATA ACCESS section explaining the agent queries data through a Genie tool (natural language to SQL). List each table with its columns and describe what data it contains. The agent does NOT write SQL directly — it asks the Genie tool in natural language.
 - Include a {{{{KNOWLEDGE_BASE}}}} placeholder for knowledge base injection
 - knowledge_base: 4-8 practical operational FAQ entries with ## headers
 - user_prompt: one realistic first message, 5-15 words
@@ -36,11 +37,12 @@ def generate_prompts(domain: str, table_schemas: list[dict] | None = None) -> di
 
     user_msg = f"Domain: {domain}"
     if table_schemas:
-        table_desc = "\n".join(
-            f"  - {t['name']}: columns = {', '.join(c['name'] for c in t.get('columns', []))}"
-            for t in table_schemas
-        )
-        user_msg += f"\n\nExisting tables:\n{table_desc}"
+        table_lines = []
+        for t in table_schemas:
+            cols = t.get('columns', [])
+            col_desc = ", ".join(f"{c['name']} ({c.get('type', 'STRING')})" for c in cols)
+            table_lines.append(f"  - {t['name']}: {col_desc}")
+        user_msg += f"\n\nTables accessible via Genie tool (natural language to SQL):\n" + "\n".join(table_lines)
 
     print(f"[~] Calling model endpoint...")
     result = call_llm_json(SYSTEM_PROMPT, user_msg, max_tokens=8192)

@@ -68,6 +68,11 @@ export function SetupView() {
       setSelectedChoice(null)
       setPhase('done')
       refreshStatus()
+      // Fetch last exec log for this block
+      fetch(`/api/setup/exec-log?step=${id}`)
+        .then(r => r.json())
+        .then(data => { if (data.lines?.length) setExecLines(data.lines.map((l: string) => ({ text: l, stream: 'out' }))) })
+        .catch(() => {})
       return
     }
     // Single-choice blocks: skip choose phase, go straight to configure

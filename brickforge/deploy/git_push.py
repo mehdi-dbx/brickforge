@@ -188,9 +188,14 @@ def git_push(config: dict, repo_url: str) -> dict:
         print("    Go to Settings > Developer > Git integration to connect GitHub.")
         return {"ok": False, "error": "no_git_credentials"}
 
-    # Build bundle
+    # Build bundle (strip tokens -- never commit secrets to git)
+    import copy
+    clean_config = copy.deepcopy(config)
+    for section in ("workspace", "model"):
+        if section in clean_config:
+            clean_config[section].pop("token", None)
     print("[~] Building agent bundle...")
-    bundle = build_agent_bundle(config)
+    bundle = build_agent_bundle(clean_config)
     print(f"[+] Bundle: {len(bundle)/1024/1024:.1f} MB")
 
     # Create Git Folder

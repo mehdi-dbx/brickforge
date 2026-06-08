@@ -1636,6 +1636,239 @@ function GenieInstanceName({ inst }: { inst: { key: string; value: string; enabl
   )
 }
 
+// ─── GitHub panel ───────────────────────────────────────────────────────────
+
+function GitHubPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const [ghStatus, setGhStatus] = useState<'loading' | 'disconnected' | 'connecting' | 'connected'>('loading')
+  const [username, setUsername] = useState('')
+  const [deviceCode, setDeviceCode] = useState<{ user_code: string; verification_uri: string; device_code: string; interval: number } | null>(null)
+  const [repoName, setRepoName] = useState('')
+  const [pushing, setPushing] = useState(false)
+  const [pushLines, setPushLines] = useState<string[]>([])
+  const [pushDone, setPushDone] = useState<boolean | null>(null)
+  const [repoUrl, setRepoUrl] = useState('')
+  const [copied, setCopied] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Check GitHub status on mount
+  useEffect(() => {
+    fetch('/api/github/status').then(r => r.json()).then(d => {
+      if (d.connected) {
+        setGhStatus('connected')
+        setUsername(d.username || '')
+      } else {
+        setGhStatus('disconnected')
+      }
+    }).catch(() => setGhStatus('disconnected'))
+  }, [])
+
+  // Poll for device flow completion
+  useEffect(() => {
+    if (ghStatus !== 'connecting' || !deviceCode) return
+    pollRef.current = setInterval(() => {
+      fetch('/api/github/poll').then(r => r.json()).then(d => {
+        if (d.status === 'connected') {
+          setGhStatus('connected')
+          setUsername(d.username || '')
+          if (pollRef.current) clearInterval(pollRef.current)
+        }
+      }).catch(() => {})
+    }, (deviceCode.interval || 5) * 1000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [ghStatus, deviceCode])
+
+  // Scroll push terminal
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [pushLines])
+
+  // Start device flow
+  const startConnect = useCallback(async () => {
+    setGhStatus('connecting')
+    try {
+      const resp = await fetch('/api/github/connect', { method: 'POST' })
+      const data = await resp.json()
+      setDeviceCode(data)
+    } catch {
+      setGhStatus('disconnected')
+    }
+  }, [])
+
+  // Push to GitHub (SSE)
+  const startPush = useCallback(async () => {
+    if (!repoName.trim()) return
+    setPushing(true)
+    setPushLines([])
+    setPushDone(null)
+    try {
+      const resp = await fetch('/api/github/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: repoName.trim(), private: true }),
+      })
+      const reader = resp.body?.getReader()
+      if (!reader) { setPushing(false); return }
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const chunks = buf.split('\n\n')
+        buf = chunks.pop() ?? ''
+        for (const chunk of chunks) {
+          let evtType = 'message', evtData = ''
+          for (const line of chunk.split('\n')) {
+            if (line.startsWith('event:')) evtType = line.slice(6).trim()
+            if (line.startsWith('data:'))  evtData = line.slice(5).trim()
+          }
+          if (!evtData) continue
+          try {
+            const parsed = JSON.parse(evtData)
+            if (evtType === 'line') {
+              const text = parsed.text ?? ''
+              if (text.trim()) {
+                setPushLines(prev => [...prev, text])
+                // Capture repo URL from output
+                const urlMatch = text.match(/https:\/\/github\.com\/\S+/)
+                if (urlMatch) setRepoUrl(urlMatch[0])
+              }
+            } else if (evtType === 'done') {
+              setPushDone(parsed.ok)
+              setPushing(false)
+              if (parsed.ok) setTimeout(onDone, 2000)
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      setPushDone(false)
+      setPushing(false)
+    }
+  }, [repoName, onDone])
+
+  return (
+    <div className="flex flex-col h-full animate-fade-in">
+      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
+        {/* Status indicator */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className={`w-2 h-2 rounded-full ${ghStatus === 'connected' ? 'bg-dbx-green shadow-[0_0_6px_rgba(0,169,114,0.5)]' : 'bg-dbx-gray-300 dark:bg-dbx-gray-600'}`} />
+          <span className="text-[13px] font-mono text-dbx-gray-500 dark:text-dbx-gray-400">
+            {ghStatus === 'loading' ? 'checking...' : ghStatus === 'connected' ? `connected as ${username}` : 'not connected'}
+          </span>
+        </div>
+
+        {/* Not connected: show Connect button */}
+        {ghStatus === 'disconnected' && (
+          <button
+            onClick={startConnect}
+            className="w-full text-[13px] py-2.5 rounded-lg font-mono font-medium bg-dbx-gray-800 dark:bg-white text-white dark:text-dbx-gray-900 hover:bg-dbx-gray-700 dark:hover:bg-dbx-gray-100 transition-colors"
+          >
+            connect GitHub
+          </button>
+        )}
+
+        {/* Connecting: show device code */}
+        {ghStatus === 'connecting' && deviceCode && (
+          <div className="space-y-3">
+            <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 font-mono leading-relaxed">
+              Open GitHub and enter this code:
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <code className="text-[24px] font-mono font-bold tracking-[0.3em] text-dbx-gray-800 dark:text-dbx-gray-100 bg-dbx-gray-50 dark:bg-dbx-gray-800 px-4 py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700">
+                {deviceCode.user_code}
+              </code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(deviceCode.user_code); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                className="text-[11px] font-mono text-dbx-gray-400 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300"
+              >
+                {copied ? 'copied' : 'copy'}
+              </button>
+            </div>
+            <button
+              onClick={() => window.open(deviceCode.verification_uri || 'https://github.com/login/device', '_blank')}
+              className="w-full text-center text-[13px] py-2.5 rounded-lg font-mono font-medium border border-dbx-gray-200 dark:border-dbx-gray-700 text-dbx-blue dark:text-dbx-green hover:bg-dbx-gray-50 dark:hover:bg-dbx-gray-800 transition-colors"
+            >
+              open github.com/login/device <ExternalLink className="inline w-3 h-3 ml-1 -mt-0.5" />
+            </button>
+            <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono text-center animate-pulse">
+              waiting for authorization...
+            </div>
+          </div>
+        )}
+
+        {/* Connected: show repo name + push */}
+        {ghStatus === 'connected' && !pushing && pushDone === null && (
+          <div className="space-y-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest font-mono font-medium text-dbx-gray-400 dark:text-dbx-gray-500 mb-1.5">repository name</div>
+              <input
+                value={repoName}
+                onChange={e => setRepoName(e.target.value)}
+                placeholder="my-agent-app"
+                className="w-full text-[13px] font-mono px-3 py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-200 outline-none focus:border-dbx-blue dark:focus:border-dbx-green"
+              />
+              <div className="text-[11px] text-dbx-gray-400 dark:text-dbx-gray-500 font-mono mt-1.5">
+                private repo under github.com/{username}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pushing: terminal */}
+        {(pushing || pushDone !== null) && (
+          <div className="space-y-2">
+            <div ref={scrollRef} className="bg-dbx-gray-900 dark:bg-black rounded-lg p-3 font-mono text-[12px] max-h-[300px] overflow-y-auto border border-dbx-gray-200 dark:border-dbx-gray-800">
+              {pushLines.map((line, i) => (
+                <div key={i} className={`leading-relaxed ${line.startsWith('[+]') ? 'text-dbx-green' : line.startsWith('[x]') ? 'text-dbx-error' : 'text-dbx-gray-300'}`}>
+                  {line}
+                </div>
+              ))}
+              {pushing && <div className="text-dbx-gray-500 animate-pulse">...</div>}
+            </div>
+            {pushDone === true && repoUrl && (
+              <a href={repoUrl} target="_blank" rel="noopener noreferrer"
+                className="block text-[12px] font-mono text-dbx-blue dark:text-dbx-green hover:underline truncate">
+                {repoUrl} <ExternalLink className="inline w-3 h-3 ml-0.5 -mt-0.5" />
+              </a>
+            )}
+            {pushDone === false && (
+              <button onClick={() => { setPushDone(null); setPushLines([]) }}
+                className="text-[12px] font-mono text-dbx-gray-400 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300">
+                try again
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800 flex flex-col gap-1.5">
+        {ghStatus === 'connected' && !pushing && pushDone === null && (
+          <button
+            onClick={startPush}
+            disabled={!repoName.trim()}
+            className={`w-full text-[14px] py-2.5 rounded-lg font-mono font-medium transition-all duration-200 ${
+              repoName.trim()
+                ? 'bg-dbx-red text-white hover:bg-dbx-red-dk shadow-dbx-md hover:shadow-dbx-glow active:scale-[0.98]'
+                : 'bg-dbx-gray-100 dark:bg-dbx-gray-800 text-dbx-gray-300 dark:text-dbx-gray-600 cursor-not-allowed'
+            }`}
+          >
+            create & push
+          </button>
+        )}
+        <button
+          onClick={onBack}
+          className="w-full text-[13px] py-2 rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-800 text-dbx-gray-400 dark:text-dbx-gray-500 hover:text-dbx-gray-600 dark:hover:text-dbx-gray-300 hover:border-dbx-gray-300 dark:hover:border-dbx-gray-700 font-mono transition-all duration-150"
+        >
+          back
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Bridge auth panel ──────────────────────────────────────────────────────
 
 function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
@@ -2259,6 +2492,12 @@ export function SetupDrawer({
     }
     // Deploy: cfg-deploy-name saves app name to config.json
     if (action === 'cfg-deploy-name' && manualVal) { action = 'save-deploy-name'; Object.assign(params, { name: manualVal.trim() }) }
+    // Deploy: exec-deploy-agent -- save name first if changed, then exec fires on next continue
+    if (action === 'exec-deploy-agent' && manualVal.trim()) {
+      const name = manualVal.trim()
+      fetch('/api/setup/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save-deploy-name', params: { name } }) })
+        .catch(() => {})
+    }
     // API: cfg-api-uc or cfg-api-direct saves API config to config.json
     if (action === 'cfg-api-uc' && mcpSlug && manualVal) {
       const slug = mcpSlug.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
@@ -2488,6 +2727,7 @@ export function SetupDrawer({
       if (action === 'cfg-genie')     return !!selGenieId
       if (action === 'cfg-mlflow')    return !!selMlflowId
       if (action === 'exec-genie')    return !!genieName
+      if (action === 'exec-deploy-agent') return !!(manualVal.trim() || currentValues.DBX_APP_NAME)
       if (action === 'cfg-new')         return !!manualVal.trim()
       if (action === 'cfg-deploy-name') return !!manualVal.trim()
       if (action === 'exec-assets')     return validSchema
@@ -2741,6 +2981,8 @@ export function SetupDrawer({
       body = (<><Label>workspace url</Label><Input value={manualVal} onChange={setManualVal} placeholder="https://....cloud.databricks.com" /><div className="mt-3"><Label>profile name (optional)</Label><Input value={genieName} onChange={setGenieName} placeholder="my-workspace" /></div><InfoBox>Will run `databricks auth login` automatically and open the browser for OAuth.</InfoBox></>)
     else if (action === 'cfg-deploy-name')
       body = (<><Label>app name</Label><Input value={manualVal} onChange={setManualVal} placeholder="my-agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">sets DBX_APP_NAME in config.json -- used as the Databricks App name for deployment</div></>)
+    else if (action === 'exec-deploy-agent')
+      body = (<><Label>app name</Label><Input value={manualVal || currentValues.DBX_APP_NAME || ''} onChange={setManualVal} placeholder="agent-app" /><div className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500 mt-2 font-mono">Databricks App will be created or updated with this name</div></>)
     else if (action === 'cfg-prompt')
       return (
         <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
@@ -2757,6 +2999,8 @@ export function SetupDrawer({
       body = <KaDocsPicker onReady={setKaDocsReady} />
     else if (action === 'cfg-grants')
       body = <InfoBox>Run the grant script to apply UC table, routine, and warehouse permissions to the app service principal.</InfoBox>
+    else if (action === 'github-push')
+      return <GitHubPanel onDone={() => { onRefresh(); wrappedExecDone(true) }} onBack={onBack} />
     else if (action === 'forge-bridge')
       return <BridgeAuthPanel onDone={() => { onRefresh(); wrappedExecDone(true) }} onBack={onBack} />
     else

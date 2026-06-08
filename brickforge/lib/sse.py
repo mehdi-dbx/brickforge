@@ -29,22 +29,40 @@ def sse_result(data: dict) -> str:
 
 
 class ExecLogger:
-    """Logs exec output to file."""
+    """Logs exec output to session log + per-action log file."""
 
     def __init__(self, action: str):
         self.log_file = LOG_FILE
         self._lines: list[str] = []
-        self._lines.append(f"\n=== EXEC {action} {time.strftime('%Y-%m-%dT%H:%M:%S')}Z ===\n")
+        header = f"\n=== EXEC {action} {time.strftime('%Y-%m-%dT%H:%M:%S')}Z ===\n"
+        self._lines.append(header)
+        # Per-action log file
+        self._action_log_dir = PROJECT_ROOT / "logs" / "exec"
+        self._action_log_dir.mkdir(parents=True, exist_ok=True)
+        self._action_file = open(self._action_log_dir / f"{action}-latest.log", "w", encoding="utf-8")
+        self._action_file.write(header)
 
     def log(self, text: str) -> None:
-        self._lines.append(text if text.endswith("\n") else text + "\n")
+        line = text if text.endswith("\n") else text + "\n"
+        self._lines.append(line)
+        if self._action_file and not self._action_file.closed:
+            self._action_file.write(line)
+            self._action_file.flush()
 
     def finish(self, ok: bool, code: int = 0) -> None:
-        self._lines.append(f"=== {'OK' if ok else 'FAILED'} (exit {code}) ===\n")
-        content = "".join(self._lines)
-        # Append to single session log file
+        footer = f"=== {'OK' if ok else 'FAILED'} (exit {code}) ===\n"
+        self._lines.append(footer)
+        # Session log
         with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(content)
+            f.write("".join(self._lines))
+        # Per-action log
+        if self._action_file and not self._action_file.closed:
+            self._action_file.write(footer)
+            self._action_file.close()
+
+    def __del__(self):
+        if hasattr(self, '_action_file') and self._action_file and not self._action_file.closed:
+            self._action_file.close()
 
 
 async def stream_subprocess(
@@ -52,6 +70,7 @@ async def stream_subprocess(
     env: dict[str, str] | None = None,
     cwd: str | Path | None = None,
     timeout: float = 300,
+    logger: ExecLogger | None = None,
     detect_result: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Stream subprocess stdout/stderr as SSE events.
@@ -93,6 +112,8 @@ async def stream_subprocess(
         text = line.decode("utf-8", errors="replace")
         if "VIRTUAL_ENV" in text and "does not match" in text:
             continue
+        if logger:
+            logger.log(text)
         if detect_result and text.startswith("__RESULT__:"):
             try:
                 result_data = json.loads(text[len("__RESULT__:"):])

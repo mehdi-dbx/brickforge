@@ -165,9 +165,10 @@ async def setup_status():
                 status = "configured" if schema_spec and "." in schema_spec else "missing"
                 values["PROJECT_UNITY_CATALOG_SCHEMA"] = schema_spec
 
-            # Prompt: file-based
+            # Prompt: file-based (project-scoped)
             if step == "prompt":
-                prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
+                from brickforge.lib.project_paths import prompt_dir as _prompt_dir
+                prompt_dir = _prompt_dir()
                 main_file = prompt_dir / "main.prompt"
                 has_content = main_file.exists() and main_file.stat().st_size > 0
                 status = "configured" if has_content else "missing"
@@ -419,13 +420,139 @@ async def delete_workspace_entry(request: Request):
     return {"ok": True}
 
 
+# ── GitHub Integration ──────────────────────────────────────────────────────
+
+_github_device: dict | None = None
+
+
+@router.get("/api/github/status")
+async def github_status():
+    """Check if GitHub is connected (token in keyring)."""
+    from brickforge.lib.token_store import get_token_store
+    store = get_token_store()
+    token = store.get("github.com")
+    if token:
+        try:
+            from brickforge.lib.github_client import get_user
+            username = get_user(token)
+            return {"connected": True, "username": username}
+        except Exception:
+            return {"connected": False}
+    return {"connected": False}
+
+
+@router.post("/api/github/connect")
+async def github_connect():
+    """Start GitHub device flow."""
+    global _github_device
+    from brickforge.lib.github_client import start_device_flow
+    _github_device = start_device_flow()
+    return {
+        "user_code": _github_device["user_code"],
+        "verification_uri": _github_device["verification_uri"],
+        "device_code": _github_device["device_code"],
+        "interval": _github_device.get("interval", 5),
+    }
+
+
+@router.get("/api/github/poll")
+async def github_poll():
+    """Poll for device flow completion."""
+    global _github_device
+    if not _github_device:
+        return {"status": "no_flow"}
+    from brickforge.lib.github_client import poll_device_flow, get_user
+    import asyncio
+    token = await asyncio.to_thread(
+        poll_device_flow, _github_device["device_code"],
+        _github_device.get("interval", 5), timeout=10,
+    )
+    if token:
+        from brickforge.lib.token_store import get_token_store
+        get_token_store().set("github.com", token)
+        username = get_user(token)
+        _github_device = None
+        return {"status": "connected", "username": username}
+    return {"status": "pending"}
+
+
+@router.post("/api/github/push")
+async def github_push(request: Request):
+    """Create repo + push code. SSE streaming."""
+    body = await request.json()
+    repo_name = body.get("name", "").strip()
+    private = body.get("private", True)
+    if not repo_name:
+        return JSONResponse({"error": "repo name required"}, status_code=400)
+
+    from brickforge.lib.token_store import get_token_store
+    token = get_token_store().get("github.com")
+    if not token:
+        return JSONResponse({"error": "GitHub not connected"}, status_code=401)
+
+    config = _get_config()
+
+    async def generate():
+        from brickforge.lib.sse import sse_line, sse_done
+        from brickforge.lib.github_client import create_repo, push_bundle, get_user
+        from brickforge.deploy.deploy_agent_app import build_agent_bundle
+        import copy
+
+        try:
+            username = get_user(token)
+            yield sse_line(f"[~] Connected as {username}\n")
+
+            yield sse_line(f"[~] Creating repo {repo_name}...\n")
+            clone_url = create_repo(token, repo_name, private)
+            yield sse_line(f"[+] Repo: {clone_url}\n")
+
+            yield sse_line("[~] Building agent bundle...\n")
+            clean_config = copy.deepcopy(config.data)
+            for section in ("workspace", "model"):
+                if section in clean_config:
+                    clean_config[section].pop("token", None)
+            bundle = build_agent_bundle(clean_config)
+            yield sse_line(f"[+] Bundle: {len(bundle)//1024}KB\n")
+
+            yield sse_line("[~] Pushing to GitHub...\n")
+            ok = push_bundle(token, clone_url, bundle)
+            if ok:
+                yield sse_line(f"[+] https://github.com/{username}/{repo_name}\n")
+                yield sse_done(True)
+            else:
+                yield sse_done(False, 1)
+        except Exception as e:
+            yield sse_line(f"[x] {e}\n")
+            yield sse_done(False, 1)
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
 # ── Exec Log ──────────────────────────────────────────────────────────────────
 
+STEP_ACTIONS: dict[str, list[str]] = {
+    "deploy": ["exec-deploy-agent"],
+    "tables": ["exec-tables", "exec-tables-uploaded"],
+    "functions": ["exec-functions"],
+    "genie": ["exec-genie"],
+    "mlflow": ["exec-mlflow"],
+    "lakebase": ["exec-lakebase"],
+    "grants": ["exec-grants"],
+    "build": ["exec-build"],
+}
+
+
 @router.get("/api/setup/exec-log")
-async def exec_log(action: str = ""):
-    if not action:
-        return JSONResponse({"error": "action param required"}, status_code=400)
+async def exec_log(action: str = "", step: str = ""):
     log_dir = PROJECT_ROOT / "logs" / "exec"
+    if step and not action:
+        for a in STEP_ACTIONS.get(step, []):
+            if (log_dir / f"{a}-latest.log").exists():
+                action = a
+                break
+    if not action:
+        return JSONResponse({"error": "action or step param required"}, status_code=400)
     latest = log_dir / f"{action}-latest.log"
     try:
         content = latest.read_text()
@@ -1185,7 +1312,7 @@ async def setup_exec(request: Request):
                 config.set_many({key: value})
                 catalog, schema = value.split(".", 1)
                 cmd = [PYTHON,"-c", _save_schema_script(catalog, schema)]
-                async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+                async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                     yield event
                 logger.finish(True)
                 return
@@ -1307,7 +1434,7 @@ async def setup_exec(request: Request):
                 return
             config.set_many({"PROJECT_UNITY_CATALOG_SCHEMA": f"{catalog}.{schema}"})
             cmd = [PYTHON,"-c", _save_schema_script(catalog, schema)]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1441,7 +1568,7 @@ if not host.startswith('http'): host = 'https://' + host
 print('[+] DATABRICKS_HOST = ' + host)
 print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
 """.strip()]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1450,7 +1577,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
 
         if action == "exec-pat":
             cmd = [PYTHON,"-c", _pat_script()]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1459,7 +1586,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             genie_name = params.get("name", "Project Data")
             sub_env["GENIE_ROOM_NAME"] = genie_name
             cmd = [PYTHON,"data/init/create_genie_space.py"]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
             # Reload config (subprocess wrote genie space ID to config.json)
             _token_before = config._data.get("workspace", {}).get("token")
@@ -1477,7 +1604,7 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
                 config.set_many({"PROJECT_UNITY_CATALOG_SCHEMA": schema_spec})
                 sub_env["PROJECT_UNITY_CATALOG_SCHEMA"] = schema_spec
             cmd = [PYTHON,"data/init/create_all_assets.py"]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1517,7 +1644,7 @@ if r.returncode != 0:
 print('[+] Deploy complete', flush=True)
 """
             cmd = [PYTHON, "-c", deploy_and_grant_script.strip()]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1534,7 +1661,7 @@ print('[+] Deploy complete', flush=True)
                 json.dump(config_dict, f, indent=2)
                 tmp_path = f.name
             cmd = [PYTHON,"deploy/git_push.py", "--repo-url", repo_url, "--config", tmp_path]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
             try:
                 os.unlink(tmp_path)
@@ -1551,7 +1678,7 @@ print('[+] Deploy complete', flush=True)
                 yield sse_done(False, 1)
                 return
             cmd = [PYTHON,"-c", _auth_login_script(host_val, params.get("profile", ""))]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1564,7 +1691,7 @@ print('[+] Deploy complete', flush=True)
                 yield sse_done(False, 1)
                 return
             cmd = [PYTHON,"-c", _model_profile_script(profile)]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                 yield event
             logger.finish(True)
             return
@@ -1593,31 +1720,31 @@ print('[+] Deploy complete', flush=True)
             # Step 1: Schema
             yield sse_line("\n[~] Schema - creating catalog and schema...\n")
             cmd = [PYTHON, "data/init/create_catalog_schema.py"]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
 
             # Step 2: Tables
             yield sse_line("\n[~] Tables - provisioning tables...\n")
             cmd = [PYTHON, "-c", _tables_script()]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
 
             # Step 2b: CSV data
             yield sse_line("\n[~] Tables - loading CSV data...\n")
             cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "py" / "csv_to_delta.py")]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
 
             # Step 3: Functions
             yield sse_line("\n[~] Functions - creating UC functions...\n")
             cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_all_functions.py")]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
 
             # Step 4: Procedures
             yield sse_line("\n[~] Procedures - creating UC procedures...\n")
             cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_all_procedures.py")]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                 yield event
 
             # Step 5: Genie
@@ -1627,7 +1754,7 @@ print('[+] Deploy complete', flush=True)
                 sub_env["GENIE_ROOM_NAME"] = genie_name
                 yield sse_line("\n[~] Genie - creating space...\n")
                 cmd = [PYTHON, "data/init/create_genie_space.py"]
-                async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                     yield event
             else:
                 yield sse_line("\n[+] Genie - already configured, skipping\n")
@@ -1637,7 +1764,7 @@ print('[+] Deploy complete', flush=True)
             if not mlflow_id:
                 yield sse_line("\n[~] MLflow - creating experiment...\n")
                 cmd = [PYTHON, str(PACKAGE_ROOT / "data" / "init" / "create_mlflow_experiment.py")]
-                async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
+                async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT, logger=logger):
                     yield event
             else:
                 yield sse_line("\n[+] MLflow - already configured, skipping\n")
@@ -1668,7 +1795,7 @@ print('[+] Deploy complete', flush=True)
 
         if action in cmd_map:
             cmd = cmd_map[action]
-            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT):
+            async for event in stream_subprocess(cmd, env=sub_env, cwd=PROJECT_ROOT, logger=logger):
                 yield event
             # Reload config if subprocess may have written back (genie ID, mlflow ID, lakebase)
             if action in ("exec-mlflow", "exec-lakebase"):
@@ -1697,7 +1824,8 @@ print('[+] Deploy complete', flush=True)
 
 @router.get("/api/setup/prompts")
 async def list_prompts():
-    prompt_dir = PACKAGE_ROOT / "conf" / "prompt"
+    from brickforge.lib.project_paths import prompt_dir as _prompt_dir
+    prompt_dir = _prompt_dir()
     try:
         files = []
         for f in sorted(prompt_dir.iterdir()):

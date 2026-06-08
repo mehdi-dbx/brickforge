@@ -21,3 +21,23 @@ OK create_reservation.sql
 Running: /opt/homebrew/opt/python@3.14/bin/python3.14 data/py/run_sql.py /Users/mehdi.lamrani/code/code/agent-forge/projects/space-hotel-2/gen/proc/register_new_guest.sql
 OK register_new_guest.sql
 === create_all_procedures completed ===
+=== create_all_procedures started 2026-06-08T13:04:54.833939 ===
+
+═══ create_reservation.sql (1/2) ═══
+Running: /opt/homebrew/opt/python@3.14/bin/python3.14 data/py/run_sql.py /Users/mehdi.lamrani/code/code/agent-forge/projects/space-hotel-2/gen/proc/create_reservation.sql
+OK create_reservation.sql
+
+═══ register_new_guest.sql (2/2) ═══
+Running: /opt/homebrew/opt/python@3.14/bin/python3.14 data/py/run_sql.py /Users/mehdi.lamrani/code/code/agent-forge/projects/space-hotel-2/gen/proc/register_new_guest.sql
+OK register_new_guest.sql
+=== create_all_procedures completed ===
+=== create_all_procedures started 2026-06-08T13:12:38.705787 ===
+
+═══ create_reservation.sql (1/2) ═══
+Running: /opt/homebrew/opt/python@3.14/bin/python3.14 data/py/run_sql.py /Users/mehdi.lamrani/code/code/agent-forge/projects/space-hotel-2/gen/proc/create_reservation.sql
+OK create_reservation.sql
+
+═══ register_new_guest.sql (2/2) ═══
+Running: /opt/homebrew/opt/python@3.14/bin/python3.14 data/py/run_sql.py /Users/mehdi.lamrani/code/code/agent-forge/projects/space-hotel-2/gen/proc/register_new_guest.sql
+OK register_new_guest.sql
+=== create_all_procedures completed ===

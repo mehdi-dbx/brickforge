@@ -16,6 +16,7 @@ import argparse
 import base64
 import io
 import json
+import os
 import tarfile
 import zipfile
 from pathlib import Path
@@ -164,9 +165,13 @@ def generate_databricks_yml(config: dict) -> str:
 
 def _make_tarball(dir_path: Path, arcname: str) -> bytes:
     """Create a tar.gz of a directory, returning the bytes."""
+    def _filter_xattr(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+        # Strip macOS extended attributes that cause warnings on Linux
+        info.pax_headers = {k: v for k, v in (info.pax_headers or {}).items() if not k.startswith("LIBARCHIVE.")}
+        return info
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-        tf.add(str(dir_path), arcname=arcname)
+        tf.add(str(dir_path), arcname=arcname, filter=_filter_xattr)
     return buf.getvalue()
 
 
@@ -234,6 +239,26 @@ def build_agent_bundle(config: dict) -> bytes:
                     deps = tomllib.load(pf).get("project", {}).get("dependencies", [])
                 zf.writestr("requirements.txt", "\n".join(deps) + "\n")
                 print(f"  [!] requirements.txt (unpinned -- slow install)")
+
+        # Overlay project-scoped artifacts (prompts, gen data, conf)
+        project_dir = os.environ.get("PROJECT_DIR", "").strip()
+        if project_dir:
+            pd = Path(project_dir)
+            overlay_map = [
+                (pd / "prompt", "conf/prompt"),
+                (pd / "gen", "data/gen"),
+                (pd / "conf", "conf"),
+            ]
+            for src_dir, bundle_prefix in overlay_map:
+                if not src_dir.exists():
+                    continue
+                for file_path in src_dir.rglob("*"):
+                    if file_path.is_dir() or file_path.name.startswith("."):
+                        continue
+                    rel = file_path.relative_to(src_dir)
+                    arc_name = f"{bundle_prefix}/{rel}"
+                    zf.writestr(arc_name, file_path.read_bytes())
+            print(f"  [+] Project artifacts overlaid from {pd.name}/")
 
         # Ship config.json as a file (agent reads it at boot)
         zf.writestr("config.json", json.dumps(config, indent=2) + "\n")
@@ -304,13 +329,19 @@ for tgz in app/client/dist.tar.gz app/server/dist.tar.gz; do
     fi
 done
 echo "[2/4] done"
-echo "[3/4] Installing Python deps (clean venv)..."
-python -m venv .venv --clear
-. .venv/bin/activate
-if [ -f requirements.txt ]; then
-    pip install -r requirements.txt 2>&1
+if [ ! -d .venv ]; then
+    echo "[3/4] Installing Python deps (first deploy)..."
+    python -m venv .venv
+    . .venv/bin/activate
+    if [ -f requirements.txt ]; then
+        pip install -r requirements.txt 2>&1
+    fi
 else
-    echo "[3/4] no requirements.txt found, skipping"
+    echo "[3/4] Reusing existing venv..."
+    . .venv/bin/activate
+    if [ -f requirements.txt ]; then
+        pip install -q --upgrade -r requirements.txt 2>&1
+    fi
 fi
 echo "[3/4] done"
 echo "[4/4] starting agent..."

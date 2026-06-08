@@ -149,6 +149,14 @@ export function StashHealthView() {
 
   useEffect(() => { load() }, [load])
 
+  // Fetch last build log on mount
+  useEffect(() => {
+    fetch('/api/setup/exec-log?action=exec-build')
+      .then(r => r.json())
+      .then(data => { if (data.lines?.length) setBuildLines(data.lines) })
+      .catch(() => {})
+  }, [])
+
   // Scroll terminal to bottom
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
