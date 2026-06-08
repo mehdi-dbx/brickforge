@@ -58,13 +58,13 @@ export function SetupView() {
     return () => window.removeEventListener('exec-line', handler)
   }, [])
 
-  const handleActivate = useCallback((id: StepId) => {
+  const handleActivate = useCallback((id: StepId, forceAdd?: boolean) => {
     setActiveStep(id)
     setExecLines([])
     setSelectedInstanceKey(null)
-    // If block is already done (configured), go straight to done phase
+    // If block is already done (configured), go straight to done phase -- unless adding new instance
     const currentStatus = stepStates[id]?.status
-    if (currentStatus === 'done') {
+    if (currentStatus === 'done' && !forceAdd) {
       setSelectedChoice(null)
       setPhase('done')
       refreshStatus()

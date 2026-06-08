@@ -620,7 +620,7 @@ async def brand_search(name: str = ""):
     if not name:
         return JSONResponse({"error": "name required"}, status_code=400)
     config = _get_config()
-    api_key = os.environ.get("BRANDFETCH_API_KEY", "").strip() or (config.get("BRANDFETCH_API_KEY") or "")
+    api_key = os.environ.get("BRANDFETCH_API_KEY", "").strip() or (config.get("branding.brandfetch_api_key") or "")
     if not api_key:
         return JSONResponse({"error": "BRANDFETCH_API_KEY not configured — paste a logo URL directly instead"}, status_code=503)
     try:
@@ -1319,8 +1319,8 @@ async def setup_exec(request: Request):
                 logger.finish(False, 1)
                 yield sse_done(False, 1)
                 return
-            existing = config.get("PROJECT_GENIE_SPACES") or ""
-            existing_ids = set(existing.split(",")) if existing else set()
+            existing_arr = config.get("tools.genie_spaces") or []
+            existing_ids = set(existing_arr) if isinstance(existing_arr, list) else set()
             existing_ids.discard("")
             existing_ids.add(genie_id)
             new_value = ",".join(sorted(existing_ids))
@@ -1462,7 +1462,10 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
             # Reload config (subprocess wrote genie space ID to config.json)
+            _token_before = config._data.get("workspace", {}).get("token")
             config._data = config._load()
+            if _token_before:
+                config._data.setdefault("workspace", {})["token"] = _token_before
             config._save()  # syncs to project mirror
             config._sync_env()
             logger.finish(True)
@@ -1484,52 +1487,38 @@ print('[+] DATABRICKS_CONFIG_PROFILE = {profile}')
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", dir=str(PROJECT_ROOT), prefix=".tmp-deploy-", delete=False) as f:
                 json.dump(config_dict, f, indent=2)
                 tmp_path = f.name
-            # Step 1: Deploy
-            cmd = [PYTHON, "deploy/deploy_agent_app.py", "--config", tmp_path]
-            deploy_ok = True
+            # Single subprocess: deploy + grants
+            app_name = config.get("app.name") or "brickforge-agent"
+            schema = config.get("workspace.unity_catalog_schema") or ""
+            deploy_and_grant_script = f"""
+import subprocess, sys, os
+ROOT = os.environ.get('BRICKFORGE_ROOT', '.')
+PY = sys.executable
+
+# Step 1: Deploy
+print('[~] Deploying agent app...', flush=True)
+r = subprocess.run([PY, 'deploy/deploy_agent_app.py', '--config', '{tmp_path}'], cwd=ROOT)
+if r.returncode != 0:
+    print('[x] Deploy failed', flush=True)
+    sys.exit(1)
+
+# Cleanup temp config
+try:
+    os.unlink('{tmp_path}')
+except OSError:
+    pass
+
+# Step 2: Grants
+print('\\n[~] Running grants for app service principal...', flush=True)
+r = subprocess.run([PY, 'deploy/grant/run_all_grants.py', '{app_name}'], cwd=ROOT)
+if r.returncode != 0:
+    print('[x] Grants failed (non-blocking)', flush=True)
+
+print('[+] Deploy complete', flush=True)
+"""
+            cmd = [PYTHON, "-c", deploy_and_grant_script.strip()]
             async for event in stream_subprocess(cmd, env=sub_env, cwd=PACKAGE_ROOT):
                 yield event
-                # Check if deploy failed
-                if isinstance(event, str) and '"ok": false' in event:
-                    deploy_ok = False
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            # Step 2: Run grants (only if deploy succeeded)
-            if deploy_ok:
-                yield sse_line("\n[~] Running grants for app service principal...\n")
-                app_name = config.get("app.name") or "brickforge-agent"
-                grant_cmd = [PYTHON, str(PACKAGE_ROOT / "deploy" / "grant" / "run_all_grants.py"), app_name]
-                async for event in stream_subprocess(grant_cmd, env=sub_env, cwd=PACKAGE_ROOT):
-                    yield event
-                # Step 3: Wait for app to be live (poll app logs for server ready signal)
-                yield sse_line("\n[~] Waiting for app to start serving...\n")
-                log_script = f"""
-import time, subprocess, sys
-for attempt in range(10):
-    try:
-        r = subprocess.run(
-            ['databricks', 'apps', 'logs', '{app_name}'],
-            capture_output=True, text=True, timeout=15
-        )
-        if 'Backend server is running' in (r.stdout or ''):
-            print('[+] App is live')
-            sys.exit(0)
-        if 'ERROR' in (r.stderr or '').upper() or 'CRASHED' in (r.stdout or '').upper():
-            print('[x] App failed -- check logs: databricks apps logs {app_name}')
-            sys.exit(0)
-    except Exception:
-        pass
-    elapsed = (attempt + 1) * 30
-    print(f'[~] App starting... ({{elapsed}}s)')
-    sys.stdout.flush()
-    time.sleep(30)
-print('[~] App deployed but not yet serving -- check logs: databricks apps logs {app_name}')
-"""
-                log_cmd = [PYTHON, "-c", log_script.strip()]
-                async for event in stream_subprocess(log_cmd, env=sub_env, cwd=PACKAGE_ROOT):
-                    yield event
             logger.finish(True)
             return
 
@@ -1632,9 +1621,9 @@ print('[~] App deployed but not yet serving -- check logs: databricks apps logs 
                 yield event
 
             # Step 5: Genie
-            genie_ids = (config.get("PROJECT_GENIE_SPACES") or "").strip()
+            genie_ids = config.get("tools.genie_spaces") or []
             if not genie_ids:
-                genie_name = config.get("GENIE_ROOM_NAME") or config.get("workspace.unity_catalog_schema") or "Project Data"
+                genie_name = config.get("genie_room.name") or config.get("workspace.unity_catalog_schema") or "Project Data"
                 sub_env["GENIE_ROOM_NAME"] = genie_name
                 yield sse_line("\n[~] Genie - creating space...\n")
                 cmd = [PYTHON, "data/init/create_genie_space.py"]
@@ -1654,7 +1643,10 @@ print('[~] App deployed but not yet serving -- check logs: databricks apps logs 
                 yield sse_line("\n[+] MLflow - already configured, skipping\n")
 
             # Reload config (subprocesses may have written genie ID, mlflow ID)
+            _token_before = config._data.get("workspace", {}).get("token")
             config._data = config._load()
+            if _token_before:
+                config._data.setdefault("workspace", {})["token"] = _token_before
             config._save()
             config._sync_env()
 
@@ -1680,7 +1672,10 @@ print('[~] App deployed but not yet serving -- check logs: databricks apps logs 
                 yield event
             # Reload config if subprocess may have written back (genie ID, mlflow ID, lakebase)
             if action in ("exec-mlflow", "exec-lakebase"):
+                _token_before = config._data.get("workspace", {}).get("token")
                 config._data = config._load()
+                if _token_before:
+                    config._data.setdefault("workspace", {})["token"] = _token_before
                 config._save()
                 config._sync_env()
             logger.finish(True)

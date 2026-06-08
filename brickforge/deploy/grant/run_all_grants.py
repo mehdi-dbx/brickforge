@@ -81,15 +81,9 @@ STEPS = [
 def run_step(label: str, cmd: list[str]) -> bool:
     print(f"[~] {label}...")
     sys.stdout.flush()
-    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-    if r.stdout:
-        for line in r.stdout.strip().splitlines():
-            print(f"  {line}")
+    r = subprocess.run(cmd, cwd=ROOT)
     if r.returncode != 0:
         print(f"  [x] {label.split('.', 1)[1].strip()} failed (non-blocking)")
-        if r.stderr:
-            for line in r.stderr.strip().splitlines()[:3]:
-                print(f"  {line}")
         sys.stdout.flush()
         return False
     print(f"  [+] done")

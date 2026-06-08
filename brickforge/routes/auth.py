@@ -236,3 +236,124 @@ async def bridge_script(request: Request, nonce: str = ""):
 @router.get("/api/setup/cloud")
 async def setup_cloud():
     return {"cloud": _get_app_cloud()}
+
+
+# ── Bridge Mode + Inline Auth ─────────────────────────────────────────────────
+
+@router.get("/api/auth/bridge-mode")
+async def bridge_mode():
+    is_local = not os.environ.get("DATABRICKS_APP_PORT")
+    return {"mode": "local" if is_local else "deployed"}
+
+
+@router.post("/api/auth/bridge-inline")
+async def bridge_inline(request: Request):
+    """Inline OAuth flow for local mode. SSE streaming."""
+    from brickforge.lib.bridge_oauth import (
+        verify_token, discover_oauth, setup_pkce, build_auth_url,
+        open_browser, wait_for_callback, exchange_token, get_user_name,
+        create_pat, store_token, _flow_running,
+    )
+    from brickforge.lib.sse import sse_line, sse_done
+    import brickforge.lib.bridge_oauth as _oauth_mod
+
+    body = await request.json()
+    ws_host = body.get("host", "").strip().rstrip("/")
+    if not ws_host:
+        return JSONResponse({"error": "host required"}, status_code=400)
+    if not ws_host.startswith("http"):
+        ws_host = "https://" + ws_host
+
+    if _oauth_mod._flow_running:
+        return JSONResponse({"error": "OAuth flow already in progress"}, status_code=409)
+
+    config = _get_config()
+
+    async def generate():
+        _oauth_mod._flow_running = True
+        try:
+            # Step 0: Check keyring
+            from brickforge.lib.token_store import get_token_store
+            store = get_token_store()
+            existing = store.get(ws_host)
+            if existing:
+                yield sse_line("[~] Found saved token, verifying...\n")
+                if verify_token(ws_host, existing):
+                    store_token(ws_host, existing, config)
+                    user = get_user_name(ws_host, existing)
+                    yield sse_line(f"[+] Reconnected to {ws_host} as {user}\n")
+                    yield sse_done(True)
+                    return
+                else:
+                    yield sse_line("[~] Saved token expired, starting OAuth...\n")
+
+            # Step 1: Discovery
+            yield sse_line(f"[~] Discovering OAuth endpoints for {ws_host}...\n")
+            try:
+                auth_endpoint, token_endpoint = discover_oauth(ws_host)
+                yield sse_line("[+] OAuth endpoints found\n")
+            except Exception as e:
+                yield sse_line(f"[x] OAuth discovery failed: {e}\n")
+                yield sse_done(False, 1)
+                return
+
+            # Step 2: PKCE + local server
+            yield sse_line("[~] Preparing authentication...\n")
+            verifier, challenge, state, port = setup_pkce()
+            auth_url = build_auth_url(auth_endpoint, challenge, state, port)
+
+            # Step 3: Open browser
+            yield sse_line("[~] Opening browser for SSO authentication...\n")
+            open_browser(auth_url)
+
+            # Step 4: Wait for callback
+            yield sse_line("[~] Waiting for SSO authentication...\n")
+            try:
+                code = await wait_for_callback(port, state, timeout=120)
+                yield sse_line("[+] Authentication successful\n")
+            except TimeoutError:
+                yield sse_line("[x] Timed out waiting for authentication (120s)\n")
+                yield sse_done(False, 1)
+                return
+            except Exception as e:
+                yield sse_line(f"[x] Callback error: {e}\n")
+                yield sse_done(False, 1)
+                return
+
+            # Step 5: Exchange token
+            yield sse_line("[~] Exchanging auth code for token...\n")
+            try:
+                access_token, refresh_token = exchange_token(token_endpoint, code, verifier, port)
+                yield sse_line(f"[+] Token acquired ({len(access_token)} chars)\n")
+            except Exception as e:
+                yield sse_line(f"[x] Token exchange failed: {e}\n")
+                yield sse_done(False, 1)
+                return
+
+            # Step 6: User info
+            user = get_user_name(ws_host, access_token)
+            yield sse_line(f"[+] Authenticated as {user}\n")
+
+            # Step 7: Create PAT
+            yield sse_line("[~] Creating 7-day PAT...\n")
+            pat = create_pat(ws_host, access_token)
+            final_token = pat or access_token
+            if pat:
+                yield sse_line(f"[+] PAT created ({pat[:12]}...)\n")
+            else:
+                yield sse_line("[~] PAT creation failed, using access token\n")
+
+            # Step 8: Store
+            yield sse_line("[~] Saving credentials...\n")
+            store_token(ws_host, final_token, config)
+            yield sse_line(f"[+] Connected to {ws_host}\n")
+            yield sse_done(True)
+
+        except Exception as e:
+            yield sse_line(f"[x] {e}\n")
+            yield sse_done(False, 1)
+        finally:
+            _oauth_mod._flow_running = False
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(generate(), media_type="text/event-stream")

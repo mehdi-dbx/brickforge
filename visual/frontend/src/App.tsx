@@ -280,10 +280,18 @@ export default function App() {
     return () => window.removeEventListener('switch-view', handler)
   }, [switchView])
 
-  // Bridge auth: detect #bridge/NONCE_ID/ENCRYPTED/HOST/USER in URL fragment
+  // Bridge auth: detect #bridge/... or #bridge-success in URL fragment
   const [bridgeResult, setBridgeResult] = useState<{ ok: boolean; message: string } | null>(null)
   useEffect(() => {
     const hash = window.location.hash
+
+    // Inline bridge auth success (no token in URL -- already captured in-process)
+    if (hash === '#bridge-success') {
+      window.history.replaceState(null, '', window.location.pathname)
+      setBridgeResult({ ok: true, message: 'Authentication successful' })
+      return
+    }
+
     if (!hash.startsWith('#bridge/')) return
 
     // Parse fragment: #bridge/NONCE_ID/ENCRYPTED/HOST/USER
@@ -507,9 +515,9 @@ export default function App() {
             {([
               ['setup', 'Setup'],
               ['data', 'Data'],
+              ['stash', 'Assets'],
               ['ka', 'Docs'],
               ['arch', 'Architecture'],
-              ['stash', 'Assets'],
               ['cleanup', 'Cleanup'],
             ] as [View, string][]).map(([v, label]) => (
               <button

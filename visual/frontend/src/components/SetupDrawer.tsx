@@ -1639,68 +1639,128 @@ function GenieInstanceName({ inst }: { inst: { key: string; value: string; enabl
 // ─── Bridge auth panel ──────────────────────────────────────────────────────
 
 function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const [mode, setMode] = useState<'loading' | 'local' | 'deployed'>('loading')
   const [nonce, setNonce] = useState<{ nonce_id: string; nonce: string; ws_default?: string } | null>(null)
-  const [status, setStatus] = useState<'loading' | 'waiting' | 'connected' | 'error'>('loading')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'waiting' | 'connecting' | 'connected' | 'error'>('idle')
   const [connInfo, setConnInfo] = useState<{ host: string; user: string; warning?: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [wsHost, setWsHost] = useState('')
+  const [inlineLines, setInlineLines] = useState<string[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const fetchNonce = useCallback(() => {
-    setStatus('loading')
-    fetch('/api/auth/bridge-nonce')
-      .then(r => r.json())
-      .then((data: { nonce_id: string; nonce: string; ws_default?: string }) => {
-        setNonce(data)
-        setCopied(false)
-        setStatus('waiting')
-      })
-      .catch(() => setStatus('error'))
+  // Detect mode on mount
+  useEffect(() => {
+    fetch('/api/auth/bridge-mode').then(r => r.json()).then(d => {
+      setMode(d.mode === 'local' ? 'local' : 'deployed')
+      if (d.mode !== 'local') {
+        // Deployed: fetch nonce for curl command
+        fetch('/api/auth/bridge-nonce').then(r => r.json()).then(n => {
+          setNonce(n)
+          if (n.ws_default) setWsHost(n.ws_default)
+          setStatus('waiting')
+        }).catch(() => setStatus('error'))
+      } else {
+        // Local: pre-fill host from config
+        fetch('/api/auth/bridge-nonce').then(r => r.json()).then(n => {
+          if (n.ws_default) setWsHost(n.ws_default)
+          setStatus('idle')
+        }).catch(() => setStatus('idle'))
+      }
+    }).catch(() => setMode('deployed'))
   }, [])
 
-  // Fetch nonce on mount
-  useEffect(() => { fetchNonce() }, [fetchNonce])
-
-  // Poll for connection
+  // Poll for deployed mode connection
   useEffect(() => {
-    if (status !== 'waiting') return
+    if (mode !== 'deployed' || status !== 'waiting') return
     pollRef.current = setInterval(() => {
-      fetch('/api/auth/bridge-status')
-        .then(r => r.json())
-        .then((data: { status: string; host?: string; user?: string; warning?: string }) => {
-          if (data.status === 'connected') {
-            setStatus('connected')
-            setConnInfo({ host: data.host || '', user: data.user || '', warning: data.warning || '' })
-            if (pollRef.current) clearInterval(pollRef.current)
-            setTimeout(onDone, 1500)
-          }
-        })
-        .catch(() => {})
+      fetch('/api/auth/bridge-status').then(r => r.json()).then(data => {
+        if (data.status === 'connected') {
+          setStatus('connected')
+          setConnInfo({ host: data.host || '', user: data.user || '', warning: data.warning || '' })
+          if (pollRef.current) clearInterval(pollRef.current)
+          setTimeout(onDone, 1500)
+        }
+      }).catch(() => {})
     }, 2000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [status, onDone])
+  }, [mode, status, onDone])
+
+  // Scroll inline terminal
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [inlineLines])
+
+  // Inline connect (local mode)
+  const startInlineConnect = useCallback(async () => {
+    if (!wsHost.trim()) return
+    setStatus('connecting')
+    setInlineLines([])
+    try {
+      const resp = await fetch('/api/auth/bridge-inline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: wsHost.trim() }),
+      })
+      const reader = resp.body?.getReader()
+      if (!reader) return
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const chunks = buf.split('\n\n')
+        buf = chunks.pop() ?? ''
+        for (const chunk of chunks) {
+          let evtType = 'message', evtData = ''
+          for (const line of chunk.split('\n')) {
+            if (line.startsWith('event:')) evtType = line.slice(6).trim()
+            if (line.startsWith('data:'))  evtData = line.slice(5).trim()
+          }
+          if (!evtData) continue
+          try {
+            const parsed = JSON.parse(evtData)
+            if (evtType === 'line') {
+              const text = parsed.text ?? ''
+              if (text.trim()) setInlineLines(prev => [...prev, text])
+            } else if (evtType === 'done') {
+              if (parsed.ok) {
+                setStatus('connected')
+                setTimeout(onDone, 1500)
+              } else {
+                setStatus('error')
+              }
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      setStatus('error')
+      setInlineLines(prev => [...prev, '[x] Connection failed\n'])
+    }
+  }, [wsHost, onDone])
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
   const command = nonce ? `curl -sL "${appUrl}/api/auth/bridge-script?nonce=${nonce.nonce_id}" | bash` : ''
 
-  const copyCommand = () => {
-    navigator.clipboard.writeText(command).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+  function colorize(text: string): string {
+    return text
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .replace(/\[x\]/g, '<span class="text-red-400">[x]</span>')
+      .replace(/\[\+\]/g, '<span class="text-emerald-400">[+]</span>')
+      .replace(/\[~\]/g, '<span class="text-amber-400">[~]</span>')
   }
 
   return (
     <>
       <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 animate-fade-in">
-        {status === 'loading' && (
-          <div className="text-sm text-dbx-gray-400 animate-pulse">Generating secure session...</div>
+        {mode === 'loading' && (
+          <div className="text-sm text-dbx-gray-400 animate-pulse">Detecting environment...</div>
         )}
 
-        {status === 'error' && (
-          <div className="text-sm text-dbx-red">Failed to initialize bridge session. Try again.</div>
-        )}
-
-        {(status === 'waiting' || status === 'connected') && nonce && (
+        {/* ── LOCAL MODE ── */}
+        {mode === 'local' && (
           <>
             <div className="text-[13px] font-semibold text-dbx-gray-700 dark:text-dbx-gray-200 mb-2">
               Connect to workspace
@@ -1711,72 +1771,108 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
               <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">Your browser will open for SSO authentication.</div>
             </div>
 
-            {typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (
-              <>
-                {/* Local mode: curl | bash */}
-                <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
-                  Run this in your terminal:
-                </div>
-                <div className="relative group">
-                  <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50">
-                    {command}
-                  </pre>
-                  <button
-                    onClick={copyCommand}
-                    className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
-                  >
-                    {copied ? 'copied' : 'copy'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Deployed mode: curl from GitHub */}
-                <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
-                  Run this in your terminal:
-                </div>
-                <div className="relative group">
-                  <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50 whitespace-pre-wrap break-all">
-                    {`bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`}
-                  </pre>
-                  <button
-                    onClick={() => {
-                      const cmd = `bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`
-                      navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000)
-                    }}
-                    className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
-                  >
-                    {copied ? 'copied' : 'copy'}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Refresh hint */}
-            <div className="mt-2 flex items-center gap-1.5">
-              <button onClick={fetchNonce} className="text-[11px] text-dbx-blue dark:text-dbx-green hover:underline font-mono">
-                regenerate
-              </button>
-              <span className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-600">
-                - if you see "session expired" in terminal
-              </span>
+            <div className="mb-3">
+              <label className="text-[11px] font-mono text-dbx-gray-400 dark:text-dbx-gray-500 block mb-1">workspace url</label>
+              <input
+                type="text"
+                value={wsHost}
+                onChange={e => setWsHost(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && startInlineConnect()}
+                placeholder="https://my-workspace.cloud.databricks.com"
+                disabled={status === 'connecting'}
+                className="w-full px-3 py-2 text-[12px] font-mono rounded-lg border border-dbx-gray-200 dark:border-dbx-gray-700 bg-white dark:bg-dbx-gray-900 text-dbx-gray-800 dark:text-dbx-gray-100 outline-none focus:border-dbx-red disabled:opacity-50"
+              />
             </div>
 
+            <button
+              onClick={startInlineConnect}
+              disabled={!wsHost.trim() || status === 'connecting'}
+              className="w-full py-2 text-[13px] font-mono font-medium rounded-lg bg-dbx-red text-white hover:bg-dbx-red/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors mb-3"
+            >
+              {status === 'connecting' ? 'Connecting...' : 'Connect'}
+            </button>
+
+            {/* Terminal output */}
+            {inlineLines.length > 0 && (
+              <div ref={scrollRef} className="bg-dbx-gray-950 rounded-lg p-3 font-mono text-[11px] text-dbx-gray-300 overflow-y-auto max-h-[200px] mb-3">
+                {inlineLines.map((line, i) => (
+                  <div key={i} dangerouslySetInnerHTML={{ __html: colorize(line) }} />
+                ))}
+                {status === 'connecting' && (
+                  <div className="text-dbx-amber animate-pulse mt-1">...</div>
+                )}
+              </div>
+            )}
+
             {/* Status */}
+            {status === 'connected' && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-dbx-green" />
+                <span className="text-[12px] text-dbx-green font-medium">Connected</span>
+              </div>
+            )}
+            {status === 'error' && (
+              <button onClick={() => { setStatus('idle'); setInlineLines([]) }}
+                className="text-[11px] font-mono text-dbx-blue hover:underline">retry</button>
+            )}
+
+            {/* Fallback link */}
+            <div className="mt-3 text-[10px] text-dbx-gray-400">
+              <button onClick={() => setMode('deployed')} className="hover:underline">use terminal command instead</button>
+            </div>
+          </>
+        )}
+
+        {/* ── DEPLOYED MODE ── */}
+        {mode === 'deployed' && (status === 'waiting' || status === 'connected') && nonce && (
+          <>
+            <div className="text-[13px] font-semibold text-dbx-gray-700 dark:text-dbx-gray-200 mb-2">
+              Connect to workspace
+            </div>
+
+            <div className="rounded-lg border border-dbx-amber/30 bg-dbx-amber/5 dark:bg-dbx-amber/10 px-3 py-2 mb-3">
+              <div className="text-[11px] text-dbx-amber font-medium">A 7-day PAT will be created on the target workspace</div>
+              <div className="text-[10px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">Your browser will open for SSO authentication.</div>
+            </div>
+
+            <div className="text-[12px] text-dbx-gray-500 dark:text-dbx-gray-400 mb-1.5">
+              Run this in your terminal:
+            </div>
+            <div className="relative group">
+              <pre className="bg-dbx-gray-950 text-[11px] text-dbx-gray-300 p-3 rounded-lg overflow-x-auto font-mono leading-relaxed border border-dbx-gray-800/50 whitespace-pre-wrap break-all">
+                {window.location.hostname === 'localhost' ? command :
+                  `bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`}
+              </pre>
+              <button
+                onClick={() => {
+                  const cmd = window.location.hostname === 'localhost' ? command :
+                    `bash <(curl -sL https://raw.githubusercontent.com/mehdi-dbx/brickforge/forge-saas-databricks/scripts/connect.sh) "${appUrl}" "${nonce.nonce}" "${nonce.nonce_id}" "${nonce.ws_default || ''}"`
+                  navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000)
+                }}
+                className="absolute top-1.5 right-1.5 text-[10px] px-2 py-0.5 rounded bg-dbx-gray-800 text-dbx-gray-400 hover:text-white transition-colors"
+              >
+                {copied ? 'copied' : 'copy'}
+              </button>
+            </div>
+
+            <div className="mt-2 flex items-center gap-1.5">
+              <button onClick={() => {
+                fetch('/api/auth/bridge-nonce').then(r => r.json()).then(n => { setNonce(n); setCopied(false) })
+              }} className="text-[11px] text-dbx-blue dark:text-dbx-green hover:underline font-mono">regenerate</button>
+              <span className="text-[10px] text-dbx-gray-400 dark:text-dbx-gray-600">- if you see "session expired" in terminal</span>
+            </div>
+
             <div className="mt-3 flex items-center gap-2">
               {status === 'waiting' ? (
                 <>
                   <span className="inline-block w-2 h-2 rounded-full bg-dbx-amber animate-pulse" />
-                  <span className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500">
-                    Waiting for connection...
-                  </span>
+                  <span className="text-[12px] text-dbx-gray-400 dark:text-dbx-gray-500">Waiting for connection...</span>
                 </>
               ) : (
                 <>
                   <span className="inline-block w-2 h-2 rounded-full bg-dbx-green" />
                   <span className="text-[12px] text-dbx-green font-medium">
-                    Connected to {connInfo?.host}
-                    {connInfo?.user ? ` as ${connInfo.user}` : ''}
+                    Connected to {connInfo?.host}{connInfo?.user ? ` as ${connInfo.user}` : ''}
                   </span>
                 </>
               )}
@@ -1789,6 +1885,10 @@ function BridgeAuthPanel({ onDone, onBack }: { onDone: () => void; onBack: () =>
               </div>
             )}
           </>
+        )}
+
+        {status === 'error' && mode === 'deployed' && (
+          <div className="text-sm text-dbx-red">Failed to initialize bridge session. Try again.</div>
         )}
       </div>
       <div className="px-4 py-3 border-t border-dbx-gray-100 dark:border-dbx-gray-800">

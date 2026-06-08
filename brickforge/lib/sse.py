@@ -67,32 +67,42 @@ async def stream_subprocess(
         env=env,
     )
 
-    async def read_stream(stream, stream_name: str):
+    # Drain stderr concurrently to prevent pipe deadlock.
+    # Without this, reading stdout sequentially before stderr causes the
+    # stderr buffer to fill (64KB), blocking the child process's stderr
+    # writes, which blocks stdout, deadlocking the entire pipeline.
+    stderr_lines: list[str] = []
+
+    async def drain_stderr():
         while True:
-            line = await stream.readline()
+            line = await proc.stderr.readline()
             if not line:
                 break
             text = line.decode("utf-8", errors="replace")
-            # Skip uv VIRTUAL_ENV warning
             if "VIRTUAL_ENV" in text and "does not match" in text:
                 continue
-            if detect_result and text.startswith("__RESULT__:"):
-                try:
-                    result_data = json.loads(text[len("__RESULT__:"):])
-                    yield sse_result(result_data)
-                except json.JSONDecodeError:
-                    yield sse_line(text, stream_name)
-            else:
-                yield sse_line(text, stream_name)
+            stderr_lines.append(text)
 
-    # Read stdout first, then collect stderr
-    async for event in read_stream(proc.stdout, "out"):
-        yield event
+    stderr_task = asyncio.create_task(drain_stderr())
 
-    # Collect stderr instead of streaming raw -- we'll parse it for clean errors
-    stderr_lines: list[str] = []
-    async for event in read_stream(proc.stderr, "err"):
-        stderr_lines.append(event)
+    # Stream stdout lines as SSE events
+    while True:
+        line = await proc.stdout.readline()
+        if not line:
+            break
+        text = line.decode("utf-8", errors="replace")
+        if "VIRTUAL_ENV" in text and "does not match" in text:
+            continue
+        if detect_result and text.startswith("__RESULT__:"):
+            try:
+                result_data = json.loads(text[len("__RESULT__:"):])
+                yield sse_result(result_data)
+            except json.JSONDecodeError:
+                yield sse_line(text, "out")
+        else:
+            yield sse_line(text, "out")
+
+    await stderr_task
 
     try:
         await asyncio.wait_for(proc.wait(), timeout=timeout)
@@ -103,18 +113,8 @@ async def stream_subprocess(
     code = proc.returncode or 0
 
     if code != 0 and stderr_lines:
-        # Parse stderr into a clean user-facing message
         from brickforge.lib.env_utils import parse_subprocess_error
-        # Extract raw text from SSE events
-        raw_stderr = ""
-        for evt in stderr_lines:
-            try:
-                data_start = evt.index("data:") + 5
-                data_end = evt.index("\n\n", data_start)
-                payload = json.loads(evt[data_start:data_end])
-                raw_stderr += payload.get("text", "")
-            except (ValueError, json.JSONDecodeError):
-                pass
+        raw_stderr = "".join(stderr_lines)
         clean_msg = parse_subprocess_error(raw_stderr)
         yield sse_line(f"[x] {clean_msg}\n", "err")
     elif code != 0:

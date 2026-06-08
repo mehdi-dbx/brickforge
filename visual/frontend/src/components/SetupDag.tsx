@@ -30,7 +30,7 @@ const MULTI_INSTANCE_STEPS: StepId[] = ['genie', 'bricks', 'vs', 'mcp', 'api', '
 interface SetupDagProps {
   stepStates: Record<StepId, StepState>
   activeStep: StepId
-  onActivate: (id: StepId) => void
+  onActivate: (id: StepId, forceAdd?: boolean) => void
   onToggleInstance?: (key: string) => void
   onToggleAllInstances?: (stepId: StepId) => void
   onClickInstance?: (stepId: StepId, key: string) => void
@@ -382,7 +382,7 @@ export function SetupDag({ stepStates, activeStep, onActivate, onToggleInstance,
                     )}
                     {isMulti && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); onActivate(id) }}
+                        onClick={(e) => { e.stopPropagation(); onActivate(id, true) }}
                         className="flex-shrink-0 p-0.5 rounded text-dbx-gray-300 dark:text-dbx-gray-600 hover:text-dbx-blue dark:hover:text-dbx-green transition-colors"
                         title={`Add ${STEP_LABEL[id]}`}
                       >

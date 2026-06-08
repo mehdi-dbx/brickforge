@@ -123,6 +123,8 @@ def build_sub_env(config: ConfigProvider, extra_env: dict[str, str] | None = Non
     env.update(config.flatten())
     if extra_env:
         env.update(extra_env)
+    # Force unbuffered output in all subprocesses (critical for SSE streaming)
+    env["PYTHONUNBUFFERED"] = "1"
     # PYTHONPATH: ensure subprocess can import from brickforge/ (tools, data, agent, etc.)
     env["PYTHONPATH"] = str(PACKAGE_ROOT)
     # BRICKFORGE_ROOT: absolute path to brickforge/ for file I/O in scripts
@@ -139,10 +141,11 @@ def build_sub_env(config: ConfigProvider, extra_env: dict[str, str] | None = Non
     if env.get("DATABRICKS_TOKEN") and env.get("DATABRICKS_CLIENT_ID"):
         env.pop("DATABRICKS_CLIENT_ID", None)
         env.pop("DATABRICKS_CLIENT_SECRET", None)
-    # Remove CLI profile in FORGE mode
-    forge_mode = os.environ.get("FORGE_MODE") == "true" or os.environ.get("DATABRICKS_APP_PORT") is not None
-    if forge_mode:
-        env.pop("DATABRICKS_CONFIG_PROFILE", None)
+    # Remove CLI profile and databrickscfg interference -- BrickForge uses PAT auth only
+    env.pop("DATABRICKS_CONFIG_PROFILE", None)
+    env.pop("DATABRICKS_CLI_UPSTREAM", None)
+    env.pop("DATABRICKS_CLI_UPSTREAM_VERSION", None)
+    env["DATABRICKS_CONFIG_FILE"] = ""  # prevent SDK from reading ~/.databrickscfg
     # Remove stale venv
     env.pop("VIRTUAL_ENV", None)
     return env

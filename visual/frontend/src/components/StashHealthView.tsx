@@ -103,6 +103,7 @@ export function StashHealthView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [connected, setConnected] = useState(false)
+  const [prereqs, setPrereqs] = useState<{ host: boolean; warehouse: boolean; schema: boolean }>({ host: false, warehouse: false, schema: false })
 
   // Build state
   const [building, setBuilding] = useState(false)
@@ -111,8 +112,8 @@ export function StashHealthView() {
   const [buildDone, setBuildDone] = useState<boolean | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Check workspace connection
-  useEffect(() => {
+  // Check workspace connection (re-check when tab becomes visible)
+  const checkConnected = useCallback(() => {
     fetch('/api/setup/status')
       .then(r => r.json())
       .then(data => {
@@ -120,10 +121,18 @@ export function StashHealthView() {
         const hostOk = steps.host?.status === 'configured'
         const whOk = steps.warehouse?.status === 'configured'
         const schemaOk = steps.schema?.status === 'configured'
+        setPrereqs({ host: hostOk, warehouse: whOk, schema: schemaOk })
         setConnected(hostOk && whOk && schemaOk)
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    checkConnected()
+    const onSwitch = () => checkConnected()
+    window.addEventListener('switch-view', onSwitch)
+    return () => window.removeEventListener('switch-view', onSwitch)
+  }, [checkConnected])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -209,16 +218,28 @@ export function StashHealthView() {
           <p className="text-[11px] text-dbx-gray-500 dark:text-dbx-gray-400 mt-0.5">
             {total > 0 ? `${total} files in current project` : 'No assets in current project'}
           </p>
-          {!connected && total > 0 && (
-            <button
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('switch-view', { detail: 'setup' }))
-                window.dispatchEvent(new CustomEvent('activate-step', { detail: 'host' }))
-              }}
-              className="text-[11px] font-mono text-dbx-red dark:text-[#FF6B5A] hover:underline mt-0.5"
-            >
-              connect workspace and set catalog/schema to build
-            </button>
+          {total > 0 && (
+            <div className="mt-1 space-y-0.5">
+              {[
+                { ok: prereqs.host, label: 'workspace', step: 'host' },
+                { ok: prereqs.warehouse, label: 'warehouse', step: 'warehouse' },
+                { ok: prereqs.schema, label: 'catalog/schema', step: 'schema' },
+              ].map(p => (
+                <div key={p.step} className="flex items-center gap-1.5">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${p.ok ? 'bg-dbx-green' : 'bg-dbx-red'}`} />
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('switch-view', { detail: 'setup' }))
+                      setTimeout(() => window.dispatchEvent(new CustomEvent('activate-step', { detail: p.step })), 100)
+                    }}
+                    className={`text-[11px] font-mono ${p.ok ? 'text-dbx-gray-400' : 'text-dbx-red dark:text-[#FF6B5A] hover:underline'}`}
+                    disabled={p.ok}
+                  >
+                    {p.label}
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">

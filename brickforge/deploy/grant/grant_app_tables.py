@@ -36,24 +36,38 @@ def main() -> int:
         print("Error: --schema required (catalog.schema). Set PROJECT_UNITY_CATALOG_SCHEMA in .env.local", file=sys.stderr)
         return 1
 
+    import sys as _sys; _sys.stdout.reconfigure(line_buffering=True)
+    print(f"[dbg] host={os.environ.get('DATABRICKS_HOST','?')}", flush=True)
+    print(f"[dbg] token={'set' if os.environ.get('DATABRICKS_TOKEN') else 'MISSING'}", flush=True)
+    print(f"[dbg] warehouse={os.environ.get('DATABRICKS_WAREHOUSE_ID','?')}", flush=True)
+    print(f"[dbg] config_file={os.environ.get('DATABRICKS_CONFIG_FILE','not set')}", flush=True)
+    print(f"[dbg] config_profile={os.environ.get('DATABRICKS_CONFIG_PROFILE','not set')}", flush=True)
+    print(f"[dbg] creating WorkspaceClient...", flush=True)
     w = WorkspaceClient()
+    print(f"[dbg] WorkspaceClient created, auth_type={w.config.auth_type}", flush=True)
+    print(f"[dbg] getting app '{args.app_name}'...", flush=True)
     try:
         app = w.apps.get(name=args.app_name)
     except Exception as e:
         print(f"Error: Could not get app '{args.app_name}': {e}", file=sys.stderr)
         return 1
+    print(f"[dbg] app found, SP={getattr(app, 'service_principal_client_id', '?')}", flush=True)
 
     sp_id = getattr(app, "service_principal_client_id", None) or getattr(app, "oauth2_app_client_id", None)
     if not sp_id:
         print(f"Error: App '{args.app_name}' has no service_principal_client_id", file=sys.stderr)
         return 1
 
-    print(f"Granting SELECT to app service principal: {app.service_principal_name} ({sp_id})")
+    print(f"Granting SELECT to app service principal: {app.service_principal_name} ({sp_id})", flush=True)
 
+    print(f"[dbg] get_warehouse()...", flush=True)
     w_client, wh_id = get_warehouse()
+    print(f"[dbg] warehouse={wh_id}", flush=True)
     catalog, schema = args.schema.split(".", 1)
 
+    print(f"[dbg] listing tables in {catalog}.{schema}...", flush=True)
     tables = list(w.tables.list(catalog_name=catalog, schema_name=schema))
+    print(f"[dbg] found {len(tables)} tables", flush=True)
     if not tables:
         print(f"No tables in {catalog}.{schema}", file=sys.stderr)
         return 1
@@ -64,7 +78,7 @@ def main() -> int:
     ]:
         try:
             execute_statement(w_client, wh_id, stmt)
-            print(f"  [+] {stmt}")
+            print(f"  [+] {stmt}", flush=True)
         except Exception as e:
             print(f"  [-] {stmt} - {e}", file=sys.stderr)
             return 1
@@ -74,7 +88,7 @@ def main() -> int:
         stmt = f"GRANT ALL PRIVILEGES ON TABLE {full_name} TO `{sp_id}`"
         try:
             execute_statement(w_client, wh_id, stmt)
-            print(f"  [+] {stmt}")
+            print(f"  [+] {stmt}", flush=True)
         except Exception as e:
             print(f"  [-] {stmt} - {e}", file=sys.stderr)
             return 1
