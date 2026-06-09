@@ -36,7 +36,7 @@ brickforge
 
 Opens the Setup App at `http://localhost:9000`. Walk through the setup blocks to connect, configure, generate data, and deploy.
 
-> **Behind Databricks VPN?** The corporate VPN may route pip traffic through an internal proxy that lags behind PyPI. If `pip install brickforge` hangs or installs an old version, install directly from the GitHub release instead:
+> $\textcolor{red}{\textsf{Behind Databricks VPN? (note for Bricksters)}}$ The corporate VPN may route pip traffic through an internal proxy that lags behind PyPI. If `pip install brickforge` hangs or installs an old version, install directly from the GitHub release instead:
 >
 > ```bash
 > pip install https://github.com/mehdi-dbx/brickforge/releases/download/latest/brickforge-latest-py3-none-any.whl
