@@ -3,121 +3,191 @@
   <img alt="BrickForge" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/logo-light.svg" width="100%">
 </picture>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/architecture-dark.svg">
-  <img alt="Architecture" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/architecture-light.svg" width="100%">
-</picture>
-
 ---
 
-## What is BrickForge?
+**Build and deploy production AI agents to Databricks in minutes.**
 
-BrickForge is an open-source accelerator that turns Databricks into a complete agentic AI platform. It ships a working reference app (flight operations), a full data layer, and a visual setup experience -- so you can **fork it, swap in your domain, and deploy**.
+BrickForge is a pip-installable tool that takes you from zero to a live, deployed AI agent on Databricks Apps. A browser-based Setup App walks you through workspace connection, data generation, agent configuration, and one-click deployment. No code, no notebooks, no YAML wrangling.
 
-The insight is simple: most agentic apps share the same architecture. The LLM reasons, tools fetch data, a frontend streams responses. What changes is the domain. BrickForge packages everything that stays the same into a templatable, extensible framework -- and lets you focus on what makes your app unique.
+> **Beta** -- BrickForge is under active development. APIs and features may change.
 
----
-
-## Why BrickForge
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/bricks-dark.svg">
-  <img alt="The Six Bricks" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/doc/assets/bricks-light.svg" width="100%">
-</picture>
+[![PyPI](https://img.shields.io/pypi/v/brickforge)](https://pypi.org/project/brickforge/)
+[![Website](https://img.shields.io/badge/website-brickforge.dev-red)](https://brickforge.dev)
 
 ---
 
 ## Quick Start
 
-### 1. Install dependencies
-
-**Python** -- requires [uv](https://docs.astral.sh/uv/getting-started/installation/):
-
 ```bash
-uv sync
+pip install brickforge
+brickforge
 ```
 
-> Fallback (without uv): `pip install -r requirements.txt`
+Opens the Setup App at `http://localhost:9000`. Walk through 18 setup blocks to connect, configure, and deploy.
 
-**Visual app** (optional) -- requires [Node.js](https://nodejs.org/) v18+:
+---
 
-```bash
-cd visual && bash start.sh
+## What You Get
+
+A deployed Databricks App with:
+
+- **LangGraph agent** backed by a Foundation Model (Claude, DBRX, Llama, etc. via serving endpoint)
+- **Chat UI** with streaming responses, structured response blocks, inline charts, action buttons
+- **Auto-discovered tools** from your Unity Catalog schema (functions + stored procedures)
+- **Genie NL-to-SQL** via MCP -- ask data questions in natural language
+- **Knowledge Assistants** -- RAG over uploaded documents with source citations
+- **Vector Search** -- semantic document retrieval
+- **External APIs** -- REST calls via UC connections or direct HTTP
+- **MCP servers** -- connect any MCP-compatible tool server
+- **A2A agents** -- delegate to remote agents via Google A2A protocol
+- **Per-user memory** -- long-term recall backed by Lakebase
+- **Charts** -- inline bar, line, area, and pie visualizations
+
+---
+
+## How It Works
+
+| Step | What happens |
+|------|-------------|
+| **Connect** | Authenticate to any Databricks workspace via one-click OAuth. Token stored in OS keychain, never on disk. |
+| **Generate** | Describe your domain in plain English. AI generates table schemas, synthetic data, SQL functions, stored procedures, system prompts, and a knowledge base. |
+| **Wire** | Pick a model endpoint. Connect Genie, KA, Vector Search, APIs, MCP servers, or other agents. Toggle features. |
+| **Deploy** | One click. Bundles code + config + chat UI, deploys to Databricks Apps, auto-grants all UC permissions. |
+| **Iterate** | Save projects, export as `.forge` bundles, share with colleagues. Push to GitHub. Clean up when done. |
+
+---
+
+## 18 Setup Blocks
+
+Every resource your agent needs, covered by a visual step:
+
+`Workspace` `SQL Warehouse` `Unity Catalog` `Data Tables` `Functions` `Model Endpoint` `Agent Prompt` `Genie Space` `Agent Bricks` `Vector Search` `MCP Servers` `REST APIs` `A2A Agents` `Features` `Lakebase` `MLflow` `Deploy` `GitHub`
+
+Each block follows the same pattern: **choose** an approach, **configure**, **execute**, **done**.
+
+---
+
+## Architecture
+
 ```
+Setup App (localhost:9000)
+  FastAPI backend + React frontend
+  18 setup blocks in a directed graph
+  Configures, generates data, deploys
+      |
+      v
+Databricks App (your workspace)
+  |
+  +-- MLflow AgentServer [port 8000]
+  |     LangGraph agent + LangChain tools + Foundation Model
+  |     Tools: Genie, KA, Vector Search, UC Functions,
+  |            APIs, MCP, A2A, Memory, Charts
+  |
+  +-- Chat UI [port 3000]
+        React frontend (Vercel AI SDK) + Express backend
+        Live data panel, action buttons, inline charts
 
-### 2. Configure environment
-
-```bash
-cp conf/.env.example .env.local
-./scripts/sh/setup_dbx_env.sh
+Config: single config.json shipped in bundle
+        Agent reads at boot, flattens to env vars
 ```
-
-The guided setup walks through every required env var and provisions Databricks resources interactively. To check status:
-
-```bash
-./scripts/sh/setup_dbx_env.sh --check
-```
-
-### 3. Provision data
-
-```bash
-uv run python data/init/create_all_assets.py
-```
-
-Auto-creates UC schema, Delta tables, UC functions, and stored procedures.
-
-### 4. Run locally
-
-```bash
-./scripts/sh/start_local.sh
-```
-
-Boots the backend (8000), Node API (3001), and frontend (3000).
-
-### 5. Deploy
-
-```bash
-./run deploy
-```
-
-Validates, syncs config, bundles, deploys to Databricks Apps, and applies grants.
 
 ---
 
 ## Project Structure
 
-| Directory | Purpose |
-|-----------|---------|
-| `agent/` | LangGraph agent, MLflow server, Genie capture |
-| `app/` | Full-stack chat app (React + Express + shared packages) |
-| `tools/` | LangChain tool functions the agent can call |
-| `data/demo/` | Shipped airport-ops data (CSV, DDL, functions, procedures) |
-| `data/gen/` | Synthetic data generation (LLM-powered wizard) |
-| `conf/` | Env template, KA configs, prompt templates |
-| `visual/` | Architecture viz + setup + data gen + cleanup UI |
-| `eval/` | MLflow GenAI eval pipeline with custom LLM judge |
-| `deploy/` | Deployment pipeline (Databricks Asset Bundles) |
-| `scripts/` | Setup, local dev, KA management |
-| `doc/` | Guide, reference, assets |
+```
+brickforge/
+  routes/          FastAPI API (setup, auth, gen, projects, ka, cleanup)
+  agent/           LangGraph agent runtime (agent.py, start_server.py, memory)
+  tools/           Dynamic tool loading (UC functions, KA, API, A2A, MCP, charts)
+  lib/             Config provider, env utils, SSE streaming, project paths
+  data/            Seed data (demo/) + AI data generation wizard (gen/)
+  deploy/          Bundle build + SDK deploy + grant scripts
+  app/             Chat UI (Node.js monorepo -- React client + Express server)
+  conf/            Agent prompt, KA configs, vector search configs
+  stash/           Pre-built demo templates (.forge bundles)
+  eval/            MLflow GenAI eval pipeline with custom LLM judge
+  static/          Pre-built Setup App frontend
+visual/
+  frontend/        Setup App React source (Vite + TypeScript)
+projects/          User project configs (JSON files + artifact dirs)
+website/           Landing page (brickforge.dev, Cloudflare Worker)
+```
 
-See [`doc/guide/brickforge-guide.md`](doc/guide/brickforge-guide.md) for the full getting started guide.
+---
+
+## AI Data Generation
+
+Describe a domain, get a complete data layer:
+
+1. **Table schemas** -- LLM designs 2-8 relational tables from your description
+2. **Synthetic data** -- realistic CSV rows generated per table
+3. **UC functions** -- parameterized SQL queries as agent tools
+4. **Stored procedures** -- mutation operations (UPDATE, INSERT)
+5. **System prompt + knowledge base** -- tailored to your domain
+
+SQL generation uses a 5-layer defense system: hardened prompts, Databricks SQL reference doc, auto-sanitizer, self-healing loop, and a learning feedback mechanism.
+
+---
+
+## Deploy Pipeline
+
+Deploy uses the **Databricks SDK** (`w.apps.create()` / `w.apps.deploy()`), not DAB CLI:
+
+1. Bundle agent code + chat UI + `config.json` + `app.yaml` into zip
+2. Upload to workspace via `w.workspace.import_()`
+3. Generate startup script (creates venv, installs 160 pinned deps)
+4. `w.apps.deploy()` triggers deployment
+5. Auto-grant permissions: tables (SELECT), functions (EXECUTE), warehouse (CAN_USE), Genie (CAN_RUN), serving endpoints (CAN_QUERY), Lakebase
+
+---
+
+## Project System
+
+- Save, load, switch between multiple projects
+- Each project: separate `config.json` + artifact dirs (prompts, generated data)
+- Export as `.forge.zip` bundles, share with colleagues
+- Import with "Load" (same workspace) or "New" (different workspace)
+- Push to GitHub via OAuth Device Flow
+
+---
+
+## Config System
+
+All configuration lives in a single `config.json`. No `.env` files.
+
+- `lib/config_provider.py` -- structured access: `config.get("workspace.host")`
+- `flatten()` converts nested JSON to flat env vars for subprocesses
+- Tokens never written to disk -- stored in OS keychain
+- Agent reads `config.json` at boot, flattens to `os.environ`
 
 ---
 
 ## Evaluation
 
-BrickForge includes an MLflow-based eval pipeline (`eval/run_eval.py`) that runs baseline vs with-guideline comparisons using a custom Claude LLM judge. Ships with 13 curated test questions for the reference domain.
+MLflow-based eval pipeline (`eval/run_eval.py`):
+
+- Baseline vs with-guideline comparisons
+- Custom Claude LLM judge scorer
+- Ships with curated test questions for the reference domain
 
 ---
 
-## Make It Yours
+## Use Cases
 
-1. **Fork** this repo
-2. **Swap the domain** -- replace the flight-ops data, prompts, and tools with your own
-3. **Add tools** -- one file per tool, register in `agent/agent.py`
-4. **Deploy** -- `./run deploy` ships it to Databricks Apps
+BrickForge ships with a **flight-operations reference agent** (check-in performance advisor with 5 tables, 8 SQL functions, 4 stored procedures, 15 custom React components). But the data gen wizard lets you build for any domain:
 
-The flight-ops scenario is just a starting point. BrickForge is designed to be rewritten, not just configured.
+- **Financial services** -- portfolio risk, compliance checks, regulatory docs
+- **Healthcare** -- clinical trial tracking, enrollment metrics, protocol retrieval
+- **Retail** -- inventory ops, demand forecasting, supplier APIs
+- **Energy & IoT** -- sensor monitoring, anomaly detection, maintenance dispatch
+- **Your domain** -- describe it, generate it, deploy it
+
+---
+
+## Website
+
+[brickforge.dev](https://brickforge.dev)
 
 ---
 
