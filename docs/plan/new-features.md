@@ -116,6 +116,35 @@ All operations (build, deploy, provisioning, genie creation, data generation) ne
 - Viewable from the UI (log viewer tab or expandable section)
 - Retained across restarts
 
+## 8. Feature-Aware Prompt Generation
+
+The prompt generator should inject tool-specific instructions into the generated system prompt based on which features are enabled in the DAG.
+
+### Current problem
+
+- `prompt_generator.py` generates the system prompt with no awareness of which agent features are toggled on
+- The chart tool (`generate_chart`) is enabled at runtime via `PROJECT_TOOL_CHART`, but the generated prompt never mentions it
+- Result: agent has the chart tool available but doesn't know it exists, so it never uses it unless the user manually edits the prompt
+- Same problem applies to any future feature-specific tools (voice, vision, memory, dashboard)
+
+### What it should do
+
+- `gen.py` reads the current feature toggles from config (`PROJECT_TOOL_CHART`, `PROJECT_TOOL_MEMORY`, etc.) and passes them to `generate_prompts.py`
+- `prompt_generator.py` conditionally appends feature-specific instructions to the LLM system prompt:
+  - **CHART enabled**: "Include a VISUALIZATION section explaining the agent can generate interactive charts (bar, line, area, pie) using the generate_chart tool when users ask for data visualizations or graphs"
+  - **MEMORY enabled**: "Include a MEMORY section explaining the agent remembers user preferences across conversations"
+  - etc.
+- Only enabled features get mentioned in the generated prompt -- disabled features are never referenced
+- This keeps the generated prompt accurate to what the agent can actually do
+
+### Files
+
+| File | Change |
+|------|--------|
+| `brickforge/routes/gen.py` | Read feature toggles from config, pass as `--features=CHART,MEMORY` arg |
+| `brickforge/data/gen/generate_prompts.py` | Accept `--features` arg, forward to `prompt_generator.py` |
+| `brickforge/data/gen/prompt_generator.py` | Conditionally append feature instructions to SYSTEM_PROMPT |
+
 ## 7. Remove "Configured" Overlay -- Always Show Drawer
 
 The "configured" full-page overlay that appears when a block is done masks the setup drawer entirely. User can't see or interact with the drawer content (current values, test button, reconfigure). The overlay is impractical -- it forces the user to click "reconfigure" just to see what's configured.
