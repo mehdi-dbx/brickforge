@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/logo-dark.svg">
-  <img alt="BrickForge" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/logo-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/logo-dark.svg?v=2">
+  <img alt="BrickForge" src="https://raw.githubusercontent.com/mehdi-dbx/brickforge/main/docs/assets/logo-light.svg?v=2" width="100%">
 </picture>
 
 <picture>
