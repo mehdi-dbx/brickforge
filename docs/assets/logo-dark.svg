@@ -18,5 +18,5 @@
   <text x="165" y="105" class="title">Brick</text>
   <text x="365" y="105" class="title-red">Forge</text>
   <!-- Subtitle -->
-  <text x="165" y="145" class="sub">Build production-ready AI agents on Databricks -- in a day, not a month.</text>
+  <text x="165" y="145" class="sub">Build production-ready AI agents on Databricks in minutes.</text>
 </svg>
