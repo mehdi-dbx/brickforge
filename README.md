@@ -12,9 +12,9 @@
 
 ## What is BrickForge?
 
-BrickForge is an open-source accelerator that turns Databricks into a complete agentic AI platform. It ships a working reference app (flight operations), a full data layer, and a visual setup experience -- so you can **fork it, swap in your domain, and deploy**.
+BrickForge is an open-source accelerator that turns Databricks into a complete agentic AI platform. It ships a working reference app (flight operations), a full data layer, and a visual setup experience -so you can **fork it, swap in your domain, and deploy**.
 
-The insight is simple: most agentic apps share the same architecture. The LLM reasons, tools fetch data, a frontend streams responses. What changes is the domain. BrickForge packages everything that stays the same into a templatable, extensible framework -- and lets you focus on what makes your app unique.
+The insight is simple: most agentic apps share the same architecture. The LLM reasons, tools fetch data, a frontend streams responses. What changes is the domain. BrickForge packages everything that stays the same into a templatable, extensible framework -and lets you focus on what makes your app unique.
 
 ---
 
@@ -42,7 +42,7 @@ Opens the Setup App at `http://localhost:9000`. Walk through the setup blocks to
 > pip install https://github.com/mehdi-dbx/brickforge/releases/download/latest/brickforge-latest-py3-none-any.whl
 > ```
 >
-> This downloads the pre-built wheel directly from GitHub -- no proxy, no resolution delay.
+> This downloads the pre-built wheel directly from GitHub -no proxy, no resolution delay.
 
 ---
 
@@ -75,9 +75,9 @@ BrickForge includes an MLflow-based eval pipeline (`eval/run_eval.py`) that runs
 ## Make It Yours
 
 1. **Fork** this repo
-2. **Swap the domain** -- replace the flight-ops data, prompts, and tools with your own
-3. **Add tools** -- one file per tool, register in `agent/agent.py`
-4. **Deploy** -- `./run deploy` ships it to Databricks Apps
+2. **Swap the domain** -replace the flight-ops data, prompts, and tools with your own
+3. **Add tools** -one file per tool, register in `agent/agent.py`
+4. **Deploy** -`./run deploy` ships it to Databricks Apps
 
 The flight-ops scenario is just a starting point. BrickForge is designed to be rewritten, not just configured.
 
