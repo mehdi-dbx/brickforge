@@ -122,15 +122,6 @@ BrickForge includes an MLflow-based eval pipeline (`eval/run_eval.py`) that runs
 
 ---
 
-## Make It Yours
-
-1. **Fork** this repo
-2. **Swap the domain** -replace the flight-ops data, prompts, and tools with your own
-3. **Add tools** -one file per tool, register in `agent/agent.py`
-4. **Deploy** -`./run deploy` ships it to Databricks Apps
-
-The flight-ops scenario is just a starting point. BrickForge is designed to be rewritten, not just configured.
-
 ---
 
 <p align="center"><sub>MIT License</sub></p>
