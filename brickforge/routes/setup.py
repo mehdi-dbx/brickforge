@@ -431,14 +431,17 @@ async def github_status():
     from brickforge.lib.token_store import get_token_store
     store = get_token_store()
     token = store.get("github.com")
+    config = _get_config()
+    repo_name = config.get("github.repo_name") or ""
+    repo_url = config.get("github.repo_url") or ""
     if token:
         try:
             from brickforge.lib.github_client import get_user
             username = get_user(token)
-            return {"connected": True, "username": username}
+            return {"connected": True, "username": username, "repo_name": repo_name, "repo_url": repo_url}
         except Exception:
-            return {"connected": False}
-    return {"connected": False}
+            return {"connected": False, "repo_name": repo_name, "repo_url": repo_url}
+    return {"connected": False, "repo_name": repo_name, "repo_url": repo_url}
 
 
 @router.post("/api/github/connect")
@@ -517,7 +520,11 @@ async def github_push(request: Request):
             yield sse_line("[~] Pushing to GitHub...\n")
             ok = push_bundle(token, clone_url, bundle)
             if ok:
-                yield sse_line(f"[+] https://github.com/{username}/{repo_name}\n")
+                repo_url = f"https://github.com/{username}/{repo_name}"
+                yield sse_line(f"[+] {repo_url}\n")
+                # Save repo URL to config
+                config.set("github.repo_url", repo_url)
+                config.set("github.repo_name", repo_name)
                 yield sse_done(True)
             else:
                 yield sse_done(False, 1)

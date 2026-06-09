@@ -1651,7 +1651,7 @@ function GitHubPanel({ onDone, onBack }: { onDone: () => void; onBack: () => voi
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Check GitHub status on mount
+  // Check GitHub status on mount + pre-fill repo name from config
   useEffect(() => {
     fetch('/api/github/status').then(r => r.json()).then(d => {
       if (d.connected) {
@@ -1660,6 +1660,8 @@ function GitHubPanel({ onDone, onBack }: { onDone: () => void; onBack: () => voi
       } else {
         setGhStatus('disconnected')
       }
+      if (d.repo_name) setRepoName(d.repo_name)
+      if (d.repo_url) setRepoUrl(d.repo_url)
     }).catch(() => setGhStatus('disconnected'))
   }, [])
 
