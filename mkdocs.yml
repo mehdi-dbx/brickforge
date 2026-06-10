@@ -21,6 +21,6 @@ nav:
   - Home: index.md
 
 markdown_extensions:
-  - admonitions
+  - admonition
   - pymdownx.highlight
   - pymdownx.superfences
