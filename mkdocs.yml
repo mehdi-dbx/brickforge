@@ -1,0 +1,26 @@
+site_name: BrickForge
+site_url: https://brickforge.readthedocs.io/
+site_description: Build and deploy Databricks AI agents in minutes
+repo_url: https://github.com/mehdi-dbx/brickforge
+repo_name: mehdi-dbx/brickforge
+
+docs_dir: rtd
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: deep orange
+    accent: deep orange
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+
+markdown_extensions:
+  - admonitions
+  - pymdownx.highlight
+  - pymdownx.superfences
