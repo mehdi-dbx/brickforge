@@ -15,12 +15,34 @@ theme:
   features:
     - navigation.instant
     - navigation.sections
+    - navigation.expand
     - content.code.copy
+    - content.tabs.link
 
 nav:
   - Home: index.md
+  - Getting Started: getting-started.md
+  - Setup Blocks: setup-blocks.md
+  - Data Generation: data-generation.md
+  - Agent Tools: agent-tools.md
+  - Prompt System: prompt-system.md
+  - Deploy: deploy.md
+  - Projects: projects.md
+  - Config: config.md
+  - Evaluation: evaluation.md
+  - GitHub Integration: github-integration.md
+  - Architecture: architecture.md
+  - Reference:
+    - Tools Table: reference/tools-table.md
+    - Config Reference: reference/config-reference.md
+    - Known Issues: reference/known-issues.md
 
 markdown_extensions:
   - admonition
   - pymdownx.highlight
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
