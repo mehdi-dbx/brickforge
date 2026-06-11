@@ -1,24 +1,15 @@
-/* Match brickforge.dev header: dark bg with red accent */
+/* ---- SHARED (both themes) ---- */
 :root {
-  --md-primary-fg-color: #0c0c0f;
-  --md-primary-bg-color: #f0f0f5;
   --md-accent-fg-color: #ff3621;
 }
 
-[data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #0c0c0f;
-  --md-primary-bg-color: #f0f0f5;
-  --md-accent-fg-color: #ff3621;
-  --md-default-bg-color: #0c0c0f;
-}
-
-/* Header bar */
+/* Header bar - always dark */
 .md-header {
   background-color: #0c0c0f;
   border-bottom: 1px solid #2a2a35;
 }
 
-/* Two-tone site name: Brick (white) + Forge (red) */
+/* Two-tone site name: Brick (white) + Forge (red) - always on dark header */
 .md-header__topic .md-ellipsis {
   font-weight: 700;
   font-size: 0;
@@ -34,7 +25,7 @@
   color: #ff3621;
 }
 
-/* Tabs and nav active states */
+/* Tabs - always dark */
 .md-tabs {
   background-color: #0c0c0f;
   border-bottom: 1px solid #2a2a35;
@@ -50,7 +41,7 @@
   color: #ff3621;
 }
 
-/* Links always visible red */
+/* Links always red */
 .md-typeset a {
   color: #ff3621;
 }
@@ -58,7 +49,39 @@
   color: #ff5a47;
 }
 
-/* Code blocks */
+/* Code inline */
 .md-typeset code {
   color: #ff5a47;
+}
+
+/* ---- DARK THEME ---- */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0c0c0f;
+  --md-primary-bg-color: #f0f0f5;
+  --md-accent-fg-color: #ff3621;
+  --md-default-bg-color: #0c0c0f;
+}
+
+/* ---- LIGHT THEME ---- */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #0c0c0f;
+  --md-primary-bg-color: #f0f0f5;
+  --md-accent-fg-color: #ff3621;
+  --md-default-bg-color: #ffffff;
+}
+
+[data-md-color-scheme="default"] .md-typeset code {
+  color: #d4300f;
+  background-color: #fff0ee;
+}
+
+[data-md-color-scheme="default"] .md-typeset a {
+  color: #d4300f;
+}
+[data-md-color-scheme="default"] .md-typeset a:hover {
+  color: #ff3621;
+}
+
+[data-md-color-scheme="default"] .md-sidebar {
+  border-right: 1px solid #e0e0e0;
 }
