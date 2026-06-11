@@ -1,0 +1,56 @@
+/* Match brickforge.dev header: dark bg with red accent */
+:root {
+  --md-primary-fg-color: #0c0c0f;
+  --md-primary-bg-color: #f0f0f5;
+  --md-accent-fg-color: #ff3621;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0c0c0f;
+  --md-primary-bg-color: #f0f0f5;
+  --md-accent-fg-color: #ff3621;
+  --md-default-bg-color: #0c0c0f;
+}
+
+/* Header bar */
+.md-header {
+  background-color: #0c0c0f;
+  border-bottom: 1px solid #2a2a35;
+}
+
+/* Two-tone site name: Brick (white) + Forge (red) */
+.md-header__topic .md-ellipsis {
+  font-weight: 700;
+  font-size: 0;
+}
+.md-header__topic .md-ellipsis::before {
+  content: "Brick";
+  font-size: 0.9rem;
+  color: #f0f0f5;
+}
+.md-header__topic .md-ellipsis::after {
+  content: "Forge";
+  font-size: 0.9rem;
+  color: #ff3621;
+}
+
+/* Tabs and nav active states */
+.md-tabs {
+  background-color: #0c0c0f;
+  border-bottom: 1px solid #2a2a35;
+}
+
+.md-tabs__link--active,
+.md-tabs__link:hover {
+  color: #ff3621;
+}
+
+/* Sidebar active link */
+.md-nav__link--active {
+  color: #ff3621;
+}
+
+/* Code blocks */
+.md-typeset code {
+  color: #ff5a47;
+}

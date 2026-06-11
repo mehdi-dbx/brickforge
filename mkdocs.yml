@@ -8,16 +8,24 @@ docs_dir: rtd
 
 theme:
   name: material
+  custom_dir: rtd/overrides
   palette:
     scheme: slate
-    primary: deep orange
-    accent: deep orange
+    primary: custom
+    accent: custom
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
   features:
     - navigation.instant
     - navigation.sections
     - navigation.expand
     - content.code.copy
     - content.tabs.link
+
+extra_css:
+  - assets/extra.css
 
 nav:
   - Home: index.md
