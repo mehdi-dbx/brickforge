@@ -50,6 +50,14 @@
   color: #ff3621;
 }
 
+/* Links always visible red */
+.md-typeset a {
+  color: #ff3621;
+}
+.md-typeset a:hover {
+  color: #ff5a47;
+}
+
 /* Code blocks */
 .md-typeset code {
   color: #ff5a47;
