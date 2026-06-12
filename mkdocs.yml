@@ -1,0 +1,65 @@
+site_name: BrickForge
+site_url: https://brickforge.readthedocs.io/
+site_description: Build and deploy Databricks AI agents in minutes
+repo_url: https://github.com/mehdi-dbx/brickforge
+repo_name: mehdi-dbx/brickforge
+
+docs_dir: rtd
+
+theme:
+  name: material
+  custom_dir: rtd/overrides
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  - assets/extra.css
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Setup Blocks: setup-blocks.md
+  - Data Generation: data-generation.md
+  - Agent Tools: agent-tools.md
+  - Prompt System: prompt-system.md
+  - Deploy: deploy.md
+  - Projects: projects.md
+  - Config: config.md
+  - Evaluation: evaluation.md
+  - GitHub Integration: github-integration.md
+  - Architecture: architecture.md
+  - Reference:
+    - Tools Table: reference/tools-table.md
+    - Config Reference: reference/config-reference.md
+    - Known Issues: reference/known-issues.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
